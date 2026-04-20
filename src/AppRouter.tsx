@@ -55,6 +55,8 @@ import { ParentHomePage } from "@/pages/ParentHomePage";
 import { VideoViewPage } from "@/pages/VideoViewPage";
 import { ProfileViewPage } from "@/pages/ProfileViewPage";
 import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
+import { GroupViewPage } from "@/pages/GroupViewPage";
+import { WoTScorePage } from "@/pages/WoTScorePage";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -324,6 +326,8 @@ export function AppRouter() {
             <Route path="/parent/kid/:id/settings"     element={<EditKidSettingsPage />} />
             <Route path="/parent/kid/:id/trust/people" element={<TrustPeoplePage     />} />
             <Route path="/parent/kid/:id/trust/places" element={<TrustPlacesPage     />} />
+            <Route path="/parent/kid/:id/groups/:gid"  element={<GroupViewPage       />} />
+            <Route path="/parent/kid/:id/wot"          element={<WoTScorePage        />} />
           </Route>
 
           {/* ─── Kubo onboarding ─────────────────────────────── */}
