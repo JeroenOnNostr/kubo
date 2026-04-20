@@ -57,6 +57,8 @@ import { ProfileViewPage } from "@/pages/ProfileViewPage";
 import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
 import { GroupViewPage } from "@/pages/GroupViewPage";
 import { WoTScorePage } from "@/pages/WoTScorePage";
+import { KuboKidLayout } from "@/components/KuboKidLayout";
+import { KidHomePage } from "@/pages/KidHomePage";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -337,8 +339,11 @@ export function AppRouter() {
             <Route path="/onboard/add-kid"       element={<AddKidPage />} />
           </Route>
 
-          {/* ─── Kid app (PR 6 stub) ──────────────────────────────────────── */}
-          <Route path="/kid" element={<KuboPlaceholderPage title="Kid feed" pr={6} description="The kid-facing video feed." />} />
+          {/* ─── Kid app ──────────────────────────────────────────────────── */}
+          <Route element={<KuboKidLayout />}>
+            <Route path="/kid"           element={<KidHomePage />} />
+            <Route path="/kid/favorites" element={<KidHomePage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AudioPlayerProvider>

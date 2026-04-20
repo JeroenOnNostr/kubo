@@ -5,7 +5,7 @@ import { HomePage } from '@/pages/HomePage';
 /**
  * Root-route gate for Kubo.
  *
- * - Authenticated user  → redirect to /parent/home (Kubo parent app)
+ * - Authenticated user  → redirect to /kid (Kubo kid app)
  * - Unauthenticated     → keep rendering Ditto's existing HomePage.
  *
  * PR 2 will replace the unauthenticated branch with /onboard/welcome once
@@ -20,7 +20,7 @@ export function KuboBootGate() {
   // redirect and back.
   if (isLoading) return <HomePage />;
 
-  if (user) return <Navigate to="/parent/home" replace />;
+  if (user) return <Navigate to="/kid" replace />;
 
   return <HomePage />;
 }
