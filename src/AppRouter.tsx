@@ -43,6 +43,10 @@ const EmojiPackDialog = lazy(() => import("@/components/EmojiPackDialog").then(m
 import { KuboBootGate } from "@/components/KuboBootGate";
 import { KuboParentLayout } from "@/components/KuboParentLayout";
 import { KuboPlaceholderPage } from "@/components/KuboPlaceholderPage";
+import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
+import { WelcomePage } from "@/pages/WelcomePage";
+import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
+import { AddKidPage } from "@/pages/AddKidPage";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -312,10 +316,12 @@ export function AppRouter() {
             <Route path="/parent/kid/:id/trust/places" element={<KuboPlaceholderPage title="Trust · Places"  pr={3} />} />
           </Route>
 
-          {/* ─── Kubo onboarding (PR 2 stubs) ─────────────────────────────── */}
-          <Route path="/onboard/welcome"       element={<KuboPlaceholderPage title="Welcome to Kubo" pr={2} />} />
-          <Route path="/onboard/create-parent" element={<KuboPlaceholderPage title="Create parent account" pr={2} />} />
-          <Route path="/onboard/add-kid"       element={<KuboPlaceholderPage title="Add a kid"      pr={2} />} />
+          {/* ─── Kubo onboarding ─────────────────────────────── */}
+          <Route element={<KuboOnboardLayout />}>
+            <Route path="/onboard/welcome"       element={<WelcomePage />} />
+            <Route path="/onboard/create-parent" element={<CreateParentAccountPage />} />
+            <Route path="/onboard/add-kid"       element={<AddKidPage />} />
+          </Route>
 
           {/* ─── Kid app (PR 6 stub) ──────────────────────────────────────── */}
           <Route path="/kid" element={<KuboPlaceholderPage title="Kid feed" pr={6} description="The kid-facing video feed." />} />
