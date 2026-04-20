@@ -12,10 +12,15 @@ import { ArcBackground } from '@/components/ArcBackground';
  * the IA is Kubo-specific.
  */
 const TABS = [
-  { to: '/parent/home',   icon: Home,   label: 'Home' },
-  { to: '/parent/upload', icon: Upload, label: 'Upload' },
-  { to: '/parent/trust',  icon: Users,  label: 'Trust' },
-  { to: '/parent/alerts', icon: Bell,   label: 'Alerts' },
+  { to: '/parent/home',   icon: Home,   label: 'Home',
+    match: (p: string) => p === '/parent/home' || p.startsWith('/parent/home/') ||
+      (p.startsWith('/parent/kid/') && !/^\/parent\/kid\/[^/]+\/trust(\/|$)/.test(p)) },
+  { to: '/parent/upload', icon: Upload, label: 'Upload',
+    match: (p: string) => p === '/parent/upload' || p.startsWith('/parent/upload/') },
+  { to: '/parent/trust',  icon: Users,  label: 'Trust',
+    match: (p: string) => p === '/parent/trust' || p.startsWith('/parent/trust/') || /^\/parent\/kid\/[^/]+\/trust(\/|$)/.test(p) },
+  { to: '/parent/alerts', icon: Bell,   label: 'Alerts',
+    match: (p: string) => p === '/parent/alerts' || p.startsWith('/parent/alerts/') },
 ] as const;
 
 export function KuboBottomNav() {
@@ -26,8 +31,8 @@ export function KuboBottomNav() {
       <div className="relative">
         <ArcBackground variant="up" />
         <div className="h-11 flex items-center relative">
-          {TABS.map(({ to, icon: Icon, label }) => {
-            const active = location.pathname === to || location.pathname.startsWith(to + '/');
+          {TABS.map(({ to, icon: Icon, label, match }) => {
+            const active = match(location.pathname);
             return (
               <NavLink
                 key={to}

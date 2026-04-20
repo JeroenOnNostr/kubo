@@ -47,6 +47,10 @@ import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
 import { AddKidPage } from "@/pages/AddKidPage";
+import { KidDashboardPage } from "@/pages/KidDashboardPage";
+import { EditKidSettingsPage } from "@/pages/EditKidSettingsPage";
+import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
+import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -310,10 +314,10 @@ export function AppRouter() {
             <Route path="/parent/upload"  element={<KuboPlaceholderPage title="Upload"        pr={4} description="Record or pick a video for your kid's feed." />} />
             <Route path="/parent/trust"   element={<KuboPlaceholderPage title="Trust domain"  pr={3} description="Manage people and places your kid sees." />} />
             <Route path="/parent/alerts"  element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
-            <Route path="/parent/kid/:id" element={<KuboPlaceholderPage title="Kid dashboard" pr={3} />} />
-            <Route path="/parent/kid/:id/settings"     element={<KuboPlaceholderPage title="Edit kid"        pr={3} />} />
-            <Route path="/parent/kid/:id/trust/people" element={<KuboPlaceholderPage title="Trust · People"  pr={3} />} />
-            <Route path="/parent/kid/:id/trust/places" element={<KuboPlaceholderPage title="Trust · Places"  pr={3} />} />
+            <Route path="/parent/kid/:id"              element={<KidDashboardPage    />} />
+            <Route path="/parent/kid/:id/settings"     element={<EditKidSettingsPage />} />
+            <Route path="/parent/kid/:id/trust/people" element={<TrustPeoplePage     />} />
+            <Route path="/parent/kid/:id/trust/places" element={<TrustPlacesPage     />} />
           </Route>
 
           {/* ─── Kubo onboarding ─────────────────────────────── */}
