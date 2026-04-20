@@ -51,6 +51,10 @@ import { KidDashboardPage } from "@/pages/KidDashboardPage";
 import { EditKidSettingsPage } from "@/pages/EditKidSettingsPage";
 import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
+import { ParentHomePage } from "@/pages/ParentHomePage";
+import { VideoViewPage } from "@/pages/VideoViewPage";
+import { ProfileViewPage } from "@/pages/ProfileViewPage";
+import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -310,8 +314,10 @@ export function AppRouter() {
 
           {/* ─── Kubo parent app (PR 1 stubs) ─────────────────────────────── */}
           <Route element={<KuboParentLayout />}>
-            <Route path="/parent/home"    element={<KuboPlaceholderPage title="Parent home"   pr={4} description="Video feed, kid switcher, upload shortcut." />} />
-            <Route path="/parent/upload"  element={<KuboPlaceholderPage title="Upload"        pr={4} description="Record or pick a video for your kid's feed." />} />
+            <Route path="/parent/home"          element={<ParentHomePage      />} />
+            <Route path="/parent/upload"        element={<ContentUploaderPage />} />
+            <Route path="/parent/video/:id"     element={<VideoViewPage       />} />
+            <Route path="/parent/profile/:npub" element={<ProfileViewPage     />} />
             <Route path="/parent/trust"   element={<KuboPlaceholderPage title="Trust domain"  pr={3} description="Manage people and places your kid sees." />} />
             <Route path="/parent/alerts"  element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
             <Route path="/parent/kid/:id"              element={<KidDashboardPage    />} />

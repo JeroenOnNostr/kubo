@@ -40,6 +40,9 @@
      variables on Android) takes precedence when available.  The inner
      env(safe-area-inset-*, 0px) is the standard fallback for iOS / web. */
 
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
   .safe-area-top {
     padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   }
