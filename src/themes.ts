@@ -103,15 +103,16 @@ export interface ThemeTokens {
  */
 export const builtinThemes: Record<'light' | 'dark', CoreThemeColors> = {
   light: {
-    background: '270 50% 97%',
-    text: '270 25% 12%',
-    primary: '270 65% 55%',
+    // Kubo: soft warm off-white paired with deep ink text and the brand orange accent.
+    background: '30 40% 98%',
+    text: '20 15% 12%',
+    primary: '24 95% 53%',   // Kubo orange (#F97316)
   },
 
   dark: {
     background: '228 20% 10%',
     text: '210 40% 98%',
-    primary: '258 70% 60%',
+    primary: '24 95% 53%',   // Kubo orange (#F97316)
   },
 };
 

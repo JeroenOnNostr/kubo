@@ -11,6 +11,7 @@ import { MainLayout } from "./components/MainLayout";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { VersionCheck } from "./components/VersionCheck";
 import { useCurrentUser } from "./hooks/useCurrentUser";
+import { useFeedSettings } from "./hooks/useFeedSettings";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
 
@@ -21,14 +22,27 @@ import NotFound from "./pages/NotFound";
 // Lazy-loaded companion layer (~450K code-split)
 const BlobbiCompanionLayer = lazy(() => import("@/blobbi/companion").then(m => ({ default: m.BlobbiCompanionLayer })));
 
+/** Mount the Blobbi companion only when feedSettings.showBlobbi is true. */
+function GatedBlobbiCompanionLayer() {
+  const { feedSettings } = useFeedSettings();
+  if (!feedSettings.showBlobbi) return null;
+  return (
+    <Suspense fallback={null}>
+      <BlobbiCompanionLayer />
+    </Suspense>
+  );
+}
+
 // Lazy-loaded compose modal (pulls in emoji-mart ~620K)
 const ReplyComposeModal = lazy(() => import("@/components/ReplyComposeModal").then(m => ({ default: m.ReplyComposeModal })));
 
 // Lazy-loaded emoji pack dialog
 const EmojiPackDialog = lazy(() => import("@/components/EmojiPackDialog").then(m => ({ default: m.EmojiPackDialog })));
 
-// HomePage eagerly imported all page components; now lazy-loaded
-const HomePage = lazy(() => import("./pages/HomePage").then(m => ({ default: m.HomePage })));
+// Kubo chrome + boot gate (PR 1)
+import { KuboBootGate } from "@/components/KuboBootGate";
+import { KuboParentLayout } from "@/components/KuboParentLayout";
+import { KuboPlaceholderPage } from "@/components/KuboPlaceholderPage";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -55,6 +69,7 @@ const LetterComposePage = lazy(() => import("./pages/LetterComposePage").then(m 
 const LetterPreferencesPage = lazy(() => import("./pages/LetterPreferencesPage").then(m => ({ default: m.LetterPreferencesPage })));
 const LettersPage = lazy(() => import("./pages/LettersPage").then(m => ({ default: m.LettersPage })));
 const MagicSettingsPage = lazy(() => import("./pages/MagicSettingsPage").then(m => ({ default: m.MagicSettingsPage })));
+const HiddenFeaturesSettingsPage = lazy(() => import("./pages/HiddenFeaturesSettingsPage").then(m => ({ default: m.HiddenFeaturesSettingsPage })));
 const MusicPage = lazy(() => import("./pages/MusicPage").then(m => ({ default: m.MusicPage })));
 const NetworkSettingsPage = lazy(() => import("./pages/NetworkSettingsPage").then(m => ({ default: m.NetworkSettingsPage })));
 const NIP19Page = lazy(() => import("./pages/NIP19Page").then(m => ({ default: m.NIP19Page })));
@@ -147,9 +162,7 @@ export function AppRouter() {
         <DeepLinkHandler />
         <ScrollToTop />
         <BlobbiActionsProvider>
-          <Suspense fallback={null}>
-            <BlobbiCompanionLayer />
-          </Suspense>
+          <GatedBlobbiCompanionLayer />
         </BlobbiActionsProvider>
         <Routes>
           {/* Auto-follow deep link: fullscreen immersive (no sidebars/nav) */}
@@ -157,7 +170,7 @@ export function AppRouter() {
 
           {/* All routes share the persistent MainLayout (sidebar + nav) */}
           <Route element={<MainLayout />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<KuboBootGate />} />
             <Route path="/feed" element={<Index />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/search" element={<SearchPage />} />
@@ -180,6 +193,7 @@ export function AppRouter() {
               element={<AdvancedSettingsPage />}
             />
             <Route path="/settings/magic" element={<MagicSettingsPage />} />
+            <Route path="/settings/hidden-features" element={<HiddenFeaturesSettingsPage />} />
             <Route path="/settings/network" element={<NetworkSettingsPage />} />
             <Route path="/lists" element={<UserListsPage />} />
             <Route path="/events" element={<EventsFeedPage />} />
@@ -285,6 +299,26 @@ export function AppRouter() {
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Route>
+
+          {/* ─── Kubo parent app (PR 1 stubs) ─────────────────────────────── */}
+          <Route element={<KuboParentLayout />}>
+            <Route path="/parent/home"    element={<KuboPlaceholderPage title="Parent home"   pr={4} description="Video feed, kid switcher, upload shortcut." />} />
+            <Route path="/parent/upload"  element={<KuboPlaceholderPage title="Upload"        pr={4} description="Record or pick a video for your kid's feed." />} />
+            <Route path="/parent/trust"   element={<KuboPlaceholderPage title="Trust domain"  pr={3} description="Manage people and places your kid sees." />} />
+            <Route path="/parent/alerts"  element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
+            <Route path="/parent/kid/:id" element={<KuboPlaceholderPage title="Kid dashboard" pr={3} />} />
+            <Route path="/parent/kid/:id/settings"     element={<KuboPlaceholderPage title="Edit kid"        pr={3} />} />
+            <Route path="/parent/kid/:id/trust/people" element={<KuboPlaceholderPage title="Trust · People"  pr={3} />} />
+            <Route path="/parent/kid/:id/trust/places" element={<KuboPlaceholderPage title="Trust · Places"  pr={3} />} />
+          </Route>
+
+          {/* ─── Kubo onboarding (PR 2 stubs) ─────────────────────────────── */}
+          <Route path="/onboard/welcome"       element={<KuboPlaceholderPage title="Welcome to Kubo" pr={2} />} />
+          <Route path="/onboard/create-parent" element={<KuboPlaceholderPage title="Create parent account" pr={2} />} />
+          <Route path="/onboard/add-kid"       element={<KuboPlaceholderPage title="Add a kid"      pr={2} />} />
+
+          {/* ─── Kid app (PR 6 stub) ──────────────────────────────────────── */}
+          <Route path="/kid" element={<KuboPlaceholderPage title="Kid feed" pr={6} description="The kid-facing video feed." />} />
         </Routes>
       </BrowserRouter>
     </AudioPlayerProvider>
