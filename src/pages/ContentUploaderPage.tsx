@@ -1,31 +1,232 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Upload, X } from 'lucide-react';
+import { NLogin, NUser, useNostrLogin } from '@nostrify/react/login';
+import { useNostr } from '@nostrify/react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   CategoryChips,
   type Category,
 } from '@/components/feed/CategoryChips';
 
+import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
+import { uploadFileWithSigner } from '@/hooks/useUploadFile';
+import { getEffectiveBlossomServers } from '@/lib/appBlossom';
+import { getEffectiveRelays } from '@/lib/appRelays';
+import { toast } from '@/hooks/useToast';
+
+import type { NostrSigner } from '@nostrify/nostrify';
+
+/** 200 MB in bytes. */
+const MAX_FILE_SIZE = 200 * 1024 * 1024;
+
+type PublishStage = 'uploading' | 'signing' | 'publishing';
+
+const STAGE_LABELS: Record<PublishStage, string> = {
+  uploading: 'Uploading to Blossom…',
+  signing: 'Signing event…',
+  publishing: 'Publishing to relays…',
+};
+
 /**
  * /parent/upload — content uploader.
  *
- * Visual only. The drop zone is decorative (no file handling); Publish
- * just navigates back home. A later PR wires useUploadFile (Blossom)
- * and a NIP-71 video event publish.
+ * Uploads media to Blossom, then publishes a NIP-71 kind 21 (video) or
+ * NIP-68 kind 20 (picture) event signed by the selected family member.
  */
 export function ContentUploaderPage() {
   const nav = useNavigate();
+  const { nostr } = useNostr();
+  const { logins } = useNostrLogin();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const { family } = useKuboFamily();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [title,       setTitle]       = useState('');
+  // Form state
+  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category,    setCategory]    = useState<Category>('animals');
+  const [category, setCategory] = useState<Category>('animals');
 
-  const canPublish = title.trim().length > 0;
+  // File state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Publisher selection — defaults to parent
+  const [publisherPubkey, setPublisherPubkey] = useState<string | null>(null);
+
+  // Advanced overrides
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [selectedBlossomServer, setSelectedBlossomServer] = useState<string | null>(null);
+  const [selectedRelay, setSelectedRelay] = useState<string | null>(null);
+
+  // Stage-based progress
+  const [stage, setStage] = useState<PublishStage | null>(null);
+
+  // Default publisher to parent when family loads
+  useEffect(() => {
+    if (family && !publisherPubkey) {
+      setPublisherPubkey(family.parentPubkey);
+    }
+  }, [family, publisherPubkey]);
+
+  // Revoke object URL on unmount or when file changes
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const isVideo = selectedFile?.type.startsWith('video/');
+  const isImage = selectedFile?.type.startsWith('image/');
+
+  // Effective server/relay lists for the advanced dropdowns
+  const blossomServers = getEffectiveBlossomServers(
+    config.blossomServerMetadata,
+    config.useAppBlossomServers,
+  );
+  const effectiveRelays = getEffectiveRelays(
+    config.relayMetadata,
+    config.useAppRelays,
+  );
+  const writeRelays = effectiveRelays.relays.filter((r) => r.write);
+
+  function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('video/') && !file.type.startsWith('image/')) {
+      toast({ title: 'Unsupported file type', description: 'Please select a video or image file.', variant: 'destructive' });
+      e.target.value = '';
+      return;
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast({ title: 'File too large', description: 'Maximum file size is 200 MB.', variant: 'destructive' });
+      e.target.value = '';
+      return;
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    e.target.value = '';
+  }
+
+  function getSignerForPubkey(pubkey: string): NostrSigner {
+    // If it's the active user (parent), use their signer directly —
+    // this handles bunker/extension logins, not just nsec.
+    if (user && pubkey === user.pubkey) {
+      return user.signer;
+    }
+    // Otherwise resolve the kid's nsec from the login store.
+    const login = logins.find((l) => l.pubkey === pubkey && l.type === 'nsec');
+    if (!login || login.type !== 'nsec') {
+      throw new Error("That account's key isn't loaded on this device.");
+    }
+    return NUser.fromNsecLogin(NLogin.fromNsec(login.data.nsec)).signer;
+  }
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedFile || !publisherPubkey) {
+        throw new Error('File and publisher are required.');
+      }
+
+      // Explicit file type guard
+      if (!isVideo && !isImage) {
+        throw new Error('Unsupported file type. Please select a video or image.');
+      }
+
+      const signer = getSignerForPubkey(publisherPubkey);
+
+      // Stage 1: Upload to Blossom
+      setStage('uploading');
+      const servers = selectedBlossomServer ? [selectedBlossomServer] : blossomServers;
+      const uploadTags = await uploadFileWithSigner(selectedFile, signer, servers);
+      const uploadedUrl = uploadTags[0][1];
+
+      // Stage 2: Sign the event
+      setStage('signing');
+
+      const tags: string[][] = [];
+      tags.push(['title', title.trim()]);
+      tags.push(['t', category]);
+
+      // imeta tag with upload metadata
+      const imetaFields: string[] = [`url ${uploadedUrl}`];
+      const mimeTag = uploadTags.find((t) => t[0] === 'm');
+      if (mimeTag) imetaFields.push(`m ${mimeTag[1]}`);
+      const hashTag = uploadTags.find((t) => t[0] === 'x');
+      if (hashTag) imetaFields.push(`x ${hashTag[1]}`);
+      const sizeTag = uploadTags.find((t) => t[0] === 'size');
+      if (sizeTag) imetaFields.push(`size ${sizeTag[1]}`);
+      tags.push(['imeta', ...imetaFields]);
+
+      const kind = isVideo ? 21 : 20;
+      const altPrefix = isVideo ? 'Video' : 'Photo';
+      tags.push(['alt', `${altPrefix}: ${title.trim()}`]);
+      tags.push(['client', config.clientName ?? config.appName]);
+
+      const event = await signer.signEvent({
+        kind,
+        content: description.trim(),
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      });
+
+      // Stage 3: Publish to relay(s)
+      setStage('publishing');
+
+      if (selectedRelay) {
+        // Use the pool's relay instance — reuses existing connection if open
+        const relay = nostr.relay(selectedRelay);
+        await relay.event(event, { signal: AbortSignal.timeout(5000) });
+      } else {
+        await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+      }
+
+      return event;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      toast({ title: 'Published!' });
+      nav('/parent/home');
+    },
+    onError: (err) => {
+      console.error('Upload/publish failed:', err);
+      toast({
+        title: 'Upload failed',
+        description: err instanceof Error ? err.message : 'Something went wrong',
+        variant: 'destructive',
+      });
+    },
+    onSettled: () => {
+      setStage(null);
+    },
+  });
+
+  const canPublish = title.trim().length > 0
+    && selectedFile !== null
+    && publisherPubkey !== null
+    && !publishMutation.isPending;
 
   return (
     <div className="flex flex-col gap-4 pt-2 pb-6 min-h-dvh">
@@ -40,20 +241,78 @@ export function ContentUploaderPage() {
         >
           <X className="size-5" />
         </Button>
-        <h1 className="text-lg font-semibold flex-1">Upload a video</h1>
+        <h1 className="text-lg font-semibold flex-1">Upload content</h1>
       </div>
 
-      {/* Drop zone */}
-      <button
-        type="button"
-        className="mx-4 aspect-video rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-card/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-card/60 transition-colors"
-      >
-        <Upload className="size-6" />
-        <span className="text-[13px]">Tap to select</span>
-        <span className="text-[11px] text-muted-foreground/70">
-          mp4, mov · up to 200 MB
-        </span>
-      </button>
+      {/* Drop zone / preview */}
+      {previewUrl && selectedFile ? (
+        <div className="mx-4 relative aspect-video rounded-2xl overflow-hidden bg-black">
+          {isVideo ? (
+            <video
+              src={previewUrl}
+              controls
+              muted
+              playsInline
+              className="size-full object-contain"
+            />
+          ) : (
+            <img
+              src={previewUrl}
+              alt="Preview"
+              className="size-full object-cover"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs text-white hover:bg-black/80 transition-colors"
+          >
+            Change
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="mx-4 aspect-video rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-card/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-card/60 transition-colors"
+        >
+          <Upload className="size-6" />
+          <span className="text-[13px]">Tap to select</span>
+          <span className="text-[11px] text-muted-foreground/70">
+            Video or image · up to 200 MB
+          </span>
+        </button>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*,image/*"
+        className="hidden"
+        onChange={handleFilePick}
+      />
+
+      {/* Publish as */}
+      {family && (
+        <div className="px-4 flex flex-col gap-2">
+          <Label>Publish as</Label>
+          <Select value={publisherPubkey ?? ''} onValueChange={setPublisherPubkey}>
+            <SelectTrigger className="h-11 rounded-xl">
+              <SelectValue placeholder="Select who publishes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={family.parentPubkey}>
+                {family.parentDisplayName} (parent)
+              </SelectItem>
+              {family.kids.map((kid) => (
+                <SelectItem key={kid.pubkey} value={kid.pubkey}>
+                  {kid.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Title */}
       <div className="px-4 flex flex-col gap-2">
@@ -91,6 +350,64 @@ export function ContentUploaderPage() {
         />
       </div>
 
+      {/* Advanced options */}
+      <div className="px-4">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          Advanced options
+        </button>
+
+        {showAdvanced && (
+          <div className="flex flex-col gap-4 mt-3">
+            {/* Blossom server */}
+            <div className="flex flex-col gap-2">
+              <Label>Blossom server</Label>
+              <Select
+                value={selectedBlossomServer ?? '__all__'}
+                onValueChange={(v) => setSelectedBlossomServer(v === '__all__' ? null : v)}
+              >
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All servers (default)</SelectItem>
+                  {blossomServers.map((server) => (
+                    <SelectItem key={server} value={server}>
+                      {server.replace(/^https?:\/\//, '').replace(/\/+$/, '')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Relay */}
+            <div className="flex flex-col gap-2">
+              <Label>Publish to relay</Label>
+              <Select
+                value={selectedRelay ?? '__all__'}
+                onValueChange={(v) => setSelectedRelay(v === '__all__' ? null : v)}
+              >
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All relays (default)</SelectItem>
+                  {writeRelays.map((relay) => (
+                    <SelectItem key={relay.url} value={relay.url}>
+                      {relay.url.replace(/^wss?:\/\//, '').replace(/\/+$/, '')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex-1" />
 
       {/* Publish */}
@@ -99,9 +416,16 @@ export function ContentUploaderPage() {
           size="lg"
           className="w-full h-12 rounded-full"
           disabled={!canPublish}
-          onClick={() => nav('/parent/home')}
+          onClick={() => publishMutation.mutate()}
         >
-          Publish
+          {publishMutation.isPending ? (
+            <>
+              <Loader2 className="size-5 animate-spin mr-2" />
+              {stage ? STAGE_LABELS[stage] : 'Publishing…'}
+            </>
+          ) : (
+            'Publish'
+          )}
         </Button>
       </div>
     </div>
