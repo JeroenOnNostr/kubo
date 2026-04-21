@@ -4,6 +4,9 @@ Issue prefix: `KUBO-xxx`
 
 ## Completed
 
+- **KUBO-029: Wire Trust domain → People to kid's follow list + persist trust assignments**
+  Replaced the hardcoded `INNER_CIRCLE` / `OTHER` arrays on `/parent/trust/people` with real data from the active kid's kind-3 follow list. Partitions by local trust assignment: `extend` → INNER CIRCLE (alphabetical), everything else → OTHER (interact → view → unassigned, alphabetical within each). GROUPS stays hardcoded. Tapping a row expands inline to an Extend / Interact / View / Remove action bar; writes land in a new `trustAssignments` map on `KuboFamily` in secureStorage — no Nostr event yet (KUBO-013 will define the kind). Also wires `AssignTrustLevelButton` on `/parent/profile/:npub` through the same store. Refactored `useKuboFamily` from per-caller `useState` to a module-level singleton + `useSyncExternalStore` (matching `item-cooldown.ts`) so writes propagate to every subscriber in one render pass — without this, bar-writes weren't visible to the page. `TrustFollowRow` is `React.memo`'d and calls `useAuthor` per-row (Ditto `FollowingUserRow` pattern) for cache-first rendering. Commit: e239ac0a · 2026-04-21
+
 - **KUBO-024: Persistent kid selector in parent chrome**
   Extracted the per-page gear dropdown on `/parent/feed` into a shared `KuboKidSelector` (pill: avatar + displayName + chevron-down) and mounted it in `KuboParentLayout`'s new slim top header alongside the wordmark, so every `/parent/*` route now shows which kid the parent is configuring and lets them swap. Selector reuses the existing "Switch to kid view" / "Switch to parent view" / "Add a kid…" menu verbatim; reads the active kid via `useSelectedKid`, drives it via `setLogin` from `useNostrLogin`. `ParentFeedPage.tsx`'s superseded header-cleanup was subsumed by concurrent KUBO-023 WIP and is not part of this commit. Commit: b1830af6 · 2026-04-21
 
