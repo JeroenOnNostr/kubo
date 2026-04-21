@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 
 import { Button } from '@/components/ui/button';
@@ -270,49 +270,38 @@ function TrustSearchResults({
 }
 
 /**
- * Shared header for the Trust screens: back button, search pill, and
- * People/Places segmented control. Factored out so Places can reuse it
- * without duplicating 30 lines of markup.
+ * Shared header for the Trust screens: search pill and People/Places
+ * segmented control. Factored out so Places can reuse it without
+ * duplicating markup.
  */
 export function TrustHeader({
   active, search,
 }: {
   active: 'people' | 'places';
-  /** Controlled search input. Omit to render the back button + segmented control only. */
+  /** Controlled search input. Omit to render the segmented control only. */
   search?: { query: string; onQueryChange: (q: string) => void };
 }) {
   const nav = useNavigate();
 
   return (
     <>
-      {/* Top row */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-full"
-          onClick={() => nav('/parent/home')}
-          aria-label="Back"
-        >
-          <ChevronLeft className="size-5" />
-        </Button>
-        {search && (
-          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-full bg-card">
-            <Search className="size-4 text-muted-foreground" aria-hidden />
-            <input
-              value={search.query}
-              onChange={(e) => search.onQueryChange(e.target.value)}
-              placeholder="Search…"
-              className="flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              aria-label="Search people"
-            />
-          </div>
-        )}
-      </div>
+      {/* Search bar */}
+      {search && (
+        <div className="flex items-center gap-2 h-9 px-3 rounded-full bg-card">
+          <Search className="size-4 text-muted-foreground" aria-hidden />
+          <input
+            value={search.query}
+            onChange={(e) => search.onQueryChange(e.target.value)}
+            placeholder="Search…"
+            className="flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            aria-label="Search people"
+          />
+        </div>
+      )}
 
       <h1 className="text-center text-base font-semibold -mt-1">Trust domain</h1>
 

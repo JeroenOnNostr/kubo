@@ -1,4 +1,6 @@
 import { memo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { nip19 } from 'nostr-tools';
 
 import { TrustAssignmentBar } from '@/components/trust/TrustAssignmentBar';
 import { TrustRow, type TrustLevel } from '@/components/trust/TrustRow';
@@ -31,6 +33,7 @@ export const TrustFollowRow = memo(function TrustFollowRow({
   kidPubkey,
   assigned,
 }: TrustFollowRowProps) {
+  const nav = useNavigate();
   const { data: author } = useAuthor(pubkey);
   const [expanded, setExpanded] = useState(false);
 
@@ -58,6 +61,7 @@ export const TrustFollowRow = memo(function TrustFollowRow({
         level={displayLevel}
         expanded={expanded}
         onClick={() => setExpanded((e) => !e)}
+        onProfileClick={() => nav(`/parent/profile/${nip19.npubEncode(pubkey)}`)}
       />
       {expanded && (
         <div className="px-2.5 pb-2.5 rounded-b-xl bg-card/60">
