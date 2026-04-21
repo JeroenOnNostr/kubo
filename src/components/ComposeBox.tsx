@@ -1479,7 +1479,7 @@ export function ComposeBox({
                   </Tooltip>
                   <PopoverContent side="bottom" align="start" sideOffset={6} className="w-44 p-1.5 rounded-xl border-border shadow-lg">
                     <div className="flex flex-col gap-0.5">
-                      {!replyTo && (
+                      {!replyTo && feedSettings.showPolls && (
                         <button
                           type="button"
                           onClick={() => { setMode((m) => m === 'poll' ? 'post' : 'poll'); setTrayOpen(false); expand(); }}

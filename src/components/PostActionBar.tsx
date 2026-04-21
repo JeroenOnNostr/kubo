@@ -10,6 +10,7 @@ import { ZapDialog } from '@/components/ZapDialog';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEventStats } from '@/hooks/useTrending';
+import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { useToast } from '@/hooks/useToast';
 import { canZap } from '@/lib/canZap';
@@ -38,7 +39,8 @@ export function PostActionBar({
   const shareOrigin = useShareOrigin();
   const author = useAuthor(event.pubkey);
   const metadata = author.data?.metadata;
-  const canZapAuthor = user && canZap(metadata);
+  const { feedSettings } = useFeedSettings();
+  const canZapAuthor = feedSettings.showZaps && user && canZap(metadata);
 
   const { data: stats } = useEventStats(event.id, event);
   const repostTotal = (stats?.reposts ?? 0) + (stats?.quotes ?? 0);
