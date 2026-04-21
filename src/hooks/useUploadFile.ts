@@ -8,6 +8,63 @@ import { useCurrentUser } from "./useCurrentUser";
 import { useAppContext } from "./useAppContext";
 import { getEffectiveBlossomServers } from "@/lib/appBlossom";
 
+/**
+ * Upload a file to Blossom using a caller-supplied signer.
+ *
+ * Used by `useUploadFile` (active user's signer) and by the kid-avatar flow
+ * (`useUploadKidAvatar`, which signs with a kid's nsec without making the kid
+ * the active login). The BUD-01 `Authorization` event is attributed to
+ * whoever owns `signer` — so kid avatars are uploaded under the kid's pubkey.
+ */
+export async function uploadFileWithSigner(
+  file: File,
+  signer: NostrSigner,
+  servers: string[],
+): Promise<string[][]> {
+  const uploader = new BlossomUploader({
+    servers,
+    signer,
+    // Custom fetch with a 30-second per-server timeout. Without this,
+    // a hanging server blocks that promise indefinitely. Promise.any()
+    // still resolves as soon as any server succeeds, but the timeout
+    // ensures all promises eventually settle so the AggregateError path
+    // fires promptly when every server is slow or down.
+    fetch: (input, init) => globalThis.fetch(input, {
+      ...init,
+      signal: AbortSignal.any([
+        init?.signal ?? AbortSignal.timeout(30_000),
+        AbortSignal.timeout(30_000),
+      ]),
+    }),
+  });
+
+  const tags = await uploader.upload(file);
+
+  // If the returned URL is missing a file extension, append one from the
+  // source file name. Blossom URLs are content-addressed (`/<sha256>`) and
+  // may omit the extension. Adding it helps clients infer the media type.
+  const ext = getFileExtension(file.name);
+  if (ext) {
+    tags[0][1] = appendExtensionIfMissing(tags[0][1], ext);
+  }
+
+  const url = tags[0][1];
+
+  // Mirror to all other servers in the background (fire-and-forget).
+  // BlossomUploader uses Promise.any(), so only one server has the blob.
+  // We mirror to the rest for redundancy (BUD-04).
+  const uploadedServer = servers.find((s) => url.startsWith(s));
+  const mirrorServers = servers.filter((s) => s !== uploadedServer);
+
+  if (mirrorServers.length > 0) {
+    mirrorToServers(url, mirrorServers, signer).catch(() => {
+      // Mirroring is best-effort — don't fail the upload if it fails.
+    });
+  }
+
+  return tags;
+}
+
 export function useUploadFile() {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
@@ -23,48 +80,7 @@ export function useUploadFile() {
         config.useAppBlossomServers,
       );
 
-      const uploader = new BlossomUploader({
-        servers,
-        signer: user.signer,
-        // Custom fetch with a 30-second per-server timeout.  Without this,
-        // a hanging server blocks that promise indefinitely.  Promise.any()
-        // still resolves as soon as any server succeeds, but the timeout
-        // ensures all promises eventually settle so the AggregateError path
-        // fires promptly when every server is slow or down.
-        fetch: (input, init) => globalThis.fetch(input, {
-          ...init,
-          signal: AbortSignal.any([
-            init?.signal ?? AbortSignal.timeout(30_000),
-            AbortSignal.timeout(30_000),
-          ]),
-        }),
-      });
-
-      const tags = await uploader.upload(file);
-
-      // If the returned URL is missing a file extension, append one from the
-      // source file name. Blossom URLs are content-addressed (`/<sha256>`) and
-      // may omit the extension. Adding it helps clients infer the media type.
-      const ext = getFileExtension(file.name);
-      if (ext) {
-        tags[0][1] = appendExtensionIfMissing(tags[0][1], ext);
-      }
-
-      const url = tags[0][1];
-
-      // Mirror to all other servers in the background (fire-and-forget).
-      // BlossomUploader uses Promise.any(), so only one server has the blob.
-      // We mirror to the rest for redundancy (BUD-04).
-      const uploadedServer = servers.find((s) => url.startsWith(s));
-      const mirrorServers = servers.filter((s) => s !== uploadedServer);
-
-      if (mirrorServers.length > 0) {
-        mirrorToServers(url, mirrorServers, user.signer).catch(() => {
-          // Mirroring is best-effort — don't fail the upload if it fails.
-        });
-      }
-
-      return tags;
+      return uploadFileWithSigner(file, user.signer, servers);
     },
   });
 }

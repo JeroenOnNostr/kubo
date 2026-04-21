@@ -1,18 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Upload } from 'lucide-react';
 import { useNostr } from '@nostrify/react';
 import { useNostrLogin } from '@nostrify/react/login';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ImageCropDialog } from '@/components/ImageCropDialog';
 import { toast } from '@/hooks/useToast';
 import { useLoginActions } from '@/hooks/useLoginActions';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
+import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { onboardIdentity, publishInitialEncryptedSettings } from '@/lib/kuboOnboarding';
 import { DEFAULT_KID_FEED_SETTINGS } from '@/lib/extraKinds';
+import { parseAuthorEvent } from '@/hooks/useAuthor';
 
 interface ParentHandoffState {
   parentPubkey?: string;
@@ -38,6 +44,10 @@ export function AddKidPage() {
   const { setLogin } = useNostrLogin();
   const { family, setFamily, addKid } = useKuboFamily();
 
+  const queryClient = useQueryClient();
+  const { mutateAsync: uploadKidAvatar } = useUploadKidAvatar();
+  const { mutateAsync: publishKidProfile } = usePublishKidProfile();
+
   const handoff = (location.state ?? {}) as ParentHandoffState;
   const parentPubkey = handoff.parentPubkey ?? family?.parentPubkey;
   const parentDisplayName = handoff.parentDisplayName ?? family?.parentDisplayName;
@@ -46,6 +56,46 @@ export function AddKidPage() {
 
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Optional avatar pick — parent can skip. If a blob is staged, we upload
+  // and publish *after* onboardIdentity resolves, wrapped in try/catch so a
+  // failed upload never blocks kid creation (the identity is already persisted).
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [stagedBlob, setStagedBlob] = useState<Blob | null>(null);
+  const [stagedPreview, setStagedPreview] = useState<string | null>(null);
+  const [cropState, setCropState] = useState<{ open: boolean; imageSrc: string } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (stagedPreview) URL.revokeObjectURL(stagedPreview);
+    };
+    // stagedPreview is intentionally tracked via ref cleanup on unmount — we
+    // re-create it on every new crop and revoke the previous one in the
+    // handler below, so this effect is just a final safety net.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCropState({ open: true, imageSrc: URL.createObjectURL(file) });
+    }
+    e.target.value = '';
+  };
+
+  const handleCropCancel = () => {
+    if (cropState) URL.revokeObjectURL(cropState.imageSrc);
+    setCropState(null);
+  };
+
+  const handleCropConfirm = (blob: Blob) => {
+    if (!cropState) return;
+    URL.revokeObjectURL(cropState.imageSrc);
+    setCropState(null);
+    if (stagedPreview) URL.revokeObjectURL(stagedPreview);
+    setStagedBlob(blob);
+    setStagedPreview(URL.createObjectURL(blob));
+  };
 
   const canSubmit = name.trim().length >= 1 && !submitting;
 
@@ -84,6 +134,32 @@ export function AddKidPage() {
         // Non-fatal: the kid will just start with the app-wide feed defaults
         // and the parent can adjust via /parent/kid/:id/feed-settings.
         console.warn('Failed to seed kid encrypted settings:', err);
+      }
+
+      // Optional avatar upload — non-blocking. If this fails the kid is still
+      // created cleanly; parent can set a picture later via /parent/kid-settings.
+      // Uses the nsec-form of the hooks because Nostrify's `logins` state is
+      // updated asynchronously by `login.nsec(...)` above and may not yet
+      // contain the new kid inside this handler.
+      if (stagedBlob) {
+        const file = new File([stagedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+        try {
+          const url = await uploadKidAvatar({ file, nsec: identity.nsec });
+          const event = await publishKidProfile({
+            patch: { picture: url },
+            nsec: identity.nsec,
+          });
+          queryClient.setQueryData(
+            ['author', identity.pubkey],
+            parseAuthorEvent(event),
+          );
+        } catch (err) {
+          console.warn('Kid avatar upload failed (non-fatal):', err);
+          toast({
+            title: 'Picture upload failed',
+            description: `${trimmed} was added but without a picture. You can add one later.`,
+          });
+        }
       }
 
       if (isFirstKid) {
@@ -127,6 +203,33 @@ export function AddKidPage() {
           </p>
         </div>
 
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={submitting}
+            className="relative size-20 rounded-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
+            aria-label={stagedPreview ? 'Change profile picture' : 'Add profile picture (optional)'}
+          >
+            <Avatar className="size-20">
+              {stagedPreview && <AvatarImage src={stagedPreview} />}
+              <AvatarFallback className="bg-[#6366F1] text-white">
+                <Upload className="size-5 opacity-80" />
+              </AvatarFallback>
+            </Avatar>
+          </button>
+          <p className="text-[11px] text-muted-foreground">
+            {stagedPreview ? 'Tap to change' : 'Profile picture (optional)'}
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFilePick}
+          />
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="kid-name">Kid's name</Label>
           <Input
@@ -143,6 +246,17 @@ export function AddKidPage() {
           </p>
         </div>
       </div>
+
+      {cropState && (
+        <ImageCropDialog
+          open={cropState.open}
+          imageSrc={cropState.imageSrc}
+          aspect={1}
+          title="Crop profile picture"
+          onCancel={handleCropCancel}
+          onCrop={handleCropConfirm}
+        />
+      )}
 
       <Button
         size="lg"

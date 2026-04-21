@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound, SlidersHorizontal } from 'lucide-react';
 
 import { NoKidSelected } from '@/components/NoKidSelected';
+import { KidAvatar } from '@/components/KidAvatar';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 
 /**
@@ -30,7 +31,11 @@ export function KidDashboardPage() {
 
       {/* Kid summary */}
       <div className="flex items-center gap-3 px-1">
-        <div className="size-14 rounded-full bg-[#6366F1]" aria-hidden />
+        <KidAvatar
+          pubkey={kid.pubkey}
+          className="size-14"
+          fallbackInitial={kid.displayName[0]?.toUpperCase()}
+        />
         <div className="flex-1 min-w-0">
           <div className="text-lg font-semibold truncate">{kid.displayName}</div>
           <div className="text-[12px] text-muted-foreground">age 6 · paired device</div>

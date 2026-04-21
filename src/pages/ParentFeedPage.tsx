@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Settings, UserRound } from 'lucide-react';
+import { Plus, Search, Settings } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
   VideoFeedCard,
   type FeedVideo,
 } from '@/components/feed/VideoFeedCard';
+import { KidAvatar } from '@/components/KidAvatar';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { toast } from '@/hooks/useToast';
 
@@ -127,12 +128,11 @@ export function ParentFeedPage() {
                 onClick={() => pickKid(k.pubkey, '/kid')}
                 className="gap-2.5"
               >
-                <span
-                  className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-muted"
-                  aria-hidden
-                >
-                  <UserRound className="size-3.5 text-white" />
-                </span>
+                <KidAvatar
+                  pubkey={k.pubkey}
+                  className="size-6"
+                  fallbackInitial={k.displayName[0]?.toUpperCase()}
+                />
                 <span className="flex-1">{k.displayName}</span>
               </DropdownMenuItem>
             ))}
@@ -145,12 +145,11 @@ export function ParentFeedPage() {
                 onClick={() => pickKid(k.pubkey, '/parent/home')}
                 className="gap-2.5"
               >
-                <span
-                  className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-muted"
-                  aria-hidden
-                >
-                  <UserRound className="size-3.5 text-white" />
-                </span>
+                <KidAvatar
+                  pubkey={k.pubkey}
+                  className="size-6"
+                  fallbackInitial={k.displayName[0]?.toUpperCase()}
+                />
                 <span className="flex-1">{k.displayName}</span>
               </DropdownMenuItem>
             ))}

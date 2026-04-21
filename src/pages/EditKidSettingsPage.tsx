@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Upload, Loader2 } from 'lucide-react';
+import { useNostrLogin } from '@nostrify/react/login';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { NoKidSelected } from '@/components/NoKidSelected';
+import { ImageCropDialog } from '@/components/ImageCropDialog';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
+import { useAuthor, parseAuthorEvent } from '@/hooks/useAuthor';
+import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
+import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
+import { toast } from '@/hooks/useToast';
 
 type Moderation = 'low' | 'mid' | 'high';
 
@@ -29,6 +37,57 @@ export function EditKidSettingsPage() {
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
   const [moderation, setMod]      = useState<Moderation>('mid');
+
+  // Avatar upload wiring. Hooks must be called unconditionally, so we call
+  // them with `kid?.pubkey ?? ''` — useAuthor is gated on a truthy pubkey
+  // internally and the mutations only read the pubkey inside the handler.
+  const kidPubkey = kid?.pubkey ?? '';
+  const { logins } = useNostrLogin();
+  const { data: authorData } = useAuthor(kidPubkey || undefined);
+  const metadata = authorData?.metadata;
+  const queryClient = useQueryClient();
+
+  const kidLoginAvailable = !!kidPubkey && logins.some(
+    (l) => l.pubkey === kidPubkey && l.type === 'nsec',
+  );
+
+  const { mutateAsync: uploadKidAvatar, isPending: isUploading } = useUploadKidAvatar();
+  const { mutateAsync: publishKidProfile, isPending: isPublishing } = usePublishKidProfile();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cropState, setCropState] = useState<{ open: boolean; imageSrc: string } | null>(null);
+
+  const openCropDialog = (file: File) => {
+    const imageSrc = URL.createObjectURL(file);
+    setCropState({ open: true, imageSrc });
+  };
+
+  const handleCropCancel = () => {
+    if (cropState) URL.revokeObjectURL(cropState.imageSrc);
+    setCropState(null);
+  };
+
+  const handleCropConfirm = async (blob: Blob) => {
+    if (!cropState || !kidPubkey) return;
+    URL.revokeObjectURL(cropState.imageSrc);
+    setCropState(null);
+
+    const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+    try {
+      const url = await uploadKidAvatar({ file, kidPubkey });
+      const event = await publishKidProfile({ patch: { picture: url }, kidPubkey });
+      // Prime TanStack Query so every KidAvatar consumer repaints immediately.
+      queryClient.setQueryData(['author', kidPubkey], parseAuthorEvent(event));
+      toast({ title: 'Profile picture saved' });
+    } catch (err) {
+      console.error('Failed to save kid avatar:', err);
+      toast({
+        title: 'Could not save picture',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   if (!kid) {
     return <NoKidSelected title="Kid settings" />;
@@ -52,12 +111,57 @@ export function EditKidSettingsPage() {
 
       {/* Kid identity block */}
       <div className="flex items-center gap-3 px-1">
-        <div className="size-12 rounded-full bg-[#6366F1]" aria-hidden />
-        <div className="min-w-0">
+        <Avatar className="size-12">
+          <AvatarImage src={metadata?.picture} />
+          <AvatarFallback className="bg-[#6366F1]" />
+        </Avatar>
+        <div className="min-w-0 flex-1">
           <div className="text-base font-semibold truncate">{kid.displayName}</div>
           <div className="text-[11px] text-muted-foreground">age {age} · paired</div>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!kidLoginAvailable || isUploading || isPublishing}
+          onClick={() => fileInputRef.current?.click()}
+          className="h-8 text-xs gap-1.5"
+          aria-label={metadata?.picture ? 'Change profile picture' : 'Upload profile picture'}
+          title={
+            kidLoginAvailable
+              ? undefined
+              : "This kid's key isn't loaded on this device."
+          }
+        >
+          {(isUploading || isPublishing)
+            ? <Loader2 className="h-3 w-3 animate-spin" />
+            : <Upload className="h-3 w-3" />}
+          {metadata?.picture ? 'Change' : 'Upload'}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) openCropDialog(file);
+            e.target.value = '';
+          }}
+        />
       </div>
+
+      {/* Crop dialog */}
+      {cropState && (
+        <ImageCropDialog
+          open={cropState.open}
+          imageSrc={cropState.imageSrc}
+          aspect={1}
+          title="Crop profile picture"
+          onCancel={handleCropCancel}
+          onCrop={handleCropConfirm}
+        />
+      )}
 
       {/* Age */}
       <Field label="Age" value={`${age} years`}>

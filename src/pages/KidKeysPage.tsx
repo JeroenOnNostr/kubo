@@ -8,6 +8,7 @@ import { useNostrLogin } from '@nostrify/react/login';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { KidAvatar } from '@/components/KidAvatar';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
@@ -86,7 +87,11 @@ export function KidKeysPage() {
 
   const identityBlock = (
     <div className="flex items-center gap-3 px-1">
-      <div className="size-12 rounded-full bg-[#6366F1]" aria-hidden />
+      <KidAvatar
+        pubkey={current.pubkey}
+        className="size-12"
+        fallbackInitial={displayName[0]?.toUpperCase()}
+      />
       <div className="min-w-0">
         <div className="text-base font-semibold truncate">{displayName}</div>
         <div className="text-[11px] text-muted-foreground">Nostr keypair</div>
