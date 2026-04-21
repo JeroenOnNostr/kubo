@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, KeyRound, Upload, Loader2 } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
@@ -17,16 +17,15 @@ import { useAuthor, parseAuthorEvent } from '@/hooks/useAuthor';
 import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
-
-type Moderation = 'low' | 'mid' | 'high';
+import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
+import type { KuboModeration } from '@/hooks/useKuboFamily';
 
 /**
  * /parent/kid-settings — per-kid knobs for whichever kid is the active signer.
  *
- * Visual only. Fields are local useState; nothing is persisted. The
- * data-layer PR will wire these to a kid-settings addressable event
- * via read-modify-write. Layout matches screen 04 in the contact sheet
- * (kid header, age slider, daily-limit slider, allowed-window inputs,
+ * Fields are persisted to the family record via setKidSettings().
+ * Layout matches screen 04 in the contact sheet
+ * (kid header, daily-limit slider, allowed-window inputs,
  * moderation radio).
  */
 export function EditKidSettingsPage() {
@@ -37,7 +36,18 @@ export function EditKidSettingsPage() {
   const [dailyLimit, setDaily]    = useState(45); // minutes
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
-  const [moderation, setMod]      = useState<Moderation>('mid');
+  const [moderation, setMod]      = useState<KuboModeration>('mid');
+
+  // Load persisted settings when kid changes.
+  useEffect(() => {
+    if (!kid) return;
+    const s = getKidSettings(kid.pubkey);
+    setAge(s.age);
+    setDaily(s.dailyLimitMin);
+    setWStart(s.windowStart);
+    setWEnd(s.windowEnd);
+    setMod(s.moderation);
+  }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Avatar upload wiring. Hooks must be called unconditionally, so we call
   // them with `kid?.pubkey ?? ''` — useAuthor is gated on a truthy pubkey
@@ -118,7 +128,7 @@ export function EditKidSettingsPage() {
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="text-base font-semibold truncate">{kid.displayName}</div>
-          <div className="text-[11px] text-muted-foreground">age {age} · paired</div>
+          <div className="text-[11px] text-muted-foreground">paired</div>
         </div>
         <Button
           type="button"
@@ -163,18 +173,6 @@ export function EditKidSettingsPage() {
           onCrop={handleCropConfirm}
         />
       )}
-
-      {/* Age */}
-      <Field label="Age" value={`${age} years`}>
-        <Slider
-          value={[age]}
-          min={3}
-          max={14}
-          step={1}
-          onValueChange={(v) => setAge(v[0])}
-          aria-label="Age"
-        />
-      </Field>
 
       {/* Daily limit */}
       <Field label="Daily limit" value={`${dailyLimit} min`}>
@@ -246,7 +244,21 @@ export function EditKidSettingsPage() {
 
       <div className="h-4" />
 
-      <Button size="lg" className="w-full h-12 rounded-full">
+      <Button
+        size="lg"
+        className="w-full h-12 rounded-full"
+        onClick={async () => {
+          if (!kid) return;
+          await setKidSettings(kid.pubkey, {
+            age,
+            dailyLimitMin: dailyLimit,
+            windowStart,
+            windowEnd,
+            moderation,
+          });
+          toast({ title: 'Settings saved' });
+        }}
+      >
         Save changes
       </Button>
     </div>

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Settings, SlidersHorizontal } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -14,31 +14,53 @@ import { KidAvatar } from '@/components/KidAvatar';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
+import { useScreenTime, useScreenTimeLog } from '@/hooks/useScreenTime';
+import { getKidSettings } from '@/hooks/useKuboFamily';
+import type { ScreenTimeEntry } from '@/lib/screenTimeStore';
 
-const ACTIVITY_DATA = [
-  { day: 'M', james: 40, maya: 55, kevin: 20 },
-  { day: 'T', james: 25, maya: 60, kevin: 30 },
-  { day: 'W', james: 20, maya: 15, kevin: 35 },
-  { day: 'T', james: 45, maya: 70, kevin: 15 },
-  { day: 'F', james: 30, maya: 40, kevin: 25 },
-  { day: 'S', james: 50, maya: 45, kevin: 30 },
-  { day: 'S', james: 35, maya: 55, kevin: 30 },
-];
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-const KID_COLORS = {
-  james: '#F97316',
-  maya: '#6366F1',
-  kevin: '#22C55E',
-};
+function formatMinutes(totalSeconds: number): string {
+  const mins = Math.round(totalSeconds / 60);
+  if (mins >= 60) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  return `${mins}m`;
+}
+
+/** Build last-7-days chart data from the screen time log. */
+function buildWeekData(log: ScreenTimeEntry[]): { day: string; minutes: number }[] {
+  const today = new Date();
+  const result: { day: string; minutes: number }[] = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const entry = log.find((e) => e.date === dateStr);
+    result.push({
+      day: DAY_LABELS[d.getDay()],
+      minutes: entry ? Math.round(entry.usedSeconds / 60) : 0,
+    });
+  }
+
+  return result;
+}
+
+/** Sum all seconds in the log entries. */
+function totalSeconds(log: ScreenTimeEntry[]): number {
+  return log.reduce((sum, e) => sum + e.usedSeconds, 0);
+}
 
 /**
  * /parent/home — per-kid dashboard for whichever kid is currently the
- * active Nostr signer. Parents swap kids via the top-right gear dropdown
- * on the Feed tab; this page then re-renders for the newly-selected kid.
+ * active Nostr signer. Parents swap kids via the KuboKidSelector dropdown;
+ * this page then re-renders for the newly-selected kid.
  *
- * Visual only. Counters and progress values are hard-coded placeholders;
- * a data-layer PR will swap them for live readings from kid-settings /
- * trust-people / trust-relays.
+ * Usage stats, progress bar, and activity chart are driven by real screen
+ * time data from the family record.
  */
 export function KidDashboardPage() {
   const nav = useNavigate();
@@ -47,6 +69,17 @@ export function KidDashboardPage() {
   if (!kid) {
     return <NoKidSelected title="Home" />;
   }
+
+  return <DashboardContent kidPubkey={kid.pubkey} kidDisplayName={kid.displayName} />;
+}
+
+function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; kidDisplayName: string }) {
+  const nav = useNavigate();
+  const { usedSeconds, remainingMinutes, dailyLimitMin, percentUsed } = useScreenTime(kidPubkey);
+  const settings = getKidSettings(kidPubkey);
+  const log = useScreenTimeLog(kidPubkey);
+  const weekData = buildWeekData(log);
+  const usedMinutes = Math.round(usedSeconds / 60);
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
@@ -58,15 +91,22 @@ export function KidDashboardPage() {
       {/* Kid summary */}
       <div className="flex items-center gap-3 px-1">
         <KidAvatar
-          pubkey={kid.pubkey}
+          pubkey={kidPubkey}
           className="size-14"
-          fallbackInitial={kid.displayName[0]?.toUpperCase()}
+          fallbackInitial={kidDisplayName[0]?.toUpperCase()}
         />
         <div className="flex-1 min-w-0">
-          <div className="text-lg font-semibold truncate">{kid.displayName}</div>
-          <div className="text-[12px] text-muted-foreground">age 6 · paired device</div>
+          <div className="text-lg font-semibold truncate">{kidDisplayName}</div>
         </div>
       </div>
+
+      {/* Kid settings */}
+      <NavTile
+        icon={<Settings className="size-5" />}
+        title="Edit kid settings"
+        subtitle="Age, time limits, moderation"
+        onClick={() => nav('/parent/kid-settings')}
+      />
 
       {/* Today's usage */}
       <div className="rounded-2xl bg-card p-4 flex flex-col gap-3">
@@ -74,35 +114,21 @@ export function KidDashboardPage() {
           <span className="text-xs uppercase tracking-[0.08em] text-muted-foreground font-semibold">
             Today
           </span>
-          <span className="text-xs text-muted-foreground">18 / 45 min</span>
+          <span className="text-xs text-muted-foreground">
+            {usedMinutes} / {dailyLimitMin} min
+          </span>
         </div>
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
           <div
             className="h-full bg-primary rounded-full"
-            style={{ width: '40%' }}
-            aria-label="40% of daily limit used"
+            style={{ width: `${percentUsed}%` }}
+            aria-label={`${percentUsed}% of daily limit used`}
           />
         </div>
         <div className="text-[11px] text-muted-foreground">
-          27 min remaining · window closes 19:00
+          {remainingMinutes} min remaining · window closes {settings.windowEnd}
         </div>
       </div>
-
-      {/* Nav tiles */}
-      <nav className="flex flex-col gap-2">
-        <NavTile
-          icon={<Settings className="size-5" />}
-          title="Edit kid settings"
-          subtitle="Age, time limits, moderation"
-          onClick={() => nav('/parent/kid-settings')}
-        />
-        <NavTile
-          icon={<SlidersHorizontal className="size-5" />}
-          title="Edit feed settings"
-          subtitle="Content types in this kid's feed"
-          onClick={() => nav('/parent/feed-settings')}
-        />
-      </nav>
 
       {/* Kids watch history — placeholder */}
       <section className="flex flex-col gap-3">
@@ -124,7 +150,7 @@ export function KidDashboardPage() {
         </div>
       </section>
 
-      {/* Kids activity — placeholder */}
+      {/* Kids activity */}
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold">Kids activity</h2>
         <Tabs defaultValue="week" className="flex flex-col gap-3">
@@ -133,10 +159,17 @@ export function KidDashboardPage() {
             <TabsTrigger value="day" className="px-6">Day</TabsTrigger>
           </TabsList>
           <TabsContent value="week" className="mt-0">
-            <ActivityChartCard />
+            <ActivityChartCard
+              data={weekData}
+              kidName={kidDisplayName}
+              totalLabel={formatMinutes(totalSeconds(log))}
+            />
           </TabsContent>
           <TabsContent value="day" className="mt-0">
-            <ActivityChartCard />
+            <Card className="p-4 flex flex-col items-center gap-2">
+              <div className="text-3xl font-bold">{formatMinutes(usedSeconds)}</div>
+              <div className="text-[12px] text-muted-foreground">today</div>
+            </Card>
           </TabsContent>
         </Tabs>
       </section>
@@ -144,12 +177,20 @@ export function KidDashboardPage() {
   );
 }
 
-function ActivityChartCard() {
+function ActivityChartCard({
+  data,
+  kidName,
+  totalLabel,
+}: {
+  data: { day: string; minutes: number }[];
+  kidName: string;
+  totalLabel: string;
+}) {
   return (
     <Card className="p-4 flex flex-col gap-3">
       <div className="h-40 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={ACTIVITY_DATA} barGap={2} barCategoryGap="20%">
+          <BarChart data={data} barCategoryGap="20%">
             <CartesianGrid vertical={false} stroke="hsl(var(--muted))" />
             <XAxis
               dataKey="day"
@@ -157,26 +198,16 @@ function ActivityChartCard() {
               axisLine={false}
               tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
             />
-            <Bar dataKey="james" fill={KID_COLORS.james} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="maya" fill={KID_COLORS.maya} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="kevin" fill={KID_COLORS.kevin} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="minutes" fill="#F97316" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex items-center justify-around text-[12px]">
-        <LegendItem color={KID_COLORS.james} name="James" time="1h 40m" />
-        <LegendItem color={KID_COLORS.maya} name="Maya" time="2h 30m" />
-        <LegendItem color={KID_COLORS.kevin} name="Kevin" time="45m" />
+      <div className="flex items-center justify-center text-[12px]">
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="font-semibold" style={{ color: '#F97316' }}>{kidName}</span>
+          <span className="text-muted-foreground">{totalLabel} this week</span>
+        </div>
       </div>
     </Card>
-  );
-}
-
-function LegendItem({ color, name, time }: { color: string; name: string; time: string }) {
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className="font-semibold" style={{ color }}>{name}</span>
-      <span className="text-muted-foreground">{time}</span>
-    </div>
   );
 }

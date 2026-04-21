@@ -4,6 +4,7 @@ import { Clock, Settings, Play, Lock, Inbox, Star } from 'lucide-react';
 
 import { getDisplayName } from '@/lib/getDisplayName';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useScreenTime } from '@/hooks/useScreenTime';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { KidRequestSheet } from '@/components/kid/KidRequestSheet';
@@ -57,6 +58,37 @@ export function KidHomePage() {
 
   const { user, metadata } = useCurrentUser();
   const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
+  const { remainingMinutes, isLocked, isOutsideWindow, settings } = useScreenTime();
+
+  // Data-driven lock — overrides any ?state= param and favorites view.
+  if (isLocked) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
+        <div
+          className="size-16 rounded-2xl flex items-center justify-center"
+          style={{ background: '#F97316' }}
+        >
+          <Lock className="size-8 text-white" strokeWidth={2.5} />
+        </div>
+        <h1 className="text-xl font-bold">
+          {isOutsideWindow ? 'Not right now!' : 'See you tomorrow!'}
+        </h1>
+        <p className="text-[14px] text-white/70 max-w-[260px] leading-relaxed">
+          {isOutsideWindow
+            ? `Come back at ${settings?.windowStart ?? '4:00 pm'}.`
+            : 'Your watch time is done for today.'}
+        </p>
+        <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
+        <button
+          type="button"
+          onClick={() => setGateOpen(true)}
+          className="mt-4 h-10 px-6 rounded-full text-[12px] text-white/60 border border-white/20 active:scale-95 transition-transform"
+        >
+          I'm a parent
+        </button>
+      </div>
+    );
+  }
 
   if (isFavorites) {
     return (
@@ -89,23 +121,6 @@ export function KidHomePage() {
 
         <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
         <KuboKidBottomNav />
-      </div>
-    );
-  }
-
-  if (state === 'locked') {
-    return (
-      <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
-        <div
-          className="size-16 rounded-2xl flex items-center justify-center"
-          style={{ background: '#F97316' }}
-        >
-          <Lock className="size-8 text-white" strokeWidth={2.5} />
-        </div>
-        <h1 className="text-xl font-bold">See you tomorrow!</h1>
-        <p className="text-[14px] text-white/70 max-w-[260px] leading-relaxed">
-          Your watch time is done for today. Come back at 4&nbsp;pm.
-        </p>
       </div>
     );
   }
@@ -201,7 +216,7 @@ export function KidHomePage() {
             style={{ background: 'rgba(255,255,255,0.2)' }}
           >
             <Clock className="size-4" />
-            12
+            {remainingMinutes}
           </div>
           <button
             type="button"

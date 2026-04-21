@@ -15,6 +15,16 @@ export interface KuboKid {
 
 export type KuboTrustLevel = 'extend' | 'interact' | 'view';
 
+export type KuboModeration = 'low' | 'mid' | 'high';
+
+export interface KidSettings {
+  dailyLimitMin: number;        // 15-180
+  windowStart: string;           // "HH:MM"
+  windowEnd: string;             // "HH:MM"
+  age: number;
+  moderation: KuboModeration;
+}
+
 export interface KuboFamily {
   parentPubkey: string;
   parentDisplayName: string;
@@ -25,6 +35,8 @@ export interface KuboFamily {
       [targetPubkey: string]: KuboTrustLevel;
     };
   };
+  /** Per-kid settings (time limits, moderation, age). */
+  kidSettings?: { [kidPubkey: string]: KidSettings };
 }
 
 /**
@@ -179,6 +191,34 @@ export async function clearTrustLevel(
   });
 }
 
+// ─── Kid settings ────────────────────────────────────────────────────────────
+
+export const DEFAULT_KID_SETTINGS: KidSettings = {
+  dailyLimitMin: 45,
+  windowStart: '16:00',
+  windowEnd: '19:00',
+  age: 6,
+  moderation: 'mid',
+};
+
+export async function setKidSettings(
+  kidPubkey: string,
+  settings: KidSettings,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot set kid settings: no family record exists yet.');
+  }
+  await writeAndNotify({
+    ...current,
+    kidSettings: { ...current.kidSettings, [kidPubkey]: settings },
+  });
+}
+
+export function getKidSettings(kidPubkey: string): KidSettings {
+  return family?.kidSettings?.[kidPubkey] ?? DEFAULT_KID_SETTINGS;
+}
+
 // ─── React binding ────────────────────────────────────────────────────────────
 
 function subscribe(onStoreChange: () => void): () => void {
@@ -206,6 +246,7 @@ export function useKuboFamily() {
   const clearFamilyCb = useCallback(clearFamily, []);
   const setTrustLevelCb = useCallback(setTrustLevel, []);
   const clearTrustLevelCb = useCallback(clearTrustLevel, []);
+  const setKidSettingsCb = useCallback(setKidSettings, []);
 
   return {
     family: current,
@@ -215,5 +256,6 @@ export function useKuboFamily() {
     clearFamily: clearFamilyCb,
     setTrustLevel: setTrustLevelCb,
     clearTrustLevel: clearTrustLevelCb,
+    setKidSettings: setKidSettingsCb,
   };
 }
