@@ -2,7 +2,7 @@ import { type FeedSettings } from "@/contexts/AppContext";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useEncryptedSettings } from "@/hooks/useEncryptedSettings";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { SIDEBAR_ITEMS, SIDEBAR_ITEM_IDS, SIDEBAR_DIVIDER_ID, isNostrUri, isExternalUri } from "@/lib/sidebarItems";
+import { SIDEBAR_ITEMS, SIDEBAR_ITEM_IDS, SIDEBAR_ITEM_VISIBILITY_KEYS, SIDEBAR_DIVIDER_ID, isNostrUri, isExternalUri } from "@/lib/sidebarItems";
 import { useCallback, useMemo } from "react";
 
 // ── Order computation ─────────────────────────────────────────────────────────
@@ -71,14 +71,19 @@ export interface HiddenSidebarItem {
 
 function computeHiddenItems(
   orderedItems: string[],
+  feedSettings: FeedSettings,
 ): HiddenSidebarItem[] {
   const visibleSet = new Set(orderedItems);
   const hidden: HiddenSidebarItem[] = [];
 
   for (const item of SIDEBAR_ITEMS) {
-    if (!visibleSet.has(item.id)) {
-      hidden.push({ id: item.id, label: item.label });
-    }
+    if (visibleSet.has(item.id)) continue;
+    // If the item is gated by a show* flag and that flag is off, exclude it
+    // from the "+ More" / "Add" menu — the master switch lives in the
+    // Hidden Features settings page.
+    const visibilityKey = SIDEBAR_ITEM_VISIBILITY_KEYS[item.id];
+    if (visibilityKey && !feedSettings[visibilityKey]) continue;
+    hidden.push({ id: item.id, label: item.label });
   }
 
   return hidden;
@@ -100,8 +105,8 @@ export function useFeedSettings() {
   );
 
   const hiddenItems = useMemo(
-    () => computeHiddenItems(orderedItems),
-    [orderedItems],
+    () => computeHiddenItems(orderedItems, config.feedSettings),
+    [orderedItems, config.feedSettings],
   );
 
   const updateFeedSettings = useCallback(

@@ -180,6 +180,43 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
 /** Set of all known sidebar item IDs for quick lookup. */
 export const SIDEBAR_ITEM_IDS = new Set(SIDEBAR_ITEMS.map((s) => s.id));
 
+/**
+ * Map from sidebar item ID to the corresponding `feedSettings.show*` key
+ * that gates its visibility. Items not in this map are always visible
+ * (e.g. system pages like Feed, Settings, Help).
+ *
+ * Keep this in sync with the FeedSettings interface in AppContext.ts.
+ */
+export const SIDEBAR_ITEM_VISIBILITY_KEYS: Record<string, keyof import("@/contexts/AppContext").FeedSettings> = {
+  // Content types with existing upstream show* keys
+  events: "showEvents",
+  photos: "showPhotos",
+  videos: "showVideos",
+  articles: "showArticles",
+  vines: "showVines",
+  music: "showMusic",
+  podcasts: "showPodcasts",
+  webxdc: "showWebxdc",
+  themes: "showProfileThemes",
+  polls: "showPolls",
+  packs: "showPacks",
+  colors: "showColors",
+  decks: "showDecks",
+  treasures: "showTreasures",
+  emojis: "showEmojiPacks",
+  development: "showDevelopment",
+  badges: "showBadges",
+  // Kubo-added show* keys (sidebar items that lacked an upstream toggle)
+  blobbi: "showBlobbi",
+  letters: "showLetters",
+  "ai-chat": "showAIChat",
+  world: "showWorld",
+  books: "showBooks",
+  archive: "showArchive",
+  wikipedia: "showWikipedia",
+  bluesky: "showBluesky",
+};
+
 /** Map from ID to definition for O(1) lookup. */
 const SIDEBAR_ITEM_MAP = new Map(SIDEBAR_ITEMS.map((s) => [s.id, s]));
 
