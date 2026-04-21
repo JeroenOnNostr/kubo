@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Settings, Shield, Clock, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
@@ -89,6 +89,12 @@ export function KidDashboardPage() {
           title="Trust · Places"
           subtitle="4 relays"
           onClick={() => nav(`/parent/kid/${id}/trust/places`)}
+        />
+        <NavTile
+          icon={<KeyRound className="size-5" />}
+          title="Backup keys"
+          subtitle="View and save this kid's Nostr key"
+          onClick={() => nav(`/parent/kid/${id}/keys`)}
         />
         <NavTile
           icon={<AlertTriangle className="size-5" />}

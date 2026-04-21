@@ -48,6 +48,7 @@ import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
 import { AddKidPage } from "@/pages/AddKidPage";
 import { KidDashboardPage } from "@/pages/KidDashboardPage";
+import { KidKeysPage } from "@/pages/KidKeysPage";
 import { EditKidSettingsPage } from "@/pages/EditKidSettingsPage";
 import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
@@ -330,6 +331,7 @@ export function AppRouter() {
             <Route path="/parent/kid/:id/trust/places" element={<TrustPlacesPage     />} />
             <Route path="/parent/kid/:id/groups/:gid"  element={<GroupViewPage       />} />
             <Route path="/parent/kid/:id/wot"          element={<WoTScorePage        />} />
+            <Route path="/parent/kid/:id/keys"         element={<KidKeysPage         />} />
           </Route>
 
           {/* ─── Kubo onboarding ─────────────────────────────── */}
