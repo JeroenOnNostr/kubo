@@ -122,6 +122,17 @@ const hardcodedConfig: AppConfig = {
     feedIncludeVanish: true,
     feedIncludeBlobbi: true,
     followsFeedShowReplies: true,
+    // Kubo: new visibility toggles. Hardcoded defaults match upstream Ditto's
+    // "everything on" stance; kubo.json overrides flip these off for our build.
+    showZaps: true,
+    showBlobbi: true,
+    showLetters: true,
+    showAIChat: true,
+    showWorld: true,
+    showBooks: true,
+    showArchive: true,
+    showWikipedia: true,
+    showBluesky: true,
   },
   sidebarOrder: [
     "feed",

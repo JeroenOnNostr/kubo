@@ -156,6 +156,24 @@ export interface FeedSettings {
   feedIncludeBlobbi: boolean;
   /** Include replies in the follows feed (default: true) */
   followsFeedShowReplies: boolean;
+  /** Show the Zap button on posts (NIP-57). When false, the zap action is hidden everywhere. */
+  showZaps: boolean;
+  /** Show the Blobbi virtual pet companion + sidebar entry. */
+  showBlobbi: boolean;
+  /** Show the Letters (encrypted personal letters, kind 8211) sidebar entry. */
+  showLetters: boolean;
+  /** Show the AI Chat sidebar entry. */
+  showAIChat: boolean;
+  /** Show the World (geographic feed) sidebar entry. */
+  showWorld: boolean;
+  /** Show the Books (Bookstr integration) sidebar entry. */
+  showBooks: boolean;
+  /** Show the Archive sidebar entry. */
+  showArchive: boolean;
+  /** Show the Wikipedia integration sidebar entry. */
+  showWikipedia: boolean;
+  /** Show the Bluesky bridge sidebar entry. */
+  showBluesky: boolean;
 }
 
 /**

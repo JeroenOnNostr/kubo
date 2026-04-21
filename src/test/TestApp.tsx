@@ -93,6 +93,16 @@ export function TestApp({ children }: TestAppProps) {
       feedIncludeVanish: true,
       feedIncludeBlobbi: true,
       followsFeedShowReplies: true,
+      // Kubo: visibility toggles for items without an upstream show* key.
+      showZaps: false,
+      showBlobbi: false,
+      showLetters: false,
+      showAIChat: false,
+      showWorld: false,
+      showBooks: false,
+      showArchive: false,
+      showWikipedia: false,
+      showBluesky: false,
     },
     sidebarOrder: [],
     nip85StatsPubkey:

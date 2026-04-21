@@ -183,6 +183,16 @@ export const FeedSettingsSchema = z.looseObject({
   feedIncludeBlobbi: z.boolean().optional(),
   showBadgeAwards: z.boolean().optional(),
   feedIncludeBadgeAwards: z.boolean().optional(),
+  // Kubo: visibility toggles for sidebar items / actions that didn't have one upstream.
+  showZaps: z.boolean().optional(),
+  showBlobbi: z.boolean().optional(),
+  showLetters: z.boolean().optional(),
+  showAIChat: z.boolean().optional(),
+  showWorld: z.boolean().optional(),
+  showBooks: z.boolean().optional(),
+  showArchive: z.boolean().optional(),
+  showWikipedia: z.boolean().optional(),
+  showBluesky: z.boolean().optional(),
 });
 
 /** Schema for a NIP-01 filter object (lenient — allows variable placeholder strings). */
