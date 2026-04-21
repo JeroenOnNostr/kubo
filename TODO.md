@@ -31,6 +31,12 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-009: Handle returning-user-on-new-device case in onboarding**
   After shortening the onboarding flow (Welcome → Create parent → Create kid), a returning Kubo user logging in on a fresh browser/device (no local settings, no remote settings discoverable within the 8s sync timeout) will have Kubo default `feedSettings` + `contentWarningPolicy: "blur"` silently written over whatever they had before. Low-risk while Kubo is new, but revisit when cross-device returning-user flow becomes a concern. Likely fix: detect "this user just came through `/onboard/create-parent`" vs. "this is an existing nsec login from elsewhere" and only apply silent defaults in the former case.
 
+- **KUBO-021: Videos tab — trust-scoped filtering**
+  Follow-up to KUBO-020. `VideosTab` on `/parent/profile/:npub` currently shows every media event from the creator, unfiltered. Once KUBO-013 defines the trust-people list kind, filter `useProfileMedia` results by the current kid's trusted-authors set (or the kid's active trust level) so the grid matches what the kid is allowed to see. Probably a thin wrapper hook `useKidScopedProfileMedia(pubkey, kidId)` that post-filters the infinite query pages.
+
+- **KUBO-022: Videos tab — infinite scroll**
+  Follow-up to KUBO-020. `VideosTab` only renders the first `useProfileMedia` page (~20 events). Wire an IntersectionObserver sentinel at the bottom of the grid that calls `fetchNextPage()` when visible, using the hook's already-implemented `getNextPageParam`.
+
 ## Deferred to post-MVP
 
 - **KUBO-002: Separate devices** — parent and kid on distinct devices rather than sharing one; requires some transport between them (pairing, key sync, etc.).
