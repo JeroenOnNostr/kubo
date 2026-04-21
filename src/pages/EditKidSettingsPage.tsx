@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { useKidDisplayName } from '@/hooks/useKidDisplayName';
 
 type Moderation = 'low' | 'mid' | 'high';
 
@@ -21,6 +22,7 @@ type Moderation = 'low' | 'mid' | 'high';
 export function EditKidSettingsPage() {
   const nav = useNavigate();
   const { id = 'ellie' } = useParams<{ id: string }>();
+  const kidName = useKidDisplayName(id);
 
   const [age, setAge]             = useState(6);
   const [dailyLimit, setDaily]    = useState(45); // minutes
@@ -48,7 +50,7 @@ export function EditKidSettingsPage() {
       <div className="flex items-center gap-3 px-1">
         <div className="size-12 rounded-full bg-[#6366F1]" aria-hidden />
         <div className="min-w-0">
-          <div className="text-base font-semibold truncate">Ellie</div>
+          <div className="text-base font-semibold truncate">{kidName}</div>
           <div className="text-[11px] text-muted-foreground">age {age} · paired</div>
         </div>
       </div>

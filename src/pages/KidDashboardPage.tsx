@@ -2,6 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useKidDisplayName } from '@/hooks/useKidDisplayName';
 
 /**
  * /parent/kid/:id — per-kid dashboard.
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button';
 export function KidDashboardPage() {
   const nav = useNavigate();
   const { id = 'ellie' } = useParams<{ id: string }>();
+  const kidName = useKidDisplayName(id);
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
@@ -45,7 +47,7 @@ export function KidDashboardPage() {
       <div className="flex items-center gap-3 px-1">
         <div className="size-14 rounded-full bg-[#6366F1]" aria-hidden />
         <div className="flex-1 min-w-0">
-          <div className="text-lg font-semibold truncate">Ellie</div>
+          <div className="text-lg font-semibold truncate">{kidName}</div>
           <div className="text-[12px] text-muted-foreground">age 6 · paired device</div>
         </div>
       </div>

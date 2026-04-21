@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { TrustLegend } from '@/components/trust/TrustLegend';
 import { TrustRow, type TrustLevel } from '@/components/trust/TrustRow';
 import { TrustSection } from '@/components/trust/TrustSection';
+import { useKidDisplayName } from '@/hooks/useKidDisplayName';
 
 /**
  * /parent/kid/:id/trust/people — People tab of the Trust domain.
@@ -42,6 +43,7 @@ const OTHER: Person[] = [
 
 export function TrustPeoplePage() {
   const { id = 'ellie' } = useParams<{ id: string }>();
+  const kidName = useKidDisplayName(id);
 
   return (
     <div className="flex flex-col gap-3 px-4 pt-2 pb-6">
@@ -49,7 +51,7 @@ export function TrustPeoplePage() {
 
       <TrustLegend className="mt-1" />
       <p className="text-[11px] text-muted-foreground px-1 -mt-1">
-        Who Ellie can see, interact with, and learn from.
+        {`Who ${kidName} can see, interact with, and learn from.`}
       </p>
 
       <TrustSection title="Inner circle" note="extend trust" />

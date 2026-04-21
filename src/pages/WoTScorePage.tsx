@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { WoTDial } from '@/components/wot/WoTDial';
+import { useKidDisplayName } from '@/hooks/useKidDisplayName';
 
 /**
  * /parent/kid/:id/wot — web-of-trust score for this kid.
@@ -36,6 +37,7 @@ const LEVEL_PILL: Record<Contributor['level'], { label: string; className: strin
 export function WoTScorePage() {
   const nav = useNavigate();
   const { id = 'ellie' } = useParams<{ id: string }>();
+  const kidName = useKidDisplayName(id);
 
   const score = 72;
 
@@ -52,7 +54,7 @@ export function WoTScorePage() {
         >
           <ChevronLeft className="size-5" />
         </Button>
-        <span className="text-[12px] text-muted-foreground">Ellie</span>
+        <span className="text-[12px] text-muted-foreground">{kidName}</span>
       </div>
 
       <h1 className="text-center text-lg font-semibold">Web-of-trust score</h1>

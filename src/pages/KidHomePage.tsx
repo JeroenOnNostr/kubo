@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Clock, Settings, Play, Lock, Inbox } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { getDisplayName } from '@/lib/getDisplayName';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { KidRequestSheet } from '@/components/kid/KidRequestSheet';
@@ -43,6 +45,9 @@ export function KidHomePage() {
 
   const [gateOpen, setGateOpen]       = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+
+  const { user, metadata } = useCurrentUser();
+  const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
 
   // State switcher dev affordance — lets reviewers walk the 5 states without
   // an admin UI. Renders only in development builds.
@@ -176,7 +181,7 @@ export function KidHomePage() {
     <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-12">
       {devSwitcher}
       <header className="flex items-center justify-between">
-        <h1 className="text-[24px] font-bold leading-none">Hi Ellie!</h1>
+        <h1 className="text-[24px] font-bold leading-none">Hi {kidName}!</h1>
         <div className="flex items-center gap-2">
           <div
             className="h-9 px-3 rounded-full flex items-center gap-1.5 text-[13px] font-semibold"
