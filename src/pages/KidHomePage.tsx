@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { Clock, Settings, Play, Lock, Inbox, Star } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { KidRequestSheet } from '@/components/kid/KidRequestSheet';
+import { KidFeedList } from '@/components/feed/KidFeedList';
 
 /**
  * /kid — the kid app entry point.
@@ -19,7 +19,13 @@ import { KidRequestSheet } from '@/components/kid/KidRequestSheet';
  *
  * Loaded (default):
  *   - "Hi <name>!" + time-remaining pill + parent-gate gear
- *   - Hero video card with Play CTA
+ *   - Scrollable feed of Nostr events from the kid's follow list, kinds
+ *     driven by Ditto's feedSettings (see `useKidFeed` → `useFeed`).
+ *     Each event renders via `NoteCard`, so videos play inline in their
+ *     tile (no navigation) while other kinds follow Ditto's default tap
+ *     behavior. Future KUBO-025 will gate non-video taps for "view-only"
+ *     kid mode.
+ *   - "Ask a grown-up" footer pill
  *   - 2-tab bottom bar
  *
  * Request: same as loaded, but KidRequestSheet is open.
@@ -87,37 +93,9 @@ export function KidHomePage() {
     );
   }
 
-  // State switcher dev affordance — lets reviewers walk the 5 states without
-  // an admin UI. Renders only in development builds.
-  const devSwitcher = import.meta.env.DEV && (
-    <div
-      className="fixed top-2 left-1/2 -translate-x-1/2 z-50 flex gap-1 bg-black/40 rounded-full p-1 text-[10px]"
-      style={{ backdropFilter: 'blur(8px)' }}
-    >
-      {(['loaded','playing','inbox','locked'] as const).map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => {
-            const next = new URLSearchParams(params);
-            next.set('state', s);
-            setParams(next, { replace: true });
-          }}
-          className={cn(
-            'px-2 py-1 rounded-full uppercase font-bold tracking-wider',
-            state === s ? 'bg-white text-[#0F172A]' : 'text-white/70',
-          )}
-        >
-          {s}
-        </button>
-      ))}
-    </div>
-  );
-
   if (state === 'locked') {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
-        {devSwitcher}
         <div
           className="size-16 rounded-2xl flex items-center justify-center"
           style={{ background: '#F97316' }}
@@ -135,7 +113,6 @@ export function KidHomePage() {
   if (state === 'playing') {
     return (
       <div className="min-h-dvh relative">
-        {devSwitcher}
         {/* Fullscreen player placeholder */}
         <div
           className="absolute inset-0 flex items-center justify-center"
@@ -170,7 +147,6 @@ export function KidHomePage() {
     ];
     return (
       <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-4">
-        {devSwitcher}
         <header className="flex items-center justify-between">
           <div>
             <div className="text-[22px] font-bold leading-none">Shared with you</div>
@@ -216,8 +192,7 @@ export function KidHomePage() {
 
   // Loaded (default)
   return (
-    <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-12">
-      {devSwitcher}
+    <div className="min-h-dvh pb-[calc(4.5rem+56px)] flex flex-col gap-3 px-5 pt-12">
       <header className="flex items-center justify-between">
         <h1 className="text-[24px] font-bold leading-none">Hi {kidName}!</h1>
         <div className="flex items-center gap-2">
@@ -240,42 +215,24 @@ export function KidHomePage() {
         </div>
       </header>
 
-      {/* Hero card */}
-      <div
-        className="rounded-3xl overflow-hidden"
-        style={{ background: 'rgba(255,255,255,0.1)' }}
-      >
-        <div
-          className="aspect-square flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg,#F97316,#EA580C)' }}
-        >
-          <div className="size-20 rounded-full bg-white/95 flex items-center justify-center">
-            <Play className="size-8 fill-[#0F172A] text-[#0F172A]" />
-          </div>
-        </div>
-        <div className="p-4">
-          <div className="text-[16px] font-bold">Octopus colours!</div>
-          <div className="text-[12px] text-white/70 mt-0.5">MarineKids · 4:12</div>
-        </div>
+      {/* Scrollable feed — Nostr events from the kid's follow list, kinds
+          driven by feedSettings. Videos play inline via NoteCard + VideoPlayer. */}
+      <div className="flex-1">
+        <KidFeedList
+          variant="kid"
+          emptyMessage="Nothing here yet — ask a grown-up!"
+        />
       </div>
 
-      <div className="flex flex-col gap-3 mt-auto">
-        <button
-          type="button"
-          onClick={() => {
-            const next = new URLSearchParams(params);
-            next.set('state', 'playing');
-            setParams(next, { replace: true });
-          }}
-          className="h-14 rounded-full bg-white text-[#0F172A] font-bold text-[15px] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-        >
-          <Play className="size-5 fill-[#0F172A]" />
-          Play
-        </button>
+      {/* Pinned footer — "Ask a grown-up" pill sits above the bottom nav */}
+      <div
+        className="fixed left-0 right-0 z-30 px-5"
+        style={{ bottom: 'calc(56px + env(safe-area-inset-bottom, 0px) + 8px)' }}
+      >
         <button
           type="button"
           onClick={() => setRequestOpen(true)}
-          className="h-11 rounded-full border border-white/20 text-white/90 text-[12px] active:scale-[0.98] transition-transform"
+          className="w-full h-11 rounded-full border border-white/20 bg-[#0C2463]/80 text-white/90 text-[12px] active:scale-[0.98] transition-transform backdrop-blur"
         >
           Something else? Ask a grown-up
         </button>

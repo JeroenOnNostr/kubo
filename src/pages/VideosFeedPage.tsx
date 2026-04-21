@@ -54,6 +54,7 @@ import { sidebarItemIcon } from "@/lib/sidebarItems";
 import { getEffectiveStreamStatus } from "@/lib/streamStatus";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
+import { fmtDuration, getTag, parseVideoImeta } from "@/lib/videoEvent";
 
 // Reuse the real VineCard — no re-implementation
 import { VineCard } from "@/pages/VinesFeedPage";
@@ -64,53 +65,6 @@ const videosDef = getExtraKindDef("videos")!;
 const VIDEO_PAGE_SIZE = 12;
 
 type FeedTab = "follows" | "global";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getTag(tags: string[][], name: string): string | undefined {
-  return tags.find(([n]) => n === name)?.[1];
-}
-
-function parseVideoImeta(tags: string[][]): {
-  url?: string;
-  thumbnail?: string;
-  duration?: string;
-  blurhash?: string;
-} {
-  // Standalone fallback tags (checked after imeta)
-  const standaloneThumb = getTag(tags, "thumb") ?? getTag(tags, "image");
-
-  for (const tag of tags) {
-    if (tag[0] !== "imeta") continue;
-    const parts: Record<string, string> = {};
-    for (let i = 1; i < tag.length; i++) {
-      const p = tag[i];
-      const sp = p.indexOf(" ");
-      if (sp !== -1) parts[p.slice(0, sp)] = p.slice(sp + 1);
-    }
-    if (parts.url) {
-      return {
-        url: parts.url,
-        // imeta uses "image" key for thumbnail; fall back to standalone tags
-        thumbnail: parts.image ?? parts.thumb ?? standaloneThumb,
-        duration: parts.duration,
-        blurhash: parts.blurhash,
-      };
-    }
-  }
-  return { url: getTag(tags, "url"), thumbnail: standaloneThumb };
-}
-
-function fmtDuration(s: string | undefined): string | undefined {
-  const n = parseFloat(s ?? "");
-  if (isNaN(n) || n <= 0) return undefined;
-  const h = Math.floor(n / 3600),
-    m = Math.floor((n % 3600) / 60),
-    sec = Math.floor(n % 60);
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
-    : `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
 
 // ── Drag-to-scroll + edge-hover-scroll for horizontal strips ─────────────────
 
