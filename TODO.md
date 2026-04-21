@@ -37,6 +37,12 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-022: Videos tab — infinite scroll**
   Follow-up to KUBO-020. `VideosTab` only renders the first `useProfileMedia` page (~20 events). Wire an IntersectionObserver sentinel at the bottom of the grid that calls `fetchNextPage()` when visible, using the hook's already-implemented `getNextPageParam`.
 
+- **KUBO-027: Kid mode "view only" interaction gate**
+  Follow-up to KUBO-026. Kids currently follow Ditto's `NoteCard` default tap behavior — tapping a non-video card navigates to a detail page, tapping a profile avatar navigates to a profile page, etc. For strict "view-only" kid mode, intercept these to either do nothing or require a parent gate. Design decision required: global toggle or per-kind ("can navigate to profiles but not to articles")? Also define whether the kid should see interaction affordances at all (zap buttons, reply icons) on a view-only screen.
+
+- **KUBO-028: Real video categorization model**
+  Category chips (All / Animals / Music / Craft / Stories) were removed in KUBO-026 because NIP-71 video events rarely carry `#t` topic tags, making non-"All" selections return empty feeds. Reintroduce once there's a backing data model: our own addressable event, a NIP-50 search query per category, an ML-based classifier running on thumbnails/titles, or an adopted `#t` convention. Until then, the chips were misleading UI.
+
 - **KUBO-024: Restructure parent home — drop redundant tiles, move Backup keys, add activity placeholders**
   On `/parent/home`, removed the three nav tiles that duplicate bottom-nav destinations (Trust · People → Trust tab, Trust · Places → Trust tab, Activity & alerts → Alerts tab) and moved the Backup keys tile into `/parent/kid-settings` where it belongs with the per-kid config knobs. Extracted `NavTile` from `KidDashboardPage.tsx` to `components/NavTile.tsx` so both pages can share it. Added two placeholder sections below the remaining tiles on the home page: **Kids watch history** (horizontal row of 3 dummy thumbnail cards) and **Kids activity** (shadcn Tabs for Week/Day + a recharts BarChart with 3 kids × 7 days of hardcoded sample data, plus a legend). Visual-only — no data wiring. Follow-up in KUBO-025.
 

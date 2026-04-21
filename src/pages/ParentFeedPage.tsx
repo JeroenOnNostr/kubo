@@ -1,166 +1,35 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Settings, UserRound } from 'lucide-react';
-import { useNostrLogin } from '@nostrify/react/login';
+import { Plus, Search } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { CategoryChips, type Category } from '@/components/feed/CategoryChips';
-import {
-  VideoFeedCard,
-  type FeedVideo,
-} from '@/components/feed/VideoFeedCard';
-import { useKuboFamily } from '@/hooks/useKuboFamily';
-import { toast } from '@/hooks/useToast';
+import { KidFeedList } from '@/components/feed/KidFeedList';
+import { useSelectedKid } from '@/hooks/useSelectedKid';
 
 /**
- * /parent/feed — preview of what the currently-selected kid will see.
+ * /parent/feed — Feed preview. Renders the exact same Nostr feed the
+ * currently-selected kid sees on /kid, so the parent can review the kid's
+ * experience without leaving the parent view.
  *
- * The gear-icon dropdown lists each kid twice (under "Switch to kid view" and
- * "Switch to parent view"); clicking any entry flips the active Nostr signer
- * to that kid's nsec and navigates to the chosen route. Picking from
- * "Switch to parent view" lands on /parent/home, which is the kid dashboard
- * for the newly-active signer.
+ * Kid switching lives in the shared KuboKidSelector in KuboParentLayout —
+ * when the parent picks a different kid, `setLogin` swaps `logins[0]` and
+ * `KidFeedList` re-renders with that kid's follow graph automatically.
  *
- * The video list is still placeholder data — a later data-layer PR replaces
- * it with a query over NIP-71 video events filtered by the active kid's
- * trust-people graph.
+ * Event kinds are driven by Ditto's feedSettings (see `useKidFeed`). The
+ * parent toggles them on /parent/kid/:id/feed-settings.
  */
-type FeedItem = FeedVideo & { category: Exclude<Category, 'all'> };
-
-const VIDEOS: FeedItem[] = [
-  {
-    id: '1',
-    title: 'How do octopuses change colour? An easy guide for kids',
-    creator: 'MarineKids',
-    duration: '4:12',
-    trust: 'High',
-    thumbGradient: 'linear-gradient(135deg, #334155, #1E293B)',
-    avatarBg: '#6366F1',
-    category: 'animals',
-  },
-  {
-    id: '2',
-    title: 'Baking bread with grandma',
-    creator: 'CozyKitchen',
-    duration: '6:48',
-    trust: 'Mid',
-    thumbGradient: 'linear-gradient(135deg, #475569, #1E293B)',
-    avatarBg: '#F97316',
-    category: 'craft',
-  },
-  {
-    id: '3',
-    title: 'Sing along — Five little ducks',
-    creator: 'StoryTime',
-    duration: '2:31',
-    trust: 'High',
-    thumbGradient: 'linear-gradient(135deg, #7C3AED, #4C1D95)',
-    avatarBg: '#6366F1',
-    category: 'music',
-  },
-  {
-    id: '4',
-    title: 'Paper plate lion — craft tutorial',
-    creator: 'CraftyKids',
-    duration: '5:04',
-    trust: 'Mid',
-    thumbGradient: 'linear-gradient(135deg, #0891B2, #164E63)',
-    avatarBg: '#22C55E',
-    category: 'craft',
-  },
-];
-
 export function ParentFeedPage() {
   const nav = useNavigate();
-  const { family } = useKuboFamily();
-  const { logins, setLogin } = useNostrLogin();
-  const [category, setCategory] = useState<Category>('all');
+  const selectedKid = useSelectedKid();
 
-  const kids = family?.kids ?? [];
-
-  const pickKid = (kidPubkey: string, destination: '/kid' | '/parent/home') => {
-    const loginId = logins.find((l) => l.pubkey === kidPubkey)?.id;
-    if (!loginId) {
-      toast({
-        title: "That kid's key isn't loaded",
-        description: "Re-add the kid from the parent dashboard.",
-        variant: 'destructive',
-      });
-      return;
-    }
-    setLogin(loginId);
-    nav(destination);
-  };
-
-  const filtered = category === 'all' ? VIDEOS : VIDEOS.filter((v) => v.category === category);
+  const previewHeading = selectedKid
+    ? `Feed preview · ${selectedKid.displayName}`
+    : 'Feed preview';
 
   return (
     <div className="flex flex-col gap-4 pt-2 pb-6">
-      {/* Header: wordmark + gear menu */}
-      <div className="flex items-center justify-between px-4">
-        <img src="/wordmark.svg" alt="Kubo" className="h-6" />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-10 rounded-full"
-              aria-label="Switch view"
-            >
-              <Settings className="size-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Switch to kid view</DropdownMenuLabel>
-            {kids.map((k) => (
-              <DropdownMenuItem
-                key={`kid-${k.pubkey}`}
-                onClick={() => pickKid(k.pubkey, '/kid')}
-                className="gap-2.5"
-              >
-                <span
-                  className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-muted"
-                  aria-hidden
-                >
-                  <UserRound className="size-3.5 text-white" />
-                </span>
-                <span className="flex-1">{k.displayName}</span>
-              </DropdownMenuItem>
-            ))}
-
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Switch to parent view</DropdownMenuLabel>
-            {kids.map((k) => (
-              <DropdownMenuItem
-                key={`parent-${k.pubkey}`}
-                onClick={() => pickKid(k.pubkey, '/parent/home')}
-                className="gap-2.5"
-              >
-                <span
-                  className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-muted"
-                  aria-hidden
-                >
-                  <UserRound className="size-3.5 text-white" />
-                </span>
-                <span className="flex-1">{k.displayName}</span>
-              </DropdownMenuItem>
-            ))}
-
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => nav('/onboard/add-kid')}>
-              Add a kid…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {/* Preview heading — tells the parent this mirrors the kid view */}
+      <div className="px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {previewHeading}
       </div>
 
       {/* Search pill */}
@@ -171,26 +40,16 @@ export function ParentFeedPage() {
         </span>
       </div>
 
-      {/* Category chips */}
-      <CategoryChips
-        value={category}
-        options={['all', 'animals', 'music', 'craft', 'stories']}
-        onChange={setCategory}
-        className="mt-1"
-      />
-
       {/* Feed */}
-      <div className="flex flex-col gap-3 px-4">
-        {filtered.map((v) => (
-          <VideoFeedCard
-            key={v.id}
-            video={v}
-            onClick={() => nav(`/parent/video/${v.id}`)}
+      <div className="px-4">
+        {selectedKid ? (
+          <KidFeedList
+            variant="parent"
+            emptyMessage="Nothing here yet. This kid isn't following anyone whose posts match the enabled kinds."
           />
-        ))}
-        {filtered.length === 0 && (
+        ) : (
           <div className="rounded-2xl bg-card p-8 text-center text-sm text-muted-foreground">
-            Nothing here yet in {category}.
+            Pick a kid to preview their feed.
           </div>
         )}
       </div>
