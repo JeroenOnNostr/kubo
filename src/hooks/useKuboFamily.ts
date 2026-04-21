@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 import { secureStorage } from '@/lib/secureStorage';
 
@@ -13,10 +13,18 @@ export interface KuboKid {
   displayName: string;
 }
 
+export type KuboTrustLevel = 'extend' | 'interact' | 'view';
+
 export interface KuboFamily {
   parentPubkey: string;
   parentDisplayName: string;
   kids: KuboKid[];
+  /** Per-kid pubkey-keyed trust assignments. Missing entry = unassigned. */
+  trustAssignments?: {
+    [kidPubkey: string]: {
+      [targetPubkey: string]: KuboTrustLevel;
+    };
+  };
 }
 
 /**
@@ -49,88 +57,163 @@ function migrateLegacy(legacy: LegacyKuboFamily): KuboFamily {
   };
 }
 
-export function useKuboFamily() {
-  const [family, setFamilyState] = useState<KuboFamily | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+// ─── Module-level singleton store ─────────────────────────────────────────────
+// Shared across all useKuboFamily() callers so that writes in one component
+// (e.g. TrustAssignmentBar.setLevel) are immediately visible to every other
+// component (e.g. TrustPeoplePage's partitioning). Follows the same
+// useSyncExternalStore pattern as src/blobbi/actions/lib/item-cooldown.ts.
 
-  useEffect(() => {
-    let cancelled = false;
+let family: KuboFamily | null = null;
+let hasBootstrapped = false;
+const subscribers = new Set<() => void>();
 
-    secureStorage.getItem(STORAGE_KEY).then(async (raw) => {
-      if (cancelled) return;
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (isLegacy(parsed)) {
-            const migrated = migrateLegacy(parsed);
-            await secureStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-            if (!cancelled) setFamilyState(migrated);
-          } else {
-            setFamilyState(parsed as KuboFamily);
-          }
-        } catch {
-          setFamilyState(null);
-        }
-      }
-      if (!cancelled) setIsLoading(false);
-    });
+function notify(): void {
+  subscribers.forEach((cb) => cb());
+}
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const setFamily = useCallback(async (next: KuboFamily) => {
-    await secureStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    setFamilyState(next);
-  }, []);
-
-  // Read the latest family record from storage, falling back to a migration
-  // step for legacy single-kid records. Used by mutators that need the
-  // ground-truth state regardless of where React's `family` state currently
-  // sits (it may still be null during the initial load effect, or the hook
-  // instance in the calling component may be behind a separate instance that
-  // just wrote).
-  const readLatest = useCallback(async (): Promise<KuboFamily | null> => {
+async function bootstrap(): Promise<void> {
+  if (hasBootstrapped) return;
+  hasBootstrapped = true;
+  try {
     const raw = await secureStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      return isLegacy(parsed) ? migrateLegacy(parsed) : (parsed as KuboFamily);
-    } catch {
-      return null;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (isLegacy(parsed)) {
+          const migrated = migrateLegacy(parsed);
+          await secureStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+          family = migrated;
+        } else {
+          family = parsed as KuboFamily;
+        }
+      } catch {
+        family = null;
+      }
     }
-  }, []);
+  } finally {
+    notify();
+  }
+}
 
-  const addKid = useCallback(async (kid: KuboKid) => {
-    const current = await readLatest();
-    if (!current) {
-      throw new Error('Cannot add a kid: no family record exists yet.');
-    }
-    const existing = current.kids.find((k) => k.pubkey === kid.pubkey);
-    const kids = existing
-      ? current.kids.map((k) => (k.pubkey === kid.pubkey ? kid : k))
-      : [...current.kids, kid];
-    const next: KuboFamily = { ...current, kids };
-    await secureStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    setFamilyState(next);
-  }, [readLatest]);
+async function readLatest(): Promise<KuboFamily | null> {
+  const raw = await secureStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return isLegacy(parsed) ? migrateLegacy(parsed) : (parsed as KuboFamily);
+  } catch {
+    return null;
+  }
+}
 
-  const removeKid = useCallback(async (pubkey: string) => {
-    const current = await readLatest();
-    if (!current) return;
-    const next: KuboFamily = {
-      ...current,
-      kids: current.kids.filter((k) => k.pubkey !== pubkey),
-    };
-    await secureStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    setFamilyState(next);
-  }, [readLatest]);
+async function writeAndNotify(next: KuboFamily): Promise<void> {
+  await secureStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  family = next;
+  notify();
+}
 
-  const clearFamily = useCallback(async () => {
-    await secureStorage.removeItem(STORAGE_KEY);
-    setFamilyState(null);
-  }, []);
+export async function setFamily(next: KuboFamily): Promise<void> {
+  await writeAndNotify(next);
+}
 
-  return { family, isLoading, setFamily, addKid, removeKid, clearFamily };
+export async function addKid(kid: KuboKid): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot add a kid: no family record exists yet.');
+  }
+  const existing = current.kids.find((k) => k.pubkey === kid.pubkey);
+  const kids = existing
+    ? current.kids.map((k) => (k.pubkey === kid.pubkey ? kid : k))
+    : [...current.kids, kid];
+  await writeAndNotify({ ...current, kids });
+}
+
+export async function removeKid(pubkey: string): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  await writeAndNotify({
+    ...current,
+    kids: current.kids.filter((k) => k.pubkey !== pubkey),
+  });
+}
+
+export async function clearFamily(): Promise<void> {
+  await secureStorage.removeItem(STORAGE_KEY);
+  family = null;
+  notify();
+}
+
+export async function setTrustLevel(
+  kidPubkey: string,
+  targetPubkey: string,
+  level: KuboTrustLevel,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot set trust level: no family record exists yet.');
+  }
+  const assignments = current.trustAssignments ?? {};
+  const kidAssignments = assignments[kidPubkey] ?? {};
+  await writeAndNotify({
+    ...current,
+    trustAssignments: {
+      ...assignments,
+      [kidPubkey]: { ...kidAssignments, [targetPubkey]: level },
+    },
+  });
+}
+
+export async function clearTrustLevel(
+  kidPubkey: string,
+  targetPubkey: string,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  const assignments = current.trustAssignments ?? {};
+  const kidAssignments = assignments[kidPubkey];
+  if (!kidAssignments || !(targetPubkey in kidAssignments)) return;
+  const { [targetPubkey]: _removed, ...rest } = kidAssignments;
+  await writeAndNotify({
+    ...current,
+    trustAssignments: { ...assignments, [kidPubkey]: rest },
+  });
+}
+
+// ─── React binding ────────────────────────────────────────────────────────────
+
+function subscribe(onStoreChange: () => void): () => void {
+  // Kick off bootstrap on the first subscriber. Cheap: `hasBootstrapped` guards
+  // against repeated execution.
+  void bootstrap();
+  subscribers.add(onStoreChange);
+  return () => {
+    subscribers.delete(onStoreChange);
+  };
+}
+
+function getSnapshot(): KuboFamily | null {
+  return family;
+}
+
+export function useKuboFamily() {
+  const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  // Stable async wrappers — identity doesn't change between renders, so
+  // consumers that use these as useEffect dependencies don't thrash.
+  const setFamilyCb = useCallback(setFamily, []);
+  const addKidCb = useCallback(addKid, []);
+  const removeKidCb = useCallback(removeKid, []);
+  const clearFamilyCb = useCallback(clearFamily, []);
+  const setTrustLevelCb = useCallback(setTrustLevel, []);
+  const clearTrustLevelCb = useCallback(clearTrustLevel, []);
+
+  return {
+    family: current,
+    setFamily: setFamilyCb,
+    addKid: addKidCb,
+    removeKid: removeKidCb,
+    clearFamily: clearFamilyCb,
+    setTrustLevel: setTrustLevelCb,
+    clearTrustLevel: clearTrustLevelCb,
+  };
 }

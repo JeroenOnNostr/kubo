@@ -13,6 +13,11 @@ interface TrustRowProps {
   subtitle?: string;
   level: TrustLevel;
   onClick?: () => void;
+  /**
+   * When true, rotates the chevron to point down and drops the bottom border
+   * radius so an expand panel rendered directly below reads as a continuation.
+   */
+  expanded?: boolean;
 }
 
 const LEVEL_DOT: Record<TrustLevel, string> = {
@@ -34,16 +39,18 @@ const LEVEL_DOT: Record<TrustLevel, string> = {
  * up later, but this file does not own any state.
  */
 export function TrustRow({
-  avatar, avatarBg, name, subtitle, level, onClick,
+  avatar, avatarBg, name, subtitle, level, onClick, expanded = false,
 }: TrustRowProps) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-expanded={expanded}
       className={cn(
-        'w-full flex items-center gap-3 p-2.5 rounded-xl bg-card/60',
+        'w-full flex items-center gap-3 p-2.5 bg-card/60',
         'hover:bg-card active:bg-card transition-colors text-left',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+        expanded ? 'rounded-t-xl' : 'rounded-xl',
       )}
     >
       <div
@@ -63,7 +70,13 @@ export function TrustRow({
         className={cn('size-2.5 rounded-full flex-shrink-0', LEVEL_DOT[level])}
         aria-label={`Trust level: ${level}`}
       />
-      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" aria-hidden />
+      <ChevronRight
+        className={cn(
+          'size-4 text-muted-foreground flex-shrink-0 transition-transform',
+          expanded && 'rotate-90',
+        )}
+        aria-hidden
+      />
     </button>
   );
 }
