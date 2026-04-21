@@ -18,7 +18,6 @@ import { ArcBackground } from '@/components/ArcBackground';
 const HOME_PATHS = new Set([
   '/parent/home',
   '/parent/kid-settings',
-  '/parent/feed-settings',
   '/parent/keys',
   '/parent/wot',
 ]);
@@ -27,7 +26,7 @@ const TABS = [
   { to: '/parent/home',   icon: Home,       label: 'Home',
     match: (p: string) => HOME_PATHS.has(p) },
   { to: '/parent/feed',   icon: PlaySquare, label: 'Feed',
-    match: (p: string) => p === '/parent/feed' },
+    match: (p: string) => p === '/parent/feed' || p === '/parent/feed-settings' },
   { to: '/parent/trust',  icon: Users,      label: 'Trust',
     match: (p: string) => p.startsWith('/parent/trust') || p.startsWith('/parent/groups/') },
   { to: '/parent/upload', icon: Upload,     label: 'Upload',

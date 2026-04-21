@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
-
-import { cn } from '@/lib/utils';
+import { Search, SlidersHorizontal } from 'lucide-react';
+import { NavTile } from '@/components/NavTile';
 import { KidFeedList } from '@/components/feed/KidFeedList';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 
@@ -40,6 +39,16 @@ export function ParentFeedPage() {
         </span>
       </div>
 
+      {/* Feed settings tile */}
+      <div className="px-4">
+        <NavTile
+          icon={<SlidersHorizontal className="size-5" />}
+          title="Edit feed settings"
+          subtitle="Content types in this kid's feed"
+          onClick={() => nav('/parent/feed-settings')}
+        />
+      </div>
+
       {/* Feed */}
       <div className="px-4">
         {selectedKid ? (
@@ -53,21 +62,6 @@ export function ParentFeedPage() {
           </div>
         )}
       </div>
-
-      {/* FAB */}
-      <button
-        type="button"
-        onClick={() => nav('/parent/upload')}
-        aria-label="Upload a video"
-        className={cn(
-          'fixed right-5 bottom-[calc(env(safe-area-inset-bottom,0px)+80px)]',
-          'size-14 rounded-full bg-primary text-primary-foreground shadow-lg',
-          'flex items-center justify-center',
-          'hover:bg-primary/90 active:scale-95 transition-transform',
-        )}
-      >
-        <Plus className="size-6" />
-      </button>
     </div>
   );
 }
