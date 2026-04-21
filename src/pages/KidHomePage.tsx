@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Clock, Settings, Play, Lock, Inbox } from 'lucide-react';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { Clock, Settings, Play, Lock, Inbox, Star } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { getDisplayName } from '@/lib/getDisplayName';
@@ -37,6 +37,9 @@ import { KidRequestSheet } from '@/components/kid/KidRequestSheet';
 type KidState = 'loaded' | 'locked' | 'playing' | 'inbox';
 
 export function KidHomePage() {
+  const { pathname } = useLocation();
+  const isFavorites = pathname === '/kid/favorites';
+
   const [params, setParams] = useSearchParams();
   const stateParam = params.get('state') as KidState | null;
   const state: KidState = stateParam && ['loaded','locked','playing','inbox'].includes(stateParam)
@@ -48,6 +51,41 @@ export function KidHomePage() {
 
   const { user, metadata } = useCurrentUser();
   const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
+
+  if (isFavorites) {
+    return (
+      <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-12">
+        <header className="flex items-center justify-between">
+          <h1 className="text-[24px] font-bold leading-none">Favorites</h1>
+          <button
+            type="button"
+            onClick={() => setGateOpen(true)}
+            aria-label="Parent access"
+            className="size-9 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+            style={{ background: 'rgba(255,255,255,0.15)' }}
+          >
+            <Settings className="size-5" />
+          </button>
+        </header>
+
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-4">
+          <div
+            className="size-16 rounded-2xl flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.15)' }}
+          >
+            <Star className="size-8 text-white" strokeWidth={2.5} />
+          </div>
+          <h2 className="text-[18px] font-bold">No favorites yet</h2>
+          <p className="text-[13px] text-white/70 max-w-[260px] leading-relaxed">
+            Tap the star on a video you love and it'll show up here.
+          </p>
+        </div>
+
+        <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
+        <KuboKidBottomNav />
+      </div>
+    );
+  }
 
   // State switcher dev affordance — lets reviewers walk the 5 states without
   // an admin UI. Renders only in development builds.
