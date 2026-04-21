@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Plus, Search } from 'lucide-react';
+import { nip19 } from 'nostr-tools';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -7,6 +9,8 @@ import { TrustLegend } from '@/components/trust/TrustLegend';
 import { TrustRow, type TrustLevel } from '@/components/trust/TrustRow';
 import { TrustSection } from '@/components/trust/TrustSection';
 import { useKidDisplayName } from '@/hooks/useKidDisplayName';
+import { useSearchProfiles, type SearchProfile } from '@/hooks/useSearchProfiles';
+import { genUserName } from '@/lib/genUserName';
 
 /**
  * /parent/kid/:id/trust/people — People tab of the Trust domain.
@@ -42,30 +46,115 @@ const OTHER: Person[] = [
 ];
 
 export function TrustPeoplePage() {
+  const nav = useNavigate();
   const { id = 'ellie' } = useParams<{ id: string }>();
   const kidName = useKidDisplayName(id);
+  const [query, setQuery] = useState('');
+  const trimmed = query.trim();
+  const { data: searchResults, isFetching } = useSearchProfiles(query);
 
   return (
     <div className="flex flex-col gap-3 px-4 pt-2 pb-6">
-      <TrustHeader kidId={id} active="people" />
+      <TrustHeader kidId={id} active="people" search={{ query, onQueryChange: setQuery }} />
 
-      <TrustLegend className="mt-1" />
-      <p className="text-[11px] text-muted-foreground px-1 -mt-1">
-        {`Who ${kidName} can see, interact with, and learn from.`}
-      </p>
+      {trimmed.length === 0 ? (
+        <>
+          <TrustLegend className="mt-1" />
+          <p className="text-[11px] text-muted-foreground px-1 -mt-1">
+            {`Who ${kidName} can see, interact with, and learn from.`}
+          </p>
 
-      <TrustSection title="Inner circle" note="extend trust" />
-      {INNER_CIRCLE.map((p) => <TrustRow key={p.id} {...p} />)}
+          <TrustSection title="Inner circle" note="extend trust" />
+          {INNER_CIRCLE.map((p) => <TrustRow key={p.id} {...p} />)}
 
-      <TrustSection title="Groups" />
-      {GROUPS.map((p) => <TrustRow key={p.id} {...p} />)}
+          <TrustSection title="Groups" />
+          {GROUPS.map((p) => (
+            <TrustRow
+              key={p.id}
+              {...p}
+              onClick={() => nav(`/parent/kid/${id}/groups/${p.id}`)}
+            />
+          ))}
 
-      <TrustSection title="Other" />
-      {OTHER.map((p) => <TrustRow key={p.id} {...p} />)}
+          <TrustSection title="Other" />
+          {OTHER.map((p) => <TrustRow key={p.id} {...p} />)}
 
-      <Button variant="secondary" size="lg" className="w-full h-11 rounded-full mt-2 gap-2">
-        <Plus className="size-4" /> Add person
-      </Button>
+          <Button variant="secondary" size="lg" className="w-full h-11 rounded-full mt-2 gap-2">
+            <Plus className="size-4" /> Add person
+          </Button>
+        </>
+      ) : (
+        <TrustSearchResults
+          results={searchResults ?? []}
+          isFetching={isFetching}
+          onSelect={(profile) =>
+            nav(`/parent/profile/${nip19.npubEncode(profile.pubkey)}`)
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders profile search results as TrustRows. Shown in place of the
+ * hardcoded sections when the search input has a non-empty query.
+ *
+ * New profiles have no trust level yet, so every row is rendered at
+ * 'view' (the lowest level) — tapping navigates to the parent-profile
+ * page where the user will eventually be able to assign a level.
+ */
+function TrustSearchResults({
+  results, isFetching, onSelect,
+}: {
+  results: SearchProfile[];
+  isFetching: boolean;
+  onSelect: (profile: SearchProfile) => void;
+}) {
+  if (isFetching && results.length === 0) {
+    return (
+      <p className="text-[12px] text-muted-foreground px-1 mt-1">Searching…</p>
+    );
+  }
+
+  if (results.length === 0) {
+    return (
+      <p className="text-[12px] text-muted-foreground px-1 mt-1">No people found.</p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 mt-1">
+      {results.map((profile) => {
+        const { pubkey, metadata } = profile;
+        const displayName = metadata.display_name || metadata.name || genUserName(pubkey);
+        const nip05 = metadata.nip05;
+        const npub = nip19.npubEncode(pubkey);
+        const subtitle = nip05
+          ? (nip05.startsWith('_@') ? nip05.slice(2) : nip05)
+          : `${npub.slice(0, 12)}…${npub.slice(-4)}`;
+        const avatar = metadata.picture ? (
+          <img
+            src={metadata.picture}
+            alt=""
+            className="size-8 rounded-full object-cover"
+          />
+        ) : (
+          displayName[0]?.toUpperCase() || '?'
+        );
+
+        return (
+          <TrustRow
+            key={pubkey}
+            avatar={avatar}
+            avatarBg={metadata.picture ? undefined : '#64748B'}
+            name={displayName}
+            subtitle={subtitle}
+            level="view"
+            onClick={() => onSelect(profile)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -76,8 +165,13 @@ export function TrustPeoplePage() {
  * without duplicating 30 lines of markup.
  */
 export function TrustHeader({
-  kidId, active,
-}: { kidId: string; active: 'people' | 'places' }) {
+  kidId, active, search,
+}: {
+  kidId: string;
+  active: 'people' | 'places';
+  /** Controlled search input. Omit to render the back button + segmented control only. */
+  search?: { query: string; onQueryChange: (q: string) => void };
+}) {
   const nav = useNavigate();
 
   return (
@@ -93,10 +187,22 @@ export function TrustHeader({
         >
           <ChevronLeft className="size-5" />
         </Button>
-        <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-full bg-card text-[12px] text-muted-foreground">
-          <Search className="size-4" aria-hidden />
-          <span>Search…</span>
-        </div>
+        {search && (
+          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-full bg-card">
+            <Search className="size-4 text-muted-foreground" aria-hidden />
+            <input
+              value={search.query}
+              onChange={(e) => search.onQueryChange(e.target.value)}
+              placeholder="Search…"
+              className="flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              aria-label="Search people"
+            />
+          </div>
+        )}
       </div>
 
       <h1 className="text-center text-base font-semibold -mt-1">Trust domain</h1>
