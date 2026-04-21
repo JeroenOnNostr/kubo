@@ -9,7 +9,7 @@
     "test": "npm i --silent && tsc --noEmit && eslint && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "cap:sync": "npx cap sync && node scripts/patch-cap-config.mjs",
     "keygen": "keytool -genkey -v -keystore android/app/my-upload-key.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias upload",
-    "icons": "bash scripts/generate-icons.sh"
+    "icons": "node scripts/generate-icons.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -165,8 +165,10 @@
     "eslint-plugin-react-refresh": "^0.4.9",
     "globals": "^15.9.0",
     "jsdom": "^26.1.0",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.4.47",
     "rollup-plugin-visualizer": "^7.0.1",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.11",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
