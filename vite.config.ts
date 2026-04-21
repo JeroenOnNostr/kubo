@@ -11,12 +11,16 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import { DittoConfigSchema } from "./src/lib/schemas";
 
 /**
- * Load and validate the build-time ditto.json configuration file.
+ * Load and validate the build-time configuration file.
  * Returns the parsed config object, or `undefined` if the file doesn't exist.
- * Set the CONFIG_FILE env var to override the default path ("./ditto.json").
+ * Set the CONFIG_FILE env var to override the default path ("./kubo.json").
+ *
+ * Kubo: defaults to "./kubo.json" (tracked in git). Upstream Ditto used
+ * "./ditto.json" (gitignored). Self-hosters can still override with
+ * CONFIG_FILE=./my-config.json.
  */
 function loadDittoConfig(): object | undefined {
-  const configPath = path.resolve(process.env.CONFIG_FILE ?? "./ditto.json");
+  const configPath = path.resolve(process.env.CONFIG_FILE ?? "./kubo.json");
 
   let raw: string;
   try {
