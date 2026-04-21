@@ -16,8 +16,8 @@ import { builtinThemes } from '@/themes';
  */
 export function KuboParentLayout() {
   return (
-    <ScopedTheme colors={builtinThemes.dark} className="min-h-dvh bg-background text-foreground safe-area-top">
-      <header className="flex items-center justify-between px-4 pt-2 pb-1">
+    <ScopedTheme colors={builtinThemes.dark} className="min-h-dvh bg-background text-foreground">
+      <header className="sticky top-0 z-20 bg-background safe-area-top flex items-center justify-between px-4 pt-2 pb-1">
         <img src="/wordmark.svg" alt="Kubo" className="h-6" />
         <KuboKidSelector />
       </header>
