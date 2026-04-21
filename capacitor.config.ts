@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'pub.ditto.app',
-  appName: 'Ditto',
+  appId: 'com.kubo.app',
+  appName: 'Kubo',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
@@ -16,7 +16,7 @@ const config: CapacitorConfig = {
   ios: {
     backgroundColor: '#14161f',
     contentInset: 'never',
-    scheme: 'Ditto'
+    scheme: 'Kubo'
   },
   plugins: {
     SystemBars: {
