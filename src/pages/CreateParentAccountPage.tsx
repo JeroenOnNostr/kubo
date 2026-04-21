@@ -1,33 +1,62 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { useNostr } from '@nostrify/react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toast } from '@/hooks/useToast';
+import { useLoginActions } from '@/hooks/useLoginActions';
+import { useAppContext } from '@/hooks/useAppContext';
+import { onboardIdentity } from '@/lib/kuboOnboarding';
 
 /**
  * /onboard/create-parent — one-screen signup (no scary "save your 24 words").
  *
- * Purely visual in this PR. The "Continue" button simulates a short
- * async with setTimeout and then navigates to /onboard/add-kid. The real
- * flow (key generation via nostr-tools, `useLoginActions.nsec`, saveNsec,
- * publishing a kind 0) is wired by the data-layer agent using Ditto's
- * existing SignupDialog code as reference.
+ * Generates the parent's Nostr identity, persists the nsec via the platform
+ * credential manager, publishes a kind 0, and adds the login to Nostrify's
+ * store. The parent's pubkey + display name are forwarded to AddKidPage via
+ * router state; the family mapping is only committed once the kid is added.
  */
 export function CreateParentAccountPage() {
   const nav = useNavigate();
+  const { nostr } = useNostr();
+  const { config } = useAppContext();
+  const login = useLoginActions();
 
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = name.trim().length >= 2 && !submitting;
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
-    // Simulate async account creation. Replaced in the data-layer PR.
-    setTimeout(() => nav('/onboard/add-kid'), 600);
+    try {
+      const trimmed = name.trim();
+      const identity = await onboardIdentity({
+        nostr,
+        name: trimmed,
+        clientTagName: config.clientName ?? config.appName,
+        clientNaddr: config.client,
+      });
+      login.nsec(identity.nsec);
+      nav('/onboard/add-kid', {
+        state: {
+          parentPubkey: identity.pubkey,
+          parentDisplayName: trimmed,
+        },
+      });
+    } catch (err) {
+      console.error('Parent onboarding failed:', err);
+      toast({
+        title: 'Could not create account',
+        description: 'Something went wrong while setting up your account. Please try again.',
+        variant: 'destructive',
+      });
+      setSubmitting(false);
+    }
   };
 
   return (
