@@ -1,69 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Loader2 } from 'lucide-react';
-import { useNostrLogin } from '@nostrify/react/login';
 
 import { Button } from '@/components/ui/button';
 import { ContentSettings } from '@/components/ContentSettings';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useEditAsKid } from '@/hooks/useEditAsKid';
 import { useKidDisplayName } from '@/hooks/useKidDisplayName';
 
 /**
  * /parent/kid/:id/feed-settings — edit a kid's feedSettings.
  *
  * Reuses Ditto's existing <ContentSettings /> by briefly switching the active
- * signer to the kid. On unmount we restore the original login so the parent
- * lands back on their own account. This is a best-effort restore — browser
- * back or tab close while editing leaves the kid as the active signer, which
- * the parent can correct via the account switcher. A visible "editing as
- * {kid}" banner + hardened restore is a planned follow-up.
+ * signer to the kid via `useEditAsKid`. See that hook for the lifecycle and
+ * known best-effort restore limits.
  */
 export function EditKidFeedSettingsPage() {
   const nav = useNavigate();
   const { id = '' } = useParams<{ id: string }>();
   const kidName = useKidDisplayName(id);
-  const { logins, setLogin } = useNostrLogin();
-  const { user } = useCurrentUser();
+  const edit = useEditAsKid(id);
 
-  // Capture the non-kid login id once, on mount. After setLogin swaps the kid
-  // to logins[0], logins[0].id would point at the kid — too late to remember
-  // who to restore. If the parent is already logged in as the kid for some
-  // reason, fall back to any other available login.
-  const kidLoginIdInit = `nsec:${id}`;
-  const originalLoginId = useRef<string | null>(
-    logins.find((l) => l.id !== kidLoginIdInit)?.id ?? null,
-  );
-
-  const kidLoginId = `nsec:${id}`;
-  const kidLoginExists = logins.some((l) => l.id === kidLoginId);
-
-  // Track whether we've switched yet so the rendered ContentSettings reads
-  // the kid's feedSettings (not the parent's, even for a frame).
-  const [switched, setSwitched] = useState(user?.pubkey === id);
-
-  useEffect(() => {
-    if (!kidLoginExists) return;
-    if (user?.pubkey === id) {
-      setSwitched(true);
-      return;
-    }
-    setLogin(kidLoginId);
-  }, [kidLoginExists, kidLoginId, id, user?.pubkey, setLogin]);
-
-  useEffect(() => {
-    if (user?.pubkey === id) setSwitched(true);
-  }, [user?.pubkey, id]);
-
-  useEffect(() => {
-    const parentId = originalLoginId.current;
-    return () => {
-      if (parentId && parentId !== kidLoginId) {
-        setLogin(parentId);
-      }
-    };
-  }, [kidLoginId, setLogin]);
-
-  if (!kidLoginExists) {
+  if (edit.status === 'unavailable') {
     return (
       <div className="flex flex-col gap-5 px-4 pt-2 pb-6">
         <Header title="Feed settings" onBack={() => nav(`/parent/kid/${id}`)} />
@@ -81,7 +37,7 @@ export function EditKidFeedSettingsPage() {
         onBack={() => nav(`/parent/kid/${id}`)}
       />
       <div className="p-4">
-        {switched ? (
+        {edit.status === 'ready' ? (
           <ContentSettings />
         ) : (
           <div className="flex items-center justify-center py-10 text-muted-foreground">
