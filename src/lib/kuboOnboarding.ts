@@ -78,6 +78,51 @@ export async function publishInitialProfile(params: {
 }
 
 /**
+ * Sign and publish the initial NIP-78 encrypted settings event (kind 30078)
+ * for a freshly generated identity.
+ *
+ * Used to seed per-kid feedSettings at creation time — we can't use the
+ * `useEncryptedSettings` hook because it closes over `useCurrentUser()`,
+ * which hasn't re-rendered with the kid's login yet in the same handler.
+ */
+export async function publishInitialEncryptedSettings<T>(params: {
+  nostr: NPool;
+  nsec: `nsec1${string}`;
+  settings: T;
+  appId: string;
+  appName: string;
+  clientNaddr: string | undefined;
+}): Promise<NostrEvent> {
+  const { nostr, nsec, settings, appId, appName, clientNaddr } = params;
+
+  const login = NLogin.fromNsec(nsec);
+  const user = NUser.fromNsecLogin(login);
+
+  if (!user.signer.nip44) {
+    throw new Error('NIP-44 encryption not supported by kid signer');
+  }
+
+  const plaintext = JSON.stringify({ ...settings, lastSync: Date.now() });
+  const encrypted = await user.signer.nip44.encrypt(user.pubkey, plaintext);
+
+  const tags: string[][] = [
+    ['d', `${appId}/metadata`],
+    ['title', `${appName} Metadata`],
+    ['client', appName, ...(clientNaddr ? [clientNaddr] : [])],
+  ];
+
+  const event = await user.signer.signEvent({
+    kind: 30078,
+    content: encrypted,
+    tags,
+    created_at: Math.floor(Date.now() / 1000),
+  });
+
+  await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+  return event;
+}
+
+/**
  * Full onboarding step for a single identity:
  *   1. Generate a fresh nsec + pubkey.
  *   2. Save the nsec via the platform credential manager (Keychain / KeyStore /

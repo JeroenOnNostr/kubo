@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound, SlidersHorizontal } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useKidDisplayName } from '@/hooks/useKidDisplayName';
@@ -79,6 +79,12 @@ export function KidDashboardPage() {
           title="Edit kid settings"
           subtitle="Age, time limits, moderation"
           onClick={() => nav(`/parent/kid/${id}/settings`)}
+        />
+        <NavTile
+          icon={<SlidersHorizontal className="size-5" />}
+          title="Edit feed settings"
+          subtitle="Content types in this kid's feed"
+          onClick={() => nav(`/parent/kid/${id}/feed-settings`)}
         />
         <NavTile
           icon={<Shield className="size-5" />}

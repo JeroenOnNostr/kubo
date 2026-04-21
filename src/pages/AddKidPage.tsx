@@ -11,7 +11,8 @@ import { toast } from '@/hooks/useToast';
 import { useLoginActions } from '@/hooks/useLoginActions';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
-import { onboardIdentity } from '@/lib/kuboOnboarding';
+import { onboardIdentity, publishInitialEncryptedSettings } from '@/lib/kuboOnboarding';
+import { DEFAULT_KID_FEED_SETTINGS } from '@/lib/extraKinds';
 
 interface ParentHandoffState {
   parentPubkey?: string;
@@ -65,6 +66,25 @@ export function AddKidPage() {
         clientNaddr: config.client,
       });
       login.nsec(identity.nsec);
+
+      // Seed the kid's encrypted feedSettings — visual content only (photos,
+      // videos, vines). Signed directly with the kid's nsec because
+      // useEncryptedSettings closes over useCurrentUser(), which is still
+      // pointing at the parent in this handler.
+      try {
+        await publishInitialEncryptedSettings({
+          nostr,
+          nsec: identity.nsec,
+          settings: { feedSettings: DEFAULT_KID_FEED_SETTINGS },
+          appId: config.appId,
+          appName: config.appName,
+          clientNaddr: config.client,
+        });
+      } catch (err) {
+        // Non-fatal: the kid will just start with the app-wide feed defaults
+        // and the parent can adjust via /parent/kid/:id/feed-settings.
+        console.warn('Failed to seed kid encrypted settings:', err);
+      }
 
       if (isFirstKid) {
         await setFamily({

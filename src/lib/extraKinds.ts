@@ -542,6 +542,53 @@ export function getPageKinds(def: ExtraKindDef, feedSettings: FeedSettings): num
 }
 
 /**
+ * Feed settings applied to a newly created kid account. Kids start with only
+ * visual content types (photos, videos, vines) enabled — every other feed-kind
+ * toggle is off. Parents can adjust via /parent/kid/:id/feed-settings.
+ *
+ * Partial: unspecified keys fall through to `hardcodedConfig.feedSettings`
+ * defaults, so future upstream additions inherit the app-wide default rather
+ * than silently defaulting to false for kids.
+ */
+export const DEFAULT_KID_FEED_SETTINGS: Partial<FeedSettings> = {
+  // Visual content types — the four kinds kids start with
+  feedIncludePhotos: true,
+  feedIncludeNormalVideos: true,
+  feedIncludeShortVideos: true,
+  feedIncludeVines: true,
+
+  // Everything else off
+  feedIncludePosts: false,
+  feedIncludeComments: false,
+  feedIncludeReposts: false,
+  feedIncludeGenericReposts: false,
+  feedIncludeArticles: false,
+  feedIncludeEvents: false,
+  feedIncludePolls: false,
+  feedIncludeTreasureGeocaches: false,
+  feedIncludeTreasureFoundLogs: false,
+  feedIncludeColors: false,
+  feedIncludePacks: false,
+  feedIncludeDecks: false,
+  feedIncludeWebxdc: false,
+  feedIncludeProfileThemes: false,
+  feedIncludeThemeDefinitions: false,
+  feedIncludeProfileThemeUpdates: false,
+  feedIncludeVoiceMessages: false,
+  feedIncludeEmojiPacks: false,
+  feedIncludeMusicTracks: false,
+  feedIncludeMusicPlaylists: false,
+  feedIncludePodcastEpisodes: false,
+  feedIncludePodcastTrailers: false,
+  feedIncludeDevelopment: false,
+  feedIncludeBadgeDefinitions: false,
+  feedIncludeProfileBadges: false,
+  feedIncludeBadgeAwards: false,
+  feedIncludeVanish: false,
+  feedIncludeBlobbi: false,
+};
+
+/**
  * Specific labels for kinds that don't have their own top-level ExtraKindDef.
  * These are kinds buried in `extraFeedKinds` arrays or otherwise needing
  * a label more specific than their parent category.
