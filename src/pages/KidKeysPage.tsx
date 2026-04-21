@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, KeyRound, Eye, EyeOff, Copy, Check, Download, Loader2,
 } from 'lucide-react';
@@ -14,19 +14,17 @@ import { useToast } from '@/hooks/useToast';
 import { saveNsec } from '@/lib/credentialManager';
 
 /**
- * /parent/kid/:id/keys — backup keys page for the currently logged-in kid.
+ * /parent/keys — backup keys page for the currently-selected kid.
  *
- * Reads from `logins[0]` (the active signer), not from the URL `:id`. The
- * parent arrives here while impersonating a specific kid, so `logins[0]` is
- * guaranteed to be the kid whose keys we want, even when multiple kids are
- * registered on the device. The URL `:id` is used only for the back-button
- * target so navigation stays consistent with the dashboard siblings.
+ * Reads from `logins[0]` (the active signer). The parent picks the kid
+ * via the top-right gear dropdown, which calls setLogin() to make that
+ * kid's account the active signer — so `logins[0]` is the kid whose
+ * keys we want.
  *
  * Mirrors the `BackupKeySection` pattern from `ProfileSettings.tsx`.
  */
 export function KidKeysPage() {
   const nav = useNavigate();
-  const { id = '' } = useParams<{ id: string }>();
 
   const { logins } = useNostrLogin();
   const current = logins[0];
@@ -47,7 +45,7 @@ export function KidKeysPage() {
         variant="ghost"
         size="icon"
         className="size-9 rounded-full"
-        onClick={() => nav(`/parent/kid/${id}`)}
+        onClick={() => nav('/parent/home')}
         aria-label="Back"
       >
         <ChevronLeft className="size-5" />

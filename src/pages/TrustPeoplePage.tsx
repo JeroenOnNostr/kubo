@@ -1,19 +1,20 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, Search } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { NoKidSelected } from '@/components/NoKidSelected';
 import { TrustLegend } from '@/components/trust/TrustLegend';
 import { TrustRow, type TrustLevel } from '@/components/trust/TrustRow';
 import { TrustSection } from '@/components/trust/TrustSection';
-import { useKidDisplayName } from '@/hooks/useKidDisplayName';
 import { useSearchProfiles, type SearchProfile } from '@/hooks/useSearchProfiles';
+import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { genUserName } from '@/lib/genUserName';
 
 /**
- * /parent/kid/:id/trust/people — People tab of the Trust domain.
+ * /parent/trust/people — People tab of the Trust domain for the active kid.
  *
  * Visual only. Fixed placeholder data matches contact-sheet screen 09.
  * A separate data-layer PR will swap these arrays for queries against
@@ -47,21 +48,24 @@ const OTHER: Person[] = [
 
 export function TrustPeoplePage() {
   const nav = useNavigate();
-  const { id = 'ellie' } = useParams<{ id: string }>();
-  const kidName = useKidDisplayName(id);
+  const kid = useSelectedKid();
   const [query, setQuery] = useState('');
   const trimmed = query.trim();
   const { data: searchResults, isFetching } = useSearchProfiles(query);
 
+  if (!kid) {
+    return <NoKidSelected title="Trust · People" />;
+  }
+
   return (
     <div className="flex flex-col gap-3 px-4 pt-2 pb-6">
-      <TrustHeader kidId={id} active="people" search={{ query, onQueryChange: setQuery }} />
+      <TrustHeader active="people" search={{ query, onQueryChange: setQuery }} />
 
       {trimmed.length === 0 ? (
         <>
           <TrustLegend className="mt-1" />
           <p className="text-[11px] text-muted-foreground px-1 -mt-1">
-            {`Who ${kidName} can see, interact with, and learn from.`}
+            {`Who ${kid.displayName} can see, interact with, and learn from.`}
           </p>
 
           <TrustSection title="Inner circle" note="extend trust" />
@@ -72,7 +76,7 @@ export function TrustPeoplePage() {
             <TrustRow
               key={p.id}
               {...p}
-              onClick={() => nav(`/parent/kid/${id}/groups/${p.id}`)}
+              onClick={() => nav(`/parent/groups/${p.id}`)}
             />
           ))}
 
@@ -165,9 +169,8 @@ function TrustSearchResults({
  * without duplicating 30 lines of markup.
  */
 export function TrustHeader({
-  kidId, active, search,
+  active, search,
 }: {
-  kidId: string;
   active: 'people' | 'places';
   /** Controlled search input. Omit to render the back button + segmented control only. */
   search?: { query: string; onQueryChange: (q: string) => void };
@@ -182,7 +185,7 @@ export function TrustHeader({
           variant="ghost"
           size="icon"
           className="size-9 rounded-full"
-          onClick={() => nav(`/parent/kid/${kidId}`)}
+          onClick={() => nav('/parent/home')}
           aria-label="Back"
         >
           <ChevronLeft className="size-5" />
@@ -211,13 +214,13 @@ export function TrustHeader({
       <div className="h-9 p-1 rounded-full bg-card grid grid-cols-2 gap-1 text-[12px] font-medium">
         <SegButton
           active={active === 'people'}
-          onClick={() => nav(`/parent/kid/${kidId}/trust/people`)}
+          onClick={() => nav('/parent/trust/people')}
         >
           People
         </SegButton>
         <SegButton
           active={active === 'places'}
-          onClick={() => nav(`/parent/kid/${kidId}/trust/places`)}
+          onClick={() => nav('/parent/trust/places')}
         >
           Places
         </SegButton>

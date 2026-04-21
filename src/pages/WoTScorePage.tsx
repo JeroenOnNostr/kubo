@@ -1,10 +1,11 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { WoTDial } from '@/components/wot/WoTDial';
-import { useKidDisplayName } from '@/hooks/useKidDisplayName';
+import { NoKidSelected } from '@/components/NoKidSelected';
+import { useSelectedKid } from '@/hooks/useSelectedKid';
 
 /**
  * /parent/kid/:id/wot — web-of-trust score for this kid.
@@ -36,8 +37,11 @@ const LEVEL_PILL: Record<Contributor['level'], { label: string; className: strin
 
 export function WoTScorePage() {
   const nav = useNavigate();
-  const { id = 'ellie' } = useParams<{ id: string }>();
-  const kidName = useKidDisplayName(id);
+  const kid = useSelectedKid();
+
+  if (!kid) {
+    return <NoKidSelected title="Web-of-trust score" />;
+  }
 
   const score = 72;
 
@@ -49,12 +53,12 @@ export function WoTScorePage() {
           variant="ghost"
           size="icon"
           className="size-9 rounded-full"
-          onClick={() => nav(`/parent/kid/${id}`)}
+          onClick={() => nav('/parent/home')}
           aria-label="Back"
         >
           <ChevronLeft className="size-5" />
         </Button>
-        <span className="text-[12px] text-muted-foreground">{kidName}</span>
+        <span className="text-[12px] text-muted-foreground">{kid.displayName}</span>
       </div>
 
       <h1 className="text-center text-lg font-semibold">Web-of-trust score</h1>

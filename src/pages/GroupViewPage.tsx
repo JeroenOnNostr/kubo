@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 
 /**
- * /parent/kid/:id/groups/:gid — group view.
+ * /parent/groups/:gid — group view, scoped to the active kid signer.
  *
  * Visual only. Chat tab renders a fixed list of 3 placeholder messages
  * + a composer that appends new messages to local state (cleared on
@@ -41,7 +41,7 @@ const MEMBERS = [
 
 export function GroupViewPage() {
   const nav = useNavigate();
-  const { id = 'ellie', gid = 'classroom-2b' } = useParams<{ id: string; gid: string }>();
+  const { gid = 'classroom-2b' } = useParams<{ gid: string }>();
 
   const [tab, setTab] = useState<Tab>('chat');
   const [messages, setMessages] = useState<Msg[]>(INITIAL);
@@ -65,7 +65,7 @@ export function GroupViewPage() {
           variant="ghost"
           size="icon"
           className="size-9 rounded-full"
-          onClick={() => nav(`/parent/kid/${id}/trust/people`)}
+          onClick={() => nav('/parent/trust/people')}
           aria-label="Back"
         >
           <ChevronLeft className="size-5" />

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, ChevronRight, Settings, UserRound } from 'lucide-react';
+import { Plus, Search, Settings, UserRound } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
 
 import { Button } from '@/components/ui/button';
@@ -22,15 +22,16 @@ import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { toast } from '@/hooks/useToast';
 
 /**
- * /parent/home — home feed.
+ * /parent/feed — preview of what the currently-selected kid will see.
  *
  * The gear-icon dropdown lists each kid twice (under "Switch to kid view" and
  * "Switch to parent view"); clicking any entry flips the active Nostr signer
- * to that kid's nsec and navigates to the chosen route. The parent view is
- * always scoped to whichever kid is `logins[0]`.
+ * to that kid's nsec and navigates to the chosen route. Picking from
+ * "Switch to parent view" lands on /parent/home, which is the kid dashboard
+ * for the newly-active signer.
  *
  * The video list is still placeholder data — a later data-layer PR replaces
- * it with a query over NIP-71 video events filtered by the current kid's
+ * it with a query over NIP-71 video events filtered by the active kid's
  * trust-people graph.
  */
 type FeedItem = FeedVideo & { category: Exclude<Category, 'all'> };
@@ -78,7 +79,7 @@ const VIDEOS: FeedItem[] = [
   },
 ];
 
-export function ParentHomePage() {
+export function ParentFeedPage() {
   const nav = useNavigate();
   const { family } = useKuboFamily();
   const { logins, setLogin } = useNostrLogin();
@@ -169,40 +170,6 @@ export function ParentHomePage() {
           Search videos, creators…
         </span>
       </div>
-
-      {/* Kids rail */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between px-4">
-          <h2 className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground font-semibold">
-            Your kids
-          </h2>
-        </div>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 pb-1">
-          {kids.map((k) => (
-            <button
-              key={k.pubkey}
-              type="button"
-              onClick={() => nav(`/parent/kid/${k.pubkey}`)}
-              className={cn(
-                'flex items-center gap-2.5 p-2 pr-3 rounded-full bg-card flex-shrink-0',
-                'hover:bg-card/80 transition-colors',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-              )}
-            >
-              <div
-                className="size-9 rounded-full flex-shrink-0 bg-muted flex items-center justify-center"
-                aria-hidden
-              >
-                <UserRound className="size-4 text-white" />
-              </div>
-              <div className="flex flex-col items-start leading-tight">
-                <span className="text-[13px] font-semibold">{k.displayName}</span>
-              </div>
-              <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
-            </button>
-          ))}
-        </div>
-      </section>
 
       {/* Category chips */}
       <CategoryChips

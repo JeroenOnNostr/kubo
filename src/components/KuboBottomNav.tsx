@@ -1,26 +1,39 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Upload, Users, Bell } from 'lucide-react';
+import { Home, PlaySquare, Upload, Users, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { selectionChanged } from '@/lib/haptics';
 import { ArcBackground } from '@/components/ArcBackground';
 
 /**
- * Kubo parent-app bottom nav: Home · Upload · Trust · Alerts.
+ * Kubo parent-app bottom nav: Home · Feed · Trust · Upload · Alerts.
  *
- * Replaces MobileBottomNav within KuboParentLayout routes. Uses the same
- * ArcBackground as the Ditto nav so the visual language carries over while
- * the IA is Kubo-specific.
+ * - Home  → per-kid dashboard (KidDashboardPage) for the currently-selected
+ *           kid signer. Tiles link to the kid-settings / feed-settings /
+ *           trust / keys / alerts pages.
+ * - Feed  → preview feed of what the selected kid will see (ParentFeedPage).
+ * - Trust → kid-scoped trust-people / trust-places.
+ * - Upload → content uploader.
+ * - Alerts → watch-requests and safety notifications.
  */
+const HOME_PATHS = new Set([
+  '/parent/home',
+  '/parent/kid-settings',
+  '/parent/feed-settings',
+  '/parent/keys',
+  '/parent/wot',
+]);
+
 const TABS = [
-  { to: '/parent/home',   icon: Home,   label: 'Home',
-    match: (p: string) => p === '/parent/home' || p.startsWith('/parent/home/') ||
-      (p.startsWith('/parent/kid/') && !/^\/parent\/kid\/[^/]+\/trust(\/|$)/.test(p)) },
-  { to: '/parent/upload', icon: Upload, label: 'Upload',
-    match: (p: string) => p === '/parent/upload' || p.startsWith('/parent/upload/') },
-  { to: '/parent/trust',  icon: Users,  label: 'Trust',
-    match: (p: string) => p === '/parent/trust' || p.startsWith('/parent/trust/') || /^\/parent\/kid\/[^/]+\/trust(\/|$)/.test(p) },
-  { to: '/parent/alerts', icon: Bell,   label: 'Alerts',
-    match: (p: string) => p === '/parent/alerts' || p.startsWith('/parent/alerts/') },
+  { to: '/parent/home',   icon: Home,       label: 'Home',
+    match: (p: string) => HOME_PATHS.has(p) },
+  { to: '/parent/feed',   icon: PlaySquare, label: 'Feed',
+    match: (p: string) => p === '/parent/feed' },
+  { to: '/parent/trust',  icon: Users,      label: 'Trust',
+    match: (p: string) => p.startsWith('/parent/trust') || p.startsWith('/parent/groups/') },
+  { to: '/parent/upload', icon: Upload,     label: 'Upload',
+    match: (p: string) => p === '/parent/upload' },
+  { to: '/parent/alerts', icon: Bell,       label: 'Alerts',
+    match: (p: string) => p === '/parent/alerts' },
 ] as const;
 
 export function KuboBottomNav() {

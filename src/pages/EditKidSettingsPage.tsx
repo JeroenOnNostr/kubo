@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
-import { useKidDisplayName } from '@/hooks/useKidDisplayName';
+import { NoKidSelected } from '@/components/NoKidSelected';
+import { useSelectedKid } from '@/hooks/useSelectedKid';
 
 type Moderation = 'low' | 'mid' | 'high';
 
 /**
- * /parent/kid/:id/settings — per-kid knobs.
+ * /parent/kid-settings — per-kid knobs for whichever kid is the active signer.
  *
  * Visual only. Fields are local useState; nothing is persisted. The
  * data-layer PR will wire these to a kid-settings addressable event
@@ -21,14 +22,17 @@ type Moderation = 'low' | 'mid' | 'high';
  */
 export function EditKidSettingsPage() {
   const nav = useNavigate();
-  const { id = 'ellie' } = useParams<{ id: string }>();
-  const kidName = useKidDisplayName(id);
+  const kid = useSelectedKid();
 
   const [age, setAge]             = useState(6);
   const [dailyLimit, setDaily]    = useState(45); // minutes
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
   const [moderation, setMod]      = useState<Moderation>('mid');
+
+  if (!kid) {
+    return <NoKidSelected title="Kid settings" />;
+  }
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-2 pb-6">
@@ -38,7 +42,7 @@ export function EditKidSettingsPage() {
           variant="ghost"
           size="icon"
           className="size-9 rounded-full"
-          onClick={() => nav(`/parent/kid/${id}`)}
+          onClick={() => nav('/parent/home')}
           aria-label="Back"
         >
           <ChevronLeft className="size-5" />
@@ -50,7 +54,7 @@ export function EditKidSettingsPage() {
       <div className="flex items-center gap-3 px-1">
         <div className="size-12 rounded-full bg-[#6366F1]" aria-hidden />
         <div className="min-w-0">
-          <div className="text-base font-semibold truncate">{kidName}</div>
+          <div className="text-base font-semibold truncate">{kid.displayName}</div>
           <div className="text-[11px] text-muted-foreground">age {age} · paired</div>
         </div>
       </div>

@@ -53,7 +53,8 @@ import { EditKidSettingsPage } from "@/pages/EditKidSettingsPage";
 import { EditKidFeedSettingsPage } from "@/pages/EditKidFeedSettingsPage";
 import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
-import { ParentHomePage } from "@/pages/ParentHomePage";
+import { ParentTrustIndexPage } from "@/pages/ParentTrustIndexPage";
+import { ParentFeedPage } from "@/pages/ParentFeedPage";
 import { VideoViewPage } from "@/pages/VideoViewPage";
 import { ProfileViewPage } from "@/pages/ProfileViewPage";
 import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
@@ -318,22 +319,26 @@ export function AppRouter() {
             <Route path="*" element={<NotFound />} />
           </Route>
 
-          {/* ─── Kubo parent app (PR 1 stubs) ─────────────────────────────── */}
+          {/* ─── Kubo parent app ──────────────────────────────────────────── */}
+          {/* All kid-scoped pages derive their kid from the active Nostr
+              signer (logins[0]) via useSelectedKid — the top-right gear
+              dropdown on the Feed tab swaps signers. No :id params. */}
           <Route element={<KuboParentLayout />}>
-            <Route path="/parent/home"          element={<ParentHomePage      />} />
+            <Route path="/parent"               element={<Navigate to="/parent/home" replace />} />
+            <Route path="/parent/home"          element={<KidDashboardPage    />} />
+            <Route path="/parent/feed"          element={<ParentFeedPage      />} />
             <Route path="/parent/upload"        element={<ContentUploaderPage />} />
             <Route path="/parent/video/:id"     element={<VideoViewPage       />} />
             <Route path="/parent/profile/:npub" element={<ProfileViewPage     />} />
-            <Route path="/parent/trust"   element={<KuboPlaceholderPage title="Trust domain"  pr={3} description="Manage people and places your kid sees." />} />
-            <Route path="/parent/alerts"  element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
-            <Route path="/parent/kid/:id"              element={<KidDashboardPage    />} />
-            <Route path="/parent/kid/:id/settings"     element={<EditKidSettingsPage />} />
-            <Route path="/parent/kid/:id/feed-settings" element={<EditKidFeedSettingsPage />} />
-            <Route path="/parent/kid/:id/trust/people" element={<TrustPeoplePage     />} />
-            <Route path="/parent/kid/:id/trust/places" element={<TrustPlacesPage     />} />
-            <Route path="/parent/kid/:id/groups/:gid"  element={<GroupViewPage       />} />
-            <Route path="/parent/kid/:id/wot"          element={<WoTScorePage        />} />
-            <Route path="/parent/kid/:id/keys"         element={<KidKeysPage         />} />
+            <Route path="/parent/trust"         element={<ParentTrustIndexPage />} />
+            <Route path="/parent/trust/people"  element={<TrustPeoplePage     />} />
+            <Route path="/parent/trust/places"  element={<TrustPlacesPage     />} />
+            <Route path="/parent/groups/:gid"   element={<GroupViewPage       />} />
+            <Route path="/parent/alerts"        element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
+            <Route path="/parent/kid-settings"  element={<EditKidSettingsPage />} />
+            <Route path="/parent/feed-settings" element={<EditKidFeedSettingsPage />} />
+            <Route path="/parent/keys"          element={<KidKeysPage         />} />
+            <Route path="/parent/wot"           element={<WoTScorePage        />} />
           </Route>
 
           {/* ─── Kubo onboarding ─────────────────────────────── */}

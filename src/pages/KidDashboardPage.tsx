@@ -1,53 +1,38 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound, SlidersHorizontal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronRight, Settings, Shield, Clock, AlertTriangle, KeyRound, SlidersHorizontal } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { useKidDisplayName } from '@/hooks/useKidDisplayName';
+import { NoKidSelected } from '@/components/NoKidSelected';
+import { useSelectedKid } from '@/hooks/useSelectedKid';
 
 /**
- * /parent/kid/:id — per-kid dashboard.
+ * /parent/home — per-kid dashboard for whichever kid is currently the
+ * active Nostr signer. Parents swap kids via the top-right gear dropdown
+ * on the Feed tab; this page then re-renders for the newly-selected kid.
  *
- * Visual only. Shows a kid header (avatar, name, age, daily-usage bar)
- * and a list of navigation tiles that deep-link into the kid-scoped
- * routes (settings, trust people, trust places). Counters and progress
- * values are hard-coded placeholders; the data-layer PR will swap them
- * for live readings from kid-settings / trust-people / trust-relays.
+ * Visual only. Counters and progress values are hard-coded placeholders;
+ * a data-layer PR will swap them for live readings from kid-settings /
+ * trust-people / trust-relays.
  */
 export function KidDashboardPage() {
   const nav = useNavigate();
-  const { id = 'ellie' } = useParams<{ id: string }>();
-  const kidName = useKidDisplayName(id);
+  const kid = useSelectedKid();
+
+  if (!kid) {
+    return <NoKidSelected title="Home" />;
+  }
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
-      {/* Back + title */}
+      {/* Title */}
       <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-full"
-          onClick={() => nav('/parent/home')}
-          aria-label="Back to home"
-        >
-          <ChevronLeft className="size-5" />
-        </Button>
-        <h1 className="text-base font-semibold flex-1">Kid</h1>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-full"
-          onClick={() => nav(`/parent/kid/${id}/settings`)}
-          aria-label="Kid settings"
-        >
-          <Settings className="size-5" />
-        </Button>
+        <h1 className="text-base font-semibold flex-1">Home</h1>
       </div>
 
       {/* Kid summary */}
       <div className="flex items-center gap-3 px-1">
         <div className="size-14 rounded-full bg-[#6366F1]" aria-hidden />
         <div className="flex-1 min-w-0">
-          <div className="text-lg font-semibold truncate">{kidName}</div>
+          <div className="text-lg font-semibold truncate">{kid.displayName}</div>
           <div className="text-[12px] text-muted-foreground">age 6 · paired device</div>
         </div>
       </div>
@@ -78,31 +63,31 @@ export function KidDashboardPage() {
           icon={<Settings className="size-5" />}
           title="Edit kid settings"
           subtitle="Age, time limits, moderation"
-          onClick={() => nav(`/parent/kid/${id}/settings`)}
+          onClick={() => nav('/parent/kid-settings')}
         />
         <NavTile
           icon={<SlidersHorizontal className="size-5" />}
           title="Edit feed settings"
           subtitle="Content types in this kid's feed"
-          onClick={() => nav(`/parent/kid/${id}/feed-settings`)}
+          onClick={() => nav('/parent/feed-settings')}
         />
         <NavTile
           icon={<Shield className="size-5" />}
           title="Trust · People"
           subtitle="12 in inner circle · 38 others"
-          onClick={() => nav(`/parent/kid/${id}/trust/people`)}
+          onClick={() => nav('/parent/trust/people')}
         />
         <NavTile
           icon={<Clock className="size-5" />}
           title="Trust · Places"
           subtitle="4 relays"
-          onClick={() => nav(`/parent/kid/${id}/trust/places`)}
+          onClick={() => nav('/parent/trust/places')}
         />
         <NavTile
           icon={<KeyRound className="size-5" />}
           title="Backup keys"
           subtitle="View and save this kid's Nostr key"
-          onClick={() => nav(`/parent/kid/${id}/keys`)}
+          onClick={() => nav('/parent/keys')}
         />
         <NavTile
           icon={<AlertTriangle className="size-5" />}

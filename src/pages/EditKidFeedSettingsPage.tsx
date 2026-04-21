@@ -1,49 +1,34 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ContentSettings } from '@/components/ContentSettings';
-import { useEditAsKid } from '@/hooks/useEditAsKid';
-import { useKidDisplayName } from '@/hooks/useKidDisplayName';
+import { NoKidSelected } from '@/components/NoKidSelected';
+import { useSelectedKid } from '@/hooks/useSelectedKid';
 
 /**
- * /parent/kid/:id/feed-settings — edit a kid's feedSettings.
+ * /parent/feed-settings — edit the active kid's feedSettings.
  *
- * Reuses Ditto's existing <ContentSettings /> by briefly switching the active
- * signer to the kid via `useEditAsKid`. See that hook for the lifecycle and
- * known best-effort restore limits.
+ * The active Nostr signer IS the kid (parent picks via the top-right gear
+ * dropdown), so Ditto's <ContentSettings /> reads/writes under the kid's
+ * pubkey without any signer-swap gymnastics.
  */
 export function EditKidFeedSettingsPage() {
   const nav = useNavigate();
-  const { id = '' } = useParams<{ id: string }>();
-  const kidName = useKidDisplayName(id);
-  const edit = useEditAsKid(id);
+  const kid = useSelectedKid();
 
-  if (edit.status === 'unavailable') {
-    return (
-      <div className="flex flex-col gap-5 px-4 pt-2 pb-6">
-        <Header title="Feed settings" onBack={() => nav(`/parent/kid/${id}`)} />
-        <p className="px-1 text-sm text-muted-foreground">
-          This kid's key isn't stored on this device, so feed settings can't be edited here.
-        </p>
-      </div>
-    );
+  if (!kid) {
+    return <NoKidSelected title="Feed settings" />;
   }
 
   return (
     <main className="flex flex-col">
       <Header
-        title={kidName ? `Feed settings · ${kidName}` : 'Feed settings'}
-        onBack={() => nav(`/parent/kid/${id}`)}
+        title={`Feed settings · ${kid.displayName}`}
+        onBack={() => nav('/parent/home')}
       />
       <div className="p-4">
-        {edit.status === 'ready' ? (
-          <ContentSettings />
-        ) : (
-          <div className="flex items-center justify-center py-10 text-muted-foreground">
-            <Loader2 className="size-5 animate-spin" />
-          </div>
-        )}
+        <ContentSettings />
       </div>
     </main>
   );
