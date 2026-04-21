@@ -22,7 +22,7 @@ export function KuboOnboardLayout() {
   return (
     <div className="min-h-dvh bg-background text-foreground flex flex-col">
       <header
-        className="flex items-center justify-center gap-2 pt-[calc(env(safe-area-inset-top,0px)+16px)] pb-4"
+        className="flex items-center justify-center gap-2 pt-[calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px))+16px)] pb-4"
         aria-label={`Step ${currentIndex + 1} of ${STEPS.length}`}
       >
         {STEPS.map((s, i) => (

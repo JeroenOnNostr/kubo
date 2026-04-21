@@ -10,7 +10,7 @@ import { KuboBottomNav } from '@/components/KuboBottomNav';
  */
 export function KuboParentLayout() {
   return (
-    <div className="min-h-dvh bg-background text-foreground">
+    <div className="min-h-dvh bg-background text-foreground safe-area-top">
       <main className="pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px))]">
         <Outlet />
       </main>

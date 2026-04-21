@@ -12,7 +12,7 @@ import { Outlet } from 'react-router-dom';
 export function KuboKidLayout() {
   return (
     <div
-      className="min-h-dvh text-white"
+      className="min-h-dvh text-white safe-area-top"
       style={{ background: '#1E3A8A' }}
     >
       <Outlet />

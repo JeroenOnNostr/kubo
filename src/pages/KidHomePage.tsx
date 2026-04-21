@@ -54,7 +54,7 @@ export function KidHomePage() {
 
   if (isFavorites) {
     return (
-      <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-12">
+      <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-4">
         <header className="flex items-center justify-between">
           <h1 className="text-[24px] font-bold leading-none">Favorites</h1>
           <button
@@ -169,7 +169,7 @@ export function KidHomePage() {
       { id: '3', from: 'Aunt Mal',   group: 'Family',         title: 'Grandma says hi 👋',        color: '#6366F1' },
     ];
     return (
-      <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-12">
+      <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-4">
         {devSwitcher}
         <header className="flex items-center justify-between">
           <div>
