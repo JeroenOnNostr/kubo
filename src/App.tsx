@@ -22,6 +22,8 @@ import { NWCProvider } from "@/contexts/NWCContext";
 import { PROTOCOL_MODE } from "@/lib/dmConstants";
 import { DittoConfigSchema, type DittoConfig } from "@/lib/schemas";
 import { secureStorage } from "@/lib/secureStorage";
+import { ScreenEffectProvider } from "@/contexts/ScreenEffectContext";
+import { ScreenEffectRenderer } from "@/components/ScreenEffectRenderer";
 import { EmotionDevProvider } from "@/blobbi/dev/EmotionDevContext";
 import AppRouter from "./AppRouter";
 
@@ -158,6 +160,8 @@ const hardcodedConfig: AppConfig = {
     { id: 'hot-posts' },
     { id: 'wikipedia' },
   ],
+  aiModel: '',
+  aiSystemPrompt: '',
 };
 
 /**
@@ -203,13 +207,16 @@ export function App() {
 
                     <NWCProvider>
                     <DMProvider config={dmConfig}>
+                      <ScreenEffectProvider>
                       <EmotionDevProvider>
                         <TooltipProvider>
                           <InitialSyncGate>
+                            <ScreenEffectRenderer />
                             <AppRouter />
                           </InitialSyncGate>
                         </TooltipProvider>
                       </EmotionDevProvider>
+                      </ScreenEffectProvider>
                     </DMProvider>
                   </NWCProvider>
                 </NostrProvider>

@@ -258,6 +258,8 @@ export const AppConfigSchema = z.object({
     id: z.string(),
     height: z.number().optional(),
   })).optional(),
+  aiModel: z.string().optional(),
+  aiSystemPrompt: z.string().optional(),
 });
 
 // ─── DittoConfigSchema (build-time ditto.json) ───────────────────────
