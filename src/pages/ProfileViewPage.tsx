@@ -68,7 +68,7 @@ export function ProfileViewPage() {
       </div>
 
       {/* Avatar + name */}
-      <div className="px-5 -mt-10 flex items-end gap-3">
+      <div className="relative px-5 -mt-10 flex items-end gap-3">
         <div
           className="size-20 rounded-full border-4 flex-shrink-0 overflow-hidden flex items-center justify-center text-2xl font-semibold text-white"
           style={{
