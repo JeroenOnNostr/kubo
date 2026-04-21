@@ -67,6 +67,13 @@ const settingsSections: SettingsSection[] = [
     path: '/settings/advanced',
   },
   {
+    id: 'hidden-features',
+    label: 'Hidden features',
+    description: 'Show or hide app features',
+    illustration: '/community-intro.png',
+    path: '/settings/hidden-features',
+  },
+  {
     id: 'magic',
     label: 'Magic',
     description: 'Enchanted cursor effects and mystical interface powers',
