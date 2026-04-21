@@ -43,6 +43,15 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-025: Wire Kids watch history + Kids activity placeholders to real data**
   Follow-up to KUBO-024. Replace the hardcoded `ACTIVITY_DATA` + 3 dummy watch-history cards on `/parent/home` with live readings. Watch history: recent-views from the active kid's signer (kind TBD — likely the same events that feed `/kid`'s tile tap, ordered by `created_at`). Activity chart: per-kid daily watch time aggregated from kid-settings/usage events across the parent's kids (iterate `useKuboFamily().kids`, switch signer per kid or query by pubkey). Week tab aggregates by day-of-week, Day tab aggregates by hour. "Watch full history" span becomes a link once the target route exists.
 
+- **KUBO-035: Prune inherited Ditto feature branches from the fork**
+  The GitHub fork (converted 2026-04-21 from the pre-existing `JeroenOnNostr/ditto` fork) carries ~50 branches from upstream Ditto (`ios-haptics`, `planet`, `reactions`, `bluesky`, `develop`, `dms`, all the `feat/blobbi-*`, etc.). These clutter the branch list and aren't Kubo work. Delete them from `origin`; they still exist on `upstream` (soapbox-pub/ditto) so nothing is lost. Leave `main`, `brand/main`, and any active `feat/kubo-*` branches alone.
+
+- **KUBO-036: Merge upstream Ditto v2.10.3 into `brand/main`**
+  Upstream Ditto has 7 commits on `main` that aren't in `brand/main` yet: lightbox swipe-to-dismiss flicker fix, release 2.10.3, iOS status-bar text color fix on light theme, envelope-card mobile tap fixes, swipe-to-dismiss on lightbox overlays, wall compose-box clearing, autoplay-videos setting. Local `main` has already been fast-forwarded to `upstream/main`; follow the flow in memory note [kubo.md](../../.claude/projects/-home-jeroen-VScode-workspace-for-building-nostr-apps/memory/kubo.md): `git checkout brand/main && git merge main`, resolve any brand-specific conflicts, `git push origin brand/main`. Watch for conflicts on files Kubo has rebranded/customized.
+
+- **KUBO-037: Set up Android release-signing keystore**
+  v0.1.0 and v0.1.1 APKs are debug-signed (shared dev key across all developers' machines) — fine for personal testing but blocks Play Store distribution, means users can't cleanly update to a release-signed build later, and gives no signing-identity guarantee. Run `npm run keygen` to generate an upload keystore, fill in `android/key.properties` with the alias/passwords, and the existing `signingConfigs.release` block in `android/app/build.gradle` will pick it up. Store the keystore + passwords somewhere durable (losing them means losing the ability to update the app). Only unblock once we're ready to distribute beyond Jeroen's own device.
+
 ## Deferred to post-MVP
 
 - **KUBO-002: Separate devices** — parent and kid on distinct devices rather than sharing one; requires some transport between them (pairing, key sync, etc.).
