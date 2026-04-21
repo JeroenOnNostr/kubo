@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, KeyRound } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { NavTile } from '@/components/NavTile';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 
@@ -131,6 +132,13 @@ export function EditKidSettingsPage() {
           {moderation === 'high' && 'Strict — only content from the inner-circle graph.'}
         </p>
       </div>
+
+      <NavTile
+        icon={<KeyRound className="size-5" />}
+        title="Backup keys"
+        subtitle="View and save this kid's Nostr key"
+        onClick={() => nav('/parent/keys')}
+      />
 
       <div className="h-4" />
 

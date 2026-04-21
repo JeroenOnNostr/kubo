@@ -37,6 +37,12 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-022: Videos tab — infinite scroll**
   Follow-up to KUBO-020. `VideosTab` only renders the first `useProfileMedia` page (~20 events). Wire an IntersectionObserver sentinel at the bottom of the grid that calls `fetchNextPage()` when visible, using the hook's already-implemented `getNextPageParam`.
 
+- **KUBO-024: Restructure parent home — drop redundant tiles, move Backup keys, add activity placeholders**
+  On `/parent/home`, removed the three nav tiles that duplicate bottom-nav destinations (Trust · People → Trust tab, Trust · Places → Trust tab, Activity & alerts → Alerts tab) and moved the Backup keys tile into `/parent/kid-settings` where it belongs with the per-kid config knobs. Extracted `NavTile` from `KidDashboardPage.tsx` to `components/NavTile.tsx` so both pages can share it. Added two placeholder sections below the remaining tiles on the home page: **Kids watch history** (horizontal row of 3 dummy thumbnail cards) and **Kids activity** (shadcn Tabs for Week/Day + a recharts BarChart with 3 kids × 7 days of hardcoded sample data, plus a legend). Visual-only — no data wiring. Follow-up in KUBO-025.
+
+- **KUBO-025: Wire Kids watch history + Kids activity placeholders to real data**
+  Follow-up to KUBO-024. Replace the hardcoded `ACTIVITY_DATA` + 3 dummy watch-history cards on `/parent/home` with live readings. Watch history: recent-views from the active kid's signer (kind TBD — likely the same events that feed `/kid`'s tile tap, ordered by `created_at`). Activity chart: per-kid daily watch time aggregated from kid-settings/usage events across the parent's kids (iterate `useKuboFamily().kids`, switch signer per kid or query by pubkey). Week tab aggregates by day-of-week, Day tab aggregates by hour. "Watch full history" span becomes a link once the target route exists.
+
 ## Deferred to post-MVP
 
 - **KUBO-002: Separate devices** — parent and kid on distinct devices rather than sharing one; requires some transport between them (pairing, key sync, etc.).
