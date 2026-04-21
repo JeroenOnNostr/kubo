@@ -7,14 +7,8 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-001: Upload flow — parent posts, signed by kid's key**
   Upload UX lives in the parent app, but the resulting event is signed with the kid's private key (the parent is acting on behalf of the kid, not posting from their own identity). Relevant to PR 4 (Upload). Figure out key-access model: does the parent hold the kid's nsec, unlock it per-upload, or sign via a delegation/NIP-46-style handoff?
 
-- **KUBO-007: Single-device MVP onboarding — 3 screens, no QR**
-  For MVP, parent and kid share one device, so drop the multi-device handoff from the onboarding flow. No QR screen, no "add kid from another device" path. Likely 3 screens total instead of 5–6 — revisit PR 2 stub routes (`/onboard/welcome`, `/onboard/create-parent`, `/onboard/add-kid`) against this simpler shape.
-
 - **KUBO-008: Request-to-watch mechanism (same device)**
   Kid taps something they're not currently allowed to see → generates a request that surfaces in the parent's Alerts tab (PR 6). Parent approves/denies in-app. No cross-device messaging needed for MVP since it's all on one device — in-app state / local event store is enough.
-
-- **KUBO-010: Backup keys page — parent-side retrieval of the logged-in kid's npub/nsec**
-  New "Backup keys" tile on `/parent/kid/:id` dashboard opens `/parent/kid/:id/keys`. Shows the logged-in kid's npub (always visible, safe to share) and nsec (masked, Eye reveal + amber warning, Copy button, "Back Up Key" via `saveNsec`). Reads from `logins[0]`, mirroring the `BackupKeySection` pattern in `ProfileSettings.tsx`.
 
 - **KUBO-011: App-wide biometric / device-PIN gate for nsec reveal and export**
   Neither Kubo nor upstream Ditto currently gates nsec reveal behind any authentication — the Eye toggle in `KidKeysPage`, `ProfileSettings.BackupKeySection`, and `InitialSyncGate` is a plain `useState`. Install a Capacitor biometric plugin (e.g. `@capacitor-community/biometric-auth`) with a web fallback (AlertDialog "type NSEC to confirm"), and wrap the reveal/export paths with a shared `<RequireAuth>` helper so the gate covers both parent and kid nsec surfaces.
