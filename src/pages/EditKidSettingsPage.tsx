@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, KeyRound, Upload, Loader2 } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
@@ -19,7 +19,8 @@ import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
 import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
-import type { KuboModeration } from '@/hooks/useKuboFamily';
+import type { KidSettings, KuboModeration } from '@/hooks/useKuboFamily';
+import { useDebounce } from '@/hooks/useDebounce';
 
 /**
  * /parent/kid-settings — per-kid knobs for whichever kid is the active signer.
@@ -40,9 +41,14 @@ export function EditKidSettingsPage() {
   const [moderation, setMod]      = useState<KuboModeration>('mid');
   const [viewOnly, setViewOnly]   = useState(false);
 
+  // Gate auto-save until after the mount-load effect has hydrated state,
+  // so the load itself doesn't trigger a redundant write.
+  const hasLoadedRef = useRef(false);
+
   // Load persisted settings when kid changes.
   useEffect(() => {
     if (!kid) return;
+    hasLoadedRef.current = false;
     const s = getKidSettings(kid.pubkey);
     setAge(s.age);
     setDaily(s.dailyLimitMin);
@@ -50,7 +56,49 @@ export function EditKidSettingsPage() {
     setWEnd(s.windowEnd);
     setMod(s.moderation);
     setViewOnly(s.viewOnly ?? false);
+    hasLoadedRef.current = true;
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Assembled snapshot of all fields, used when building the patch to persist.
+  const currentSettings = useMemo<KidSettings>(() => ({
+    age,
+    dailyLimitMin: dailyLimit,
+    windowStart,
+    windowEnd,
+    moderation,
+    viewOnly,
+  }), [age, dailyLimit, windowStart, windowEnd, moderation, viewOnly]);
+
+  // Per-field immediate persist (Ditto's settings-page convention).
+  // Fire-and-forget; on failure we surface a toast but don't roll back — the
+  // UI state reflects the user's intent and a retry will be written on next
+  // interaction.
+  const saveField = (patch: Partial<KidSettings>) => {
+    if (!kid || !hasLoadedRef.current) return;
+    setKidSettings(kid.pubkey, { ...currentSettings, ...patch }).catch((err) => {
+      console.error('Failed to auto-save kid settings:', err);
+      toast({
+        title: 'Could not save settings',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    });
+  };
+
+  // Time inputs fire on every keystroke; debounce so typing "16:30" produces
+  // one write, not five. All other fields save immediately on change.
+  const debouncedWindowStart = useDebounce(windowStart, 400);
+  const debouncedWindowEnd   = useDebounce(windowEnd, 400);
+  useEffect(() => {
+    if (!kid || !hasLoadedRef.current) return;
+    setKidSettings(kid.pubkey, {
+      ...currentSettings,
+      windowStart: debouncedWindowStart,
+      windowEnd:   debouncedWindowEnd,
+    }).catch((err) => {
+      console.error('Failed to auto-save kid settings:', err);
+    });
+  }, [debouncedWindowStart, debouncedWindowEnd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Avatar upload wiring. Hooks must be called unconditionally, so we call
   // them with `kid?.pubkey ?? ''` — useAuthor is gated on a truthy pubkey
@@ -184,7 +232,10 @@ export function EditKidSettingsPage() {
           min={15}
           max={180}
           step={5}
-          onValueChange={(v) => setDaily(v[0])}
+          onValueChange={(v) => {
+            setDaily(v[0]);
+            saveField({ dailyLimitMin: v[0] });
+          }}
           aria-label="Daily limit in minutes"
         />
       </Field>
@@ -218,7 +269,10 @@ export function EditKidSettingsPage() {
               type="button"
               role="radio"
               aria-checked={moderation === m}
-              onClick={() => setMod(m)}
+              onClick={() => {
+                setMod(m);
+                saveField({ moderation: m });
+              }}
               className={cn(
                 'h-11 rounded-xl text-sm font-medium capitalize transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
@@ -248,7 +302,10 @@ export function EditKidSettingsPage() {
         </div>
         <Switch
           checked={viewOnly}
-          onCheckedChange={setViewOnly}
+          onCheckedChange={(v) => {
+            setViewOnly(v);
+            saveField({ viewOnly: v });
+          }}
           aria-label="View-only mode"
         />
       </div>
@@ -259,27 +316,6 @@ export function EditKidSettingsPage() {
         subtitle="View and save this kid's Nostr key"
         onClick={() => nav('/parent/keys')}
       />
-
-      <div className="h-4" />
-
-      <Button
-        size="lg"
-        className="w-full h-12 rounded-full"
-        onClick={async () => {
-          if (!kid) return;
-          await setKidSettings(kid.pubkey, {
-            age,
-            dailyLimitMin: dailyLimit,
-            windowStart,
-            windowEnd,
-            moderation,
-            viewOnly,
-          });
-          toast({ title: 'Settings saved' });
-        }}
-      >
-        Save changes
-      </Button>
     </div>
   );
 }
