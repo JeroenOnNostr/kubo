@@ -56,8 +56,11 @@ export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
   } = useKidFeed();
   const { muteItems } = useMuteList();
 
-  // View-only mode: only applies in kid variant, read from per-kid settings.
-  const isViewOnly = variant === 'kid' && !!user?.pubkey
+  // View-only mode: read from the active kid's settings. Applies to both
+  // variants — on /kid the signer *is* the kid, and on /parent/feed the
+  // parent has swapped the signer to the selected kid via useSelectedKid,
+  // so logins[0].pubkey resolves to the same kid in both cases.
+  const isViewOnly = !!user?.pubkey
     && getKidSettings(user.pubkey).viewOnly === true;
 
   const feedItems = useMemo<FeedItem[]>(() => {
