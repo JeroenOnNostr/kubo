@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { KuboWordmark } from '@/components/KuboWordmark';
 
 /**
  * /onboard/welcome — first screen an unauthenticated visitor sees.
@@ -14,11 +15,7 @@ export function WelcomePage() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-10 text-center max-w-sm mx-auto w-full">
       <div className="flex flex-col items-center gap-6">
-        <img
-          src="/wordmark.svg"
-          alt="Kubo"
-          className="h-16"
-        />
+        <KuboWordmark className="h-16 text-foreground" />
         <h1 className="text-2xl font-semibold tracking-tight">
           Safe social for kids.
         </h1>

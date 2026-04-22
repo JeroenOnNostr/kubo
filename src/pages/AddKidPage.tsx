@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { useNostr } from '@nostrify/react';
 import { useNostrLogin } from '@nostrify/react/login';
 import { useQueryClient } from '@tanstack/react-query';
@@ -56,6 +56,21 @@ export function AddKidPage() {
 
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // When the kid is created but the avatar upload fails, we stop short of
+  // navigating and surface a persistent retry affordance on the avatar
+  // tile. `pendingAvatar` holds the data we'd need to retry without a
+  // second identity creation: the new kid's pubkey+nsec and the finishing
+  // handoff (navigation destination + family write that still needs doing).
+  const [pendingAvatar, setPendingAvatar] = useState<
+    | null
+    | {
+        kidPubkey: string;
+        kidNsec: `nsec1${string}`;
+        kidDisplayName: string;
+        finish: () => void;
+      }
+  >(null);
+  const [retrying, setRetrying] = useState(false);
 
   // Optional avatar pick — parent can skip. If a blob is staged, we upload
   // and publish *after* onboardIdentity resolves, wrapped in try/catch so a
@@ -97,7 +112,12 @@ export function AddKidPage() {
     setStagedPreview(URL.createObjectURL(blob));
   };
 
-  const canSubmit = name.trim().length >= 1 && !submitting;
+  const KID_NAME_MAX = 30;
+  const trimmedNameLength = name.trim().length;
+  const canSubmit =
+    trimmedNameLength >= 1 &&
+    trimmedNameLength <= KID_NAME_MAX &&
+    !submitting;
 
   const handleAdd = async () => {
     if (!canSubmit) return;
@@ -136,11 +156,36 @@ export function AddKidPage() {
         console.warn('Failed to seed kid encrypted settings:', err);
       }
 
-      // Optional avatar upload — non-blocking. If this fails the kid is still
-      // created cleanly; parent can set a picture later via /parent/kid-settings.
-      // Uses the nsec-form of the hooks because Nostrify's `logins` state is
-      // updated asynchronously by `login.nsec(...)` above and may not yet
-      // contain the new kid inside this handler.
+      // Finishing handoff — runs either after a successful avatar upload,
+      // or after the user opts to skip a failed upload. Writing the family
+      // record is what anchors the kid permanently; doing it *after* the
+      // avatar attempt means retrying isn't blocked by a missing family
+      // entry.
+      const finish = () => {
+        (async () => {
+          if (isFirstKid) {
+            await setFamily({
+              parentPubkey,
+              parentDisplayName,
+              kids: [{ pubkey: identity.pubkey, displayName: trimmed }],
+            });
+          } else {
+            await addKid({ pubkey: identity.pubkey, displayName: trimmed });
+          }
+
+          // Make the freshly-created kid the active signer so the parent
+          // lands on /parent/home already scoped to them. Nostrify's login
+          // id for an nsec login is deterministic (`nsec:<pubkey>`), so we
+          // can reconstruct it without reading `logins` (which would be
+          // stale in this same handler).
+          setLogin(`nsec:${identity.pubkey}`);
+          nav('/parent/home', { replace: true });
+        })();
+      };
+
+      // Optional avatar upload — non-blocking for kid creation, but if it
+      // fails we keep the user here with a persistent inline retry affordance
+      // on the avatar tile (better than a toast that disappears).
       if (stagedBlob) {
         const file = new File([stagedBlob], 'avatar.jpg', { type: 'image/jpeg' });
         try {
@@ -155,30 +200,18 @@ export function AddKidPage() {
           );
         } catch (err) {
           console.warn('Kid avatar upload failed (non-fatal):', err);
-          toast({
-            title: 'Picture upload failed',
-            description: `${trimmed} was added but without a picture. You can add one later.`,
+          setPendingAvatar({
+            kidPubkey: identity.pubkey,
+            kidNsec: identity.nsec,
+            kidDisplayName: trimmed,
+            finish,
           });
+          setSubmitting(false);
+          return; // stop here; user decides retry vs skip
         }
       }
 
-      if (isFirstKid) {
-        await setFamily({
-          parentPubkey,
-          parentDisplayName,
-          kids: [{ pubkey: identity.pubkey, displayName: trimmed }],
-        });
-      } else {
-        await addKid({ pubkey: identity.pubkey, displayName: trimmed });
-      }
-
-      // Make the freshly-created kid the active signer so the parent lands on
-      // /parent/home already scoped to them. Nostrify's login id for an nsec
-      // login is deterministic (`nsec:<pubkey>`), so we can reconstruct it
-      // without reading `logins` (which would be stale in this same handler).
-      setLogin(`nsec:${identity.pubkey}`);
-
-      nav('/parent/home', { replace: true });
+      finish();
     } catch (err) {
       console.error('Kid onboarding failed:', err);
       toast({
@@ -188,6 +221,42 @@ export function AddKidPage() {
       });
       setSubmitting(false);
     }
+  };
+
+  const retryAvatar = async () => {
+    if (!pendingAvatar || !stagedBlob) return;
+    setRetrying(true);
+    try {
+      const file = new File([stagedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+      const url = await uploadKidAvatar({ file, nsec: pendingAvatar.kidNsec });
+      const event = await publishKidProfile({
+        patch: { picture: url },
+        nsec: pendingAvatar.kidNsec,
+      });
+      queryClient.setQueryData(
+        ['author', pendingAvatar.kidPubkey],
+        parseAuthorEvent(event),
+      );
+      const finish = pendingAvatar.finish;
+      setPendingAvatar(null);
+      finish();
+    } catch (err) {
+      console.warn('Avatar retry failed:', err);
+      toast({
+        title: 'Still couldn’t upload the picture',
+        description: 'Check your connection and try once more, or skip for now.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const skipAvatar = () => {
+    if (!pendingAvatar) return;
+    const finish = pendingAvatar.finish;
+    setPendingAvatar(null);
+    finish();
   };
 
   const title = isFirstKid ? 'Add your first kid' : 'Add a kid';
@@ -207,20 +276,64 @@ export function AddKidPage() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={submitting}
+            disabled={submitting || retrying || !!pendingAvatar}
             className="relative size-20 rounded-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
             aria-label={stagedPreview ? 'Change profile picture' : 'Add profile picture (optional)'}
           >
             <Avatar className="size-20">
               {stagedPreview && <AvatarImage src={stagedPreview} />}
-              <AvatarFallback className="bg-[#6366F1] text-white">
-                <Upload className="size-5 opacity-80" />
+              <AvatarFallback className="bg-primary/10 text-primary border-2 border-dashed border-primary/30">
+                <Upload className="size-5" />
               </AvatarFallback>
             </Avatar>
+            {pendingAvatar && (
+              <span
+                className="absolute inset-0 bg-destructive/20 ring-2 ring-destructive flex items-center justify-center"
+                aria-hidden
+              >
+                <AlertTriangle className="size-6 text-destructive drop-shadow" />
+              </span>
+            )}
           </button>
-          <p className="text-[11px] text-muted-foreground">
-            {stagedPreview ? 'Tap to change' : 'Profile picture (optional)'}
-          </p>
+          {pendingAvatar ? (
+            <div className="flex flex-col items-center gap-2 mt-1">
+              <p className="text-[12px] text-destructive font-medium">
+                Couldn’t upload the picture.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={retryAvatar}
+                  disabled={retrying}
+                >
+                  {retrying ? (
+                    <>
+                      <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                      Retrying…
+                    </>
+                  ) : (
+                    'Retry upload'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-full"
+                  onClick={skipAvatar}
+                  disabled={retrying}
+                >
+                  Skip for now
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              {stagedPreview ? 'Tap to change' : 'Profile picture (optional)'}
+            </p>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -231,13 +344,21 @@ export function AddKidPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="kid-name">Kid's name</Label>
+          <div className="flex items-baseline justify-between">
+            <Label htmlFor="kid-name">Kid's name</Label>
+            {name.length > 0 && (
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {name.length}/{KID_NAME_MAX}
+              </span>
+            )}
+          </div>
           <Input
             id="kid-name"
             autoFocus
             placeholder="Mia"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            maxLength={KID_NAME_MAX}
             className="h-12 rounded-xl text-base"
             disabled={submitting}
           />
@@ -258,16 +379,24 @@ export function AddKidPage() {
         />
       )}
 
-      <Button
-        size="lg"
-        className="w-full h-12 rounded-full"
-        disabled={!canSubmit}
-        onClick={handleAdd}
-      >
-        {submitting
-          ? <><Loader2 className="size-4 mr-2 animate-spin" /> Adding…</>
-          : 'Add kid'}
-      </Button>
+      {/*
+        While the avatar is pending retry, the kid is already saved — the
+        primary CTA is whichever retry/skip action lives on the avatar tile
+        above, not "Add kid" again. Hide the main button during that state
+        so there's only one obvious next move.
+      */}
+      {!pendingAvatar && (
+        <Button
+          size="lg"
+          className="w-full h-12 rounded-full"
+          disabled={!canSubmit}
+          onClick={handleAdd}
+        >
+          {submitting
+            ? <><Loader2 className="size-4 mr-2 animate-spin" /> Adding…</>
+            : 'Add kid'}
+        </Button>
+      )}
     </div>
   );
 }

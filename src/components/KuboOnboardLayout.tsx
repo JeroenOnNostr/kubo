@@ -1,5 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { KuboOnboardErrorFallback } from '@/components/KuboErrorFallbacks';
 
 /**
  * Chrome for /onboard/* routes: a 3-dot progress indicator at the top,
@@ -29,10 +31,13 @@ export function KuboOnboardLayout() {
           <span
             key={s.path}
             className={cn(
-              'size-2 rounded-full transition-colors',
-              i < currentIndex && 'bg-primary/60',
+              // Animate width + color so the active pill grows into place
+              // when the user advances a step (≈200ms feels snappy, not
+              // sluggish). Width collapses back on step-back too.
+              'h-2 rounded-full transition-[width,background-color] duration-300 ease-out',
+              i < currentIndex && 'bg-primary/60 w-2',
               i === currentIndex && 'bg-primary w-8',
-              i > currentIndex && 'bg-muted',
+              i > currentIndex && 'bg-muted w-2',
             )}
             aria-hidden
           />
@@ -40,7 +45,13 @@ export function KuboOnboardLayout() {
       </header>
 
       <main className="flex-1 flex flex-col px-6 pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
-        <Outlet />
+        {/*
+          Onboarding-themed fallback — keeps the beige palette consistent
+          if something crashes mid-flow (e.g., relay publish failure).
+        */}
+        <ErrorBoundary fallback={<KuboOnboardErrorFallback />}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

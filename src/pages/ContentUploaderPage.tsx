@@ -16,11 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  CategoryChips,
-  type Category,
-} from '@/components/feed/CategoryChips';
-
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -61,7 +56,6 @@ export function ContentUploaderPage() {
   // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Category>('animals');
 
   // File state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -168,7 +162,6 @@ export function ContentUploaderPage() {
 
       const tags: string[][] = [];
       tags.push(['title', title.trim()]);
-      tags.push(['t', category]);
 
       // imeta tag with upload metadata
       const imetaFields: string[] = [`url ${uploadedUrl}`];
@@ -340,16 +333,6 @@ export function ContentUploaderPage() {
         />
       </div>
 
-      {/* Category */}
-      <div className="flex flex-col gap-2">
-        <Label className="px-4">Category</Label>
-        <CategoryChips
-          value={category}
-          options={['animals', 'music', 'craft', 'stories']}
-          onChange={setCategory}
-        />
-      </div>
-
       {/* Advanced options */}
       <div className="px-4">
         <button
@@ -408,10 +391,19 @@ export function ContentUploaderPage() {
         )}
       </div>
 
-      <div className="flex-1" />
+      {/* Bottom padding so the last form field doesn't tuck under the sticky bar. */}
+      <div className="h-20" />
 
-      {/* Publish */}
-      <div className="px-4">
+      {/*
+        Publish — sticks above the bottom nav. `bottom` offsets by the nav
+        height so the button is reachable without colliding with nav icons.
+        The page lives inside <main> which already reserves that space at
+        its base; sticky is viewport-relative, so we add the offset here.
+      */}
+      <div
+        className="sticky inset-x-0 px-4 pt-3 pb-3 bg-gradient-to-t from-background via-background to-background/0"
+        style={{ bottom: 'calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px))' }}
+      >
         <Button
           size="lg"
           className="w-full h-12 rounded-full"

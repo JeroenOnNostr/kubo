@@ -28,7 +28,9 @@ export function CreateParentAccountPage() {
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = name.trim().length >= 2 && !submitting;
+  const NAME_MAX = 50;
+  const trimmedLength = name.trim().length;
+  const canSubmit = trimmedLength >= 2 && trimmedLength <= NAME_MAX && !submitting;
 
   const handleCreate = async () => {
     if (!canSubmit) return;
@@ -70,7 +72,14 @@ export function CreateParentAccountPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="parent-name">Your name</Label>
+          <div className="flex items-baseline justify-between">
+            <Label htmlFor="parent-name">Your name</Label>
+            {name.length > 0 && (
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {name.length}/{NAME_MAX}
+              </span>
+            )}
+          </div>
           <Input
             id="parent-name"
             autoFocus
@@ -78,9 +87,16 @@ export function CreateParentAccountPage() {
             placeholder="Sam Rivera"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            maxLength={NAME_MAX}
             className="h-12 rounded-xl text-base"
             disabled={submitting}
+            aria-describedby="parent-name-hint"
           />
+          <p id="parent-name-hint" className="text-[11px] text-muted-foreground">
+            {trimmedLength < 2
+              ? 'At least 2 characters'
+              : 'Looks good — tap Continue.'}
+          </p>
         </div>
       </div>
 

@@ -4,8 +4,9 @@ import { type KuboKid, useKuboFamily } from './useKuboFamily';
 
 /**
  * The "currently selected kid" on the parent side = whichever kid is the
- * active Nostr signer (logins[0]). Parents pick via the top-right gear
- * dropdown, which calls setLogin() to swap signers.
+ * active Nostr signer (logins[0]). Parents pick via the persistent
+ * "Select kid" pill in the top-right of KuboParentLayout, which calls
+ * setLogin() to swap signers.
  *
  * Returns null when logins[0] is the parent (or any non-kid account), or
  * when family state hasn't loaded yet. Every kid-scoped parent page derives

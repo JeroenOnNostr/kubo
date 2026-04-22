@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { start, stopTracker } from '@/lib/screenTimeTracker';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { KuboKidErrorFallback } from '@/components/KuboErrorFallbacks';
 
 /**
  * Layout shell for all /kid/* routes.
@@ -33,7 +35,16 @@ export function KuboKidLayout() {
       className="min-h-dvh text-white safe-area-top"
       style={{ background: '#1E3A8A' }}
     >
-      <Outlet />
+      {/*
+        Kid-themed fallback — a crash here must NOT show Ditto's onboarding-
+        beige error screen (the shared ErrorBoundary default uses the global
+        palette, which in this layout would clash badly with #1E3A8A). We
+        pass a Kubo-themed fallback rather than editing the shared boundary,
+        so upstream Ditto merges stay conflict-free.
+      */}
+      <ErrorBoundary fallback={<KuboKidErrorFallback />}>
+        <Outlet />
+      </ErrorBoundary>
     </div>
   );
 }
