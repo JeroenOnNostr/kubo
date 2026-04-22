@@ -35,6 +35,21 @@ export interface KidSettings {
   showMoreAction?: boolean;
 }
 
+export interface KidFeedSources {
+  /** Normalized wss:// URLs enabled as relay firehoses. */
+  relays: string[];
+  /** NIP-33 a-tags for enabled NIP-72 communities: `34550:<pubkey>:<d-tag>`. */
+  communities: string[];
+  /** NIP-33 a-tags for enabled follow packs/sets: `<kind>:<pubkey>:<d-tag>` (30000|39089). */
+  packs: string[];
+}
+
+export const EMPTY_FEED_SOURCES: KidFeedSources = {
+  relays: [],
+  communities: [],
+  packs: [],
+};
+
 export interface KuboFamily {
   parentPubkey: string;
   parentDisplayName: string;
@@ -47,6 +62,12 @@ export interface KuboFamily {
   };
   /** Per-kid settings (time limits, moderation, age). */
   kidSettings?: { [kidPubkey: string]: KidSettings };
+  /**
+   * Per-kid enabled feed sources for relays/communities/packs. Profiles are
+   * NOT stored here — they live in the kid's kind-3 follow list. Stage-1 is
+   * persist-only for these three; Stage-2 wires them into the feed aggregator.
+   */
+  feedSources?: { [kidPubkey: string]: KidFeedSources };
 }
 
 /**
@@ -153,10 +174,23 @@ export async function addKid(kid: KuboKid): Promise<void> {
 export async function removeKid(pubkey: string): Promise<void> {
   const current = await readLatest();
   if (!current) return;
-  await writeAndNotify({
+  const next: KuboFamily = {
     ...current,
     kids: current.kids.filter((k) => k.pubkey !== pubkey),
-  });
+  };
+  if (current.trustAssignments && pubkey in current.trustAssignments) {
+    const { [pubkey]: _removedTrust, ...restTrust } = current.trustAssignments;
+    next.trustAssignments = restTrust;
+  }
+  if (current.kidSettings && pubkey in current.kidSettings) {
+    const { [pubkey]: _removedKid, ...restKid } = current.kidSettings;
+    next.kidSettings = restKid;
+  }
+  if (current.feedSources && pubkey in current.feedSources) {
+    const { [pubkey]: _removedFs, ...restFs } = current.feedSources;
+    next.feedSources = restFs;
+  }
+  await writeAndNotify(next);
 }
 
 export async function clearFamily(): Promise<void> {
@@ -240,6 +274,72 @@ export function getKidSettings(kidPubkey: string): KidSettings {
   return family?.kidSettings?.[kidPubkey] ?? DEFAULT_KID_SETTINGS;
 }
 
+// ─── Feed sources ────────────────────────────────────────────────────────────
+
+async function mutateFeedSources(
+  kidPubkey: string,
+  mutate: (current: KidFeedSources) => KidFeedSources,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot update feed sources: no family record exists yet.');
+  }
+  const existing = current.feedSources?.[kidPubkey] ?? EMPTY_FEED_SOURCES;
+  const next = mutate(existing);
+  // Skip the disk write + notify if nothing actually changed. Toggles on the
+  // same source are common and the equality check keeps the re-render budget
+  // tight (per M4 plan goal of not invalidating unrelated consumers).
+  if (
+    next.relays === existing.relays &&
+    next.communities === existing.communities &&
+    next.packs === existing.packs
+  ) {
+    return;
+  }
+  await writeAndNotify({
+    ...current,
+    feedSources: { ...current.feedSources, [kidPubkey]: next },
+  });
+}
+
+function toggleInList(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+export async function toggleFeedRelay(
+  kidPubkey: string,
+  url: string,
+): Promise<void> {
+  await mutateFeedSources(kidPubkey, (fs) => ({
+    ...fs,
+    relays: toggleInList(fs.relays, url),
+  }));
+}
+
+export async function toggleFeedCommunity(
+  kidPubkey: string,
+  atag: string,
+): Promise<void> {
+  await mutateFeedSources(kidPubkey, (fs) => ({
+    ...fs,
+    communities: toggleInList(fs.communities, atag),
+  }));
+}
+
+export async function toggleFeedPack(
+  kidPubkey: string,
+  atag: string,
+): Promise<void> {
+  await mutateFeedSources(kidPubkey, (fs) => ({
+    ...fs,
+    packs: toggleInList(fs.packs, atag),
+  }));
+}
+
+export function getFeedSources(kidPubkey: string): KidFeedSources {
+  return family?.feedSources?.[kidPubkey] ?? EMPTY_FEED_SOURCES;
+}
+
 // ─── React binding ────────────────────────────────────────────────────────────
 
 function subscribe(onStoreChange: () => void): () => void {
@@ -255,6 +355,11 @@ function subscribe(onStoreChange: () => void): () => void {
 function getSnapshot(): KuboFamily | null {
   return family;
 }
+
+// Exported bindings so per-slice hooks (e.g. useKidFeedSources) can subscribe
+// to the same underlying store without duplicating its module-level state.
+export const subscribeFamily = subscribe;
+export const getFamilySnapshot = getSnapshot;
 
 export function useKuboFamily() {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

@@ -55,6 +55,7 @@ import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
 import { ParentTrustIndexPage } from "@/pages/ParentTrustIndexPage";
 import { ParentFeedPage } from "@/pages/ParentFeedPage";
+import { renderKuboFeedSourcesRoutes } from "@/kuboFeedSourcesRoutes";
 import { VideoViewPage } from "@/pages/VideoViewPage";
 import { ProfileViewPage } from "@/pages/ProfileViewPage";
 import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
@@ -327,6 +328,7 @@ export function AppRouter() {
             <Route path="/parent"               element={<Navigate to="/parent/home" replace />} />
             <Route path="/parent/home"          element={<KidDashboardPage    />} />
             <Route path="/parent/feed"          element={<ParentFeedPage      />} />
+            {renderKuboFeedSourcesRoutes()}
             <Route path="/parent/upload"        element={<ContentUploaderPage />} />
             <Route path="/parent/video/:id"     element={<VideoViewPage       />} />
             <Route path="/parent/profile/:npub" element={<ProfileViewPage     />} />
