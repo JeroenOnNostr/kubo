@@ -25,7 +25,7 @@ export function EditKidFeedSettingsPage() {
     <main className="flex flex-col">
       <Header
         title={`Feed settings · ${kid.displayName}`}
-        onBack={() => nav('/parent/home')}
+        onBack={() => nav('/parent/feed')}
       />
       <div className="p-4">
         <ContentSettings />
