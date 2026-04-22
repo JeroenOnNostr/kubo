@@ -144,7 +144,7 @@ export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
           }
           className={cardWrapperClass}
         >
-          <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} compact={isViewOnly} />
+          <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} />
         </div>
       ))}
       {/* Infinite-scroll sentinel */}

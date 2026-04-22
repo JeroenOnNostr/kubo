@@ -20,6 +20,7 @@ import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
 import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
 import type { KidSettings, KuboModeration } from '@/hooks/useKuboFamily';
+import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
 
 /**
@@ -33,6 +34,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 export function EditKidSettingsPage() {
   const nav = useNavigate();
   const kid = useSelectedKid();
+  const { feedSettings } = useFeedSettings();
 
   const [age, setAge]             = useState(6);
   const [dailyLimit, setDaily]    = useState(45); // minutes
@@ -40,6 +42,16 @@ export function EditKidSettingsPage() {
   const [windowEnd, setWEnd]      = useState('19:00');
   const [moderation, setMod]      = useState<KuboModeration>('mid');
   const [viewOnly, setViewOnly]   = useState(false);
+
+  // Post-action button visibility, per-kid. Initialized from each kid's
+  // override if present, otherwise from the global FeedSettings toggle
+  // (so the switches reflect the currently-effective visibility).
+  const [showReply,    setShowReply]    = useState(true);
+  const [showRepost,   setShowRepost]   = useState(true);
+  const [showReaction, setShowReaction] = useState(true);
+  const [showZap,      setShowZap]      = useState(true);
+  const [showShare,    setShowShare]    = useState(true);
+  const [showMore,     setShowMore]     = useState(true);
 
   // Gate auto-save until after the mount-load effect has hydrated state,
   // so the load itself doesn't trigger a redundant write.
@@ -56,10 +68,17 @@ export function EditKidSettingsPage() {
     setWEnd(s.windowEnd);
     setMod(s.moderation);
     setViewOnly(s.viewOnly ?? false);
+    const globalOn = (v: boolean) => v !== false;
+    setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
+    setShowRepost(  s.showRepostAction   ?? globalOn(feedSettings.showRepostAction));
+    setShowReaction(s.showReactionAction ?? globalOn(feedSettings.showReactionAction));
+    setShowZap(     s.showZapAction      ?? globalOn(feedSettings.showZaps));
+    setShowShare(   s.showShareAction    ?? globalOn(feedSettings.showShareAction));
+    setShowMore(    s.showMoreAction     ?? globalOn(feedSettings.showMoreAction));
     hasLoadedRef.current = true;
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Assembled snapshot of all fields, used when building the patch to persist.
+  // Assembled snapshot of all 12 fields, used when building the patch to persist.
   const currentSettings = useMemo<KidSettings>(() => ({
     age,
     dailyLimitMin: dailyLimit,
@@ -67,7 +86,16 @@ export function EditKidSettingsPage() {
     windowEnd,
     moderation,
     viewOnly,
-  }), [age, dailyLimit, windowStart, windowEnd, moderation, viewOnly]);
+    showReplyAction:    showReply,
+    showRepostAction:   showRepost,
+    showReactionAction: showReaction,
+    showZapAction:      showZap,
+    showShareAction:    showShare,
+    showMoreAction:     showMore,
+  }), [
+    age, dailyLimit, windowStart, windowEnd, moderation, viewOnly,
+    showReply, showRepost, showReaction, showZap, showShare, showMore,
+  ]);
 
   // Per-field immediate persist (Ditto's settings-page convention).
   // Fire-and-forget; on failure we surface a toast but don't roll back — the
@@ -310,6 +338,46 @@ export function EditKidSettingsPage() {
         />
       </div>
 
+      {/* Post actions — per-kid button visibility */}
+      <div className="flex flex-col gap-2">
+        <Label>Post actions</Label>
+        <p className="text-[11px] text-muted-foreground">
+          Show or hide each action button under posts in this kid's feed.
+        </p>
+        <div className="flex flex-col rounded-xl bg-card divide-y divide-border/40 overflow-hidden">
+          <ActionToggleRow
+            label="Reply"
+            checked={showReply}
+            onChange={(v) => { setShowReply(v);    saveField({ showReplyAction:    v }); }}
+          />
+          <ActionToggleRow
+            label="Repost"
+            checked={showRepost}
+            onChange={(v) => { setShowRepost(v);   saveField({ showRepostAction:   v }); }}
+          />
+          <ActionToggleRow
+            label="Reactions"
+            checked={showReaction}
+            onChange={(v) => { setShowReaction(v); saveField({ showReactionAction: v }); }}
+          />
+          <ActionToggleRow
+            label="Zaps"
+            checked={showZap}
+            onChange={(v) => { setShowZap(v);      saveField({ showZapAction:      v }); }}
+          />
+          <ActionToggleRow
+            label="Share"
+            checked={showShare}
+            onChange={(v) => { setShowShare(v);    saveField({ showShareAction:    v }); }}
+          />
+          <ActionToggleRow
+            label="More"
+            checked={showMore}
+            onChange={(v) => { setShowMore(v);     saveField({ showMoreAction:     v }); }}
+          />
+        </div>
+      </div>
+
       <NavTile
         icon={<KeyRound className="size-5" />}
         title="Backup keys"
@@ -334,6 +402,25 @@ function Field({
         <span className="text-[11px] text-muted-foreground tabular-nums">{value}</span>
       </div>
       {children}
+    </div>
+  );
+}
+
+function ActionToggleRow({
+  label, checked, onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <span className="text-sm">{label}</span>
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-label={`${label} button`}
+      />
     </div>
   );
 }

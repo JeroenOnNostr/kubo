@@ -24,6 +24,15 @@ export interface KidSettings {
   age: number;
   moderation: KuboModeration;
   viewOnly?: boolean;
+  // Per-kid post-action visibility. When undefined, the corresponding global
+  // FeedSettings flag applies (so kids that predate this field inherit the
+  // parent's global choices). When set, overrides the global flag for this kid.
+  showReplyAction?: boolean;
+  showRepostAction?: boolean;
+  showReactionAction?: boolean;
+  showZapAction?: boolean;
+  showShareAction?: boolean;
+  showMoreAction?: boolean;
 }
 
 export interface KuboFamily {
@@ -200,7 +209,17 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   windowEnd: '19:00',
   age: 6,
   moderation: 'mid',
-  viewOnly: false,
+  // Safe-by-default parental posture: on a fresh install a kid can see their
+  // feed but can't tap into threads, comment, repost, react, zap, share, or
+  // open the more menu. Parents opt in to more interactivity per-kid on
+  // /parent/kid-settings.
+  viewOnly: true,
+  showReplyAction: false,
+  showRepostAction: false,
+  showReactionAction: false,
+  showZapAction: false,
+  showShareAction: false,
+  showMoreAction: false,
 };
 
 export async function setKidSettings(
