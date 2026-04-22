@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { NavTile } from '@/components/NavTile';
@@ -37,6 +38,7 @@ export function EditKidSettingsPage() {
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
   const [moderation, setMod]      = useState<KuboModeration>('mid');
+  const [viewOnly, setViewOnly]   = useState(false);
 
   // Load persisted settings when kid changes.
   useEffect(() => {
@@ -47,6 +49,7 @@ export function EditKidSettingsPage() {
     setWStart(s.windowStart);
     setWEnd(s.windowEnd);
     setMod(s.moderation);
+    setViewOnly(s.viewOnly ?? false);
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Avatar upload wiring. Hooks must be called unconditionally, so we call
@@ -235,6 +238,21 @@ export function EditKidSettingsPage() {
         </p>
       </div>
 
+      {/* View-only mode */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>View-only mode</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Tapping a post won't open comments or details.
+          </p>
+        </div>
+        <Switch
+          checked={viewOnly}
+          onCheckedChange={setViewOnly}
+          aria-label="View-only mode"
+        />
+      </div>
+
       <NavTile
         icon={<KeyRound className="size-5" />}
         title="Backup keys"
@@ -255,6 +273,7 @@ export function EditKidSettingsPage() {
             windowStart,
             windowEnd,
             moderation,
+            viewOnly,
           });
           toast({ title: 'Settings saved' });
         }}

@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 
 import { NoteCard } from '@/components/NoteCard';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useKidFeed } from '@/hooks/useKidFeed';
+import { getKidSettings } from '@/hooks/useKuboFamily';
 import { useMuteList } from '@/hooks/useMuteList';
 import { shouldHideFeedEvent } from '@/lib/feedUtils';
 import { isEventMuted } from '@/lib/muteHelpers';
@@ -43,6 +45,7 @@ interface KidFeedListProps {
 }
 
 export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
+  const { user } = useCurrentUser();
   const {
     data,
     fetchNextPage,
@@ -52,6 +55,10 @@ export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
     isLoading,
   } = useKidFeed();
   const { muteItems } = useMuteList();
+
+  // View-only mode: only applies in kid variant, read from per-kid settings.
+  const isViewOnly = variant === 'kid' && !!user?.pubkey
+    && getKidSettings(user.pubkey).viewOnly === true;
 
   const feedItems = useMemo<FeedItem[]>(() => {
     if (!data?.pages) return [];
@@ -134,7 +141,7 @@ export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
           }
           className={cardWrapperClass}
         >
-          <NoteCard event={item.event} repostedBy={item.repostedBy} />
+          <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} compact={isViewOnly} />
         </div>
       ))}
       {/* Infinite-scroll sentinel */}

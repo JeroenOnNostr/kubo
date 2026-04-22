@@ -23,6 +23,7 @@ export interface KidSettings {
   windowEnd: string;             // "HH:MM"
   age: number;
   moderation: KuboModeration;
+  viewOnly?: boolean;
 }
 
 export interface KuboFamily {
@@ -199,6 +200,7 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   windowEnd: '19:00',
   age: 6,
   moderation: 'mid',
+  viewOnly: false,
 };
 
 export async function setKidSettings(

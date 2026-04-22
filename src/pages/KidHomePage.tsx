@@ -24,8 +24,8 @@ import { KidFeedList } from '@/components/feed/KidFeedList';
  *     driven by Ditto's feedSettings (see `useKidFeed` → `useFeed`).
  *     Each event renders via `NoteCard`, so videos play inline in their
  *     tile (no navigation) while other kinds follow Ditto's default tap
- *     behavior. Future KUBO-025 will gate non-video taps for "view-only"
- *     kid mode.
+ *     behavior. View-only mode (KUBO-031), when enabled in kid settings,
+ *     suppresses card-click navigation via the `viewOnly` prop on NoteCard.
  *   - "Ask a grown-up" footer pill
  *   - 2-tab bottom bar
  *

@@ -249,6 +249,8 @@ interface NoteCardProps {
   highlight?: boolean;
   /** If true, suppress the kind-derived action header (e.g. "created a badge"). Used when the parent already provides context. */
   hideKindHeader?: boolean;
+  /** If true, disable card-click navigation (content still interactive). Used by Kubo kid view-only mode. */
+  viewOnly?: boolean;
 }
 
 /** Gets a tag value by name. */
@@ -322,6 +324,7 @@ export const NoteCard = memo(function NoteCard({
   threadedLast,
   highlight,
   hideKindHeader,
+  viewOnly,
 }: NoteCardProps) {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -361,6 +364,7 @@ export const NoteCard = memo(function NoteCard({
 
   // Handler to navigate to post detail, but only if click didn't originate from a modal
   const handleCardClick = (e: React.MouseEvent) => {
+    if (viewOnly) return;
     const target = e.target as HTMLElement;
     if (
       target.closest('[role="dialog"]') ||
@@ -378,6 +382,7 @@ export const NoteCard = memo(function NoteCard({
   };
 
   const handleAuxClick = (e: React.MouseEvent) => {
+    if (viewOnly) return;
     const target = e.target as HTMLElement;
     if (
       target.closest('[role="dialog"]') ||
@@ -853,7 +858,8 @@ export const NoteCard = memo(function NoteCard({
       return (
         <article
           className={cn(
-            "px-4 pt-3 hover:bg-secondary/30 transition-colors cursor-pointer overflow-hidden",
+            "px-4 pt-3 transition-colors overflow-hidden",
+            !viewOnly && "hover:bg-secondary/30 cursor-pointer",
             threaded ? "pb-0" : "pb-3 border-b border-border",
             className,
           )}
@@ -885,7 +891,8 @@ export const NoteCard = memo(function NoteCard({
     return (
       <article
         className={cn(
-          "px-4 py-3 border-b border-border hover:bg-secondary/30 transition-colors cursor-pointer overflow-hidden",
+          "px-4 py-3 border-b border-border transition-colors overflow-hidden",
+          !viewOnly && "hover:bg-secondary/30 cursor-pointer",
           className,
         )}
         onClick={handleCardClick}
@@ -1042,7 +1049,8 @@ export const NoteCard = memo(function NoteCard({
     return (
       <article
         className={cn(
-          "px-4 pt-3 hover:bg-secondary/30 transition-colors cursor-pointer overflow-hidden",
+          "px-4 pt-3 transition-colors overflow-hidden",
+          !viewOnly && "hover:bg-secondary/30 cursor-pointer",
           threaded ? "pb-0" : "pb-3 border-b border-border",
           className,
         )}
@@ -1081,7 +1089,8 @@ export const NoteCard = memo(function NoteCard({
   return (
     <article
       className={cn(
-        "px-4 py-3 border-b border-border hover:bg-secondary/30 transition-colors cursor-pointer overflow-hidden",
+        "px-4 py-3 border-b border-border transition-colors overflow-hidden",
+        !viewOnly && "hover:bg-secondary/30 cursor-pointer",
         highlight && "animate-highlight-fade",
         className,
       )}
