@@ -7,7 +7,6 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useScreenTime } from '@/hooks/useScreenTime';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
-import { KidRequestSheet } from '@/components/kid/KidRequestSheet';
 import { KidFeedList } from '@/components/feed/KidFeedList';
 
 /**
@@ -26,10 +25,7 @@ import { KidFeedList } from '@/components/feed/KidFeedList';
  *     tile (no navigation) while other kinds follow Ditto's default tap
  *     behavior. View-only mode (KUBO-031), when enabled in kid settings,
  *     suppresses card-click navigation via the `viewOnly` prop on NoteCard.
- *   - "Ask a grown-up" footer pill
  *   - 2-tab bottom bar
- *
- * Request: same as loaded, but KidRequestSheet is open.
  *
  * Playing: fullscreen player placeholder, no chrome, single "Done" pill.
  *
@@ -53,8 +49,7 @@ export function KidHomePage() {
     ? stateParam
     : 'loaded';
 
-  const [gateOpen, setGateOpen]       = useState(false);
-  const [requestOpen, setRequestOpen] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
 
   const { user, metadata } = useCurrentUser();
   const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
@@ -207,7 +202,7 @@ export function KidHomePage() {
 
   // Loaded (default)
   return (
-    <div className="min-h-dvh pb-[calc(4.5rem+56px)] flex flex-col gap-3 px-5 pt-12">
+    <div className="min-h-dvh pb-24 flex flex-col gap-3 px-5 pt-12">
       <header className="flex items-center justify-between">
         <h1 className="text-[24px] font-bold leading-none">Hi {kidName}!</h1>
         <div className="flex items-center gap-2">
@@ -239,22 +234,7 @@ export function KidHomePage() {
         />
       </div>
 
-      {/* Pinned footer — "Ask a grown-up" pill sits above the bottom nav */}
-      <div
-        className="fixed left-0 right-0 z-30 px-5"
-        style={{ bottom: 'calc(56px + env(safe-area-inset-bottom, 0px) + 8px)' }}
-      >
-        <button
-          type="button"
-          onClick={() => setRequestOpen(true)}
-          className="w-full h-11 rounded-full border border-white/20 bg-[#0C2463]/80 text-white/90 text-[12px] active:scale-[0.98] transition-transform backdrop-blur"
-        >
-          Something else? Ask a grown-up
-        </button>
-      </div>
-
       <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-      <KidRequestSheet open={requestOpen} onOpenChange={setRequestOpen} />
 
       <KuboKidBottomNav />
     </div>
