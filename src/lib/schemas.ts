@@ -185,6 +185,11 @@ export const FeedSettingsSchema = z.looseObject({
   feedIncludeBadgeAwards: z.boolean().optional(),
   // Kubo: visibility toggles for sidebar items / actions that didn't have one upstream.
   showZaps: z.boolean().optional(),
+  showReplyAction: z.boolean().optional(),
+  showRepostAction: z.boolean().optional(),
+  showReactionAction: z.boolean().optional(),
+  showShareAction: z.boolean().optional(),
+  showMoreAction: z.boolean().optional(),
   showBlobbi: z.boolean().optional(),
   showLetters: z.boolean().optional(),
   showAIChat: z.boolean().optional(),

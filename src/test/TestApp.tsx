@@ -95,6 +95,11 @@ export function TestApp({ children }: TestAppProps) {
       followsFeedShowReplies: true,
       // Kubo: visibility toggles for items without an upstream show* key.
       showZaps: false,
+      showReplyAction: false,
+      showRepostAction: false,
+      showReactionAction: false,
+      showShareAction: false,
+      showMoreAction: false,
       showBlobbi: false,
       showLetters: false,
       showAIChat: false,

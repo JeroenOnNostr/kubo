@@ -10,7 +10,7 @@ import { ZapDialog } from '@/components/ZapDialog';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEventStats } from '@/hooks/useTrending';
-import { useFeedSettings } from '@/hooks/useFeedSettings';
+import { useActionVisibility } from '@/hooks/useActionVisibility';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { useToast } from '@/hooks/useToast';
 import { canZap } from '@/lib/canZap';
@@ -39,8 +39,8 @@ export function PostActionBar({
   const shareOrigin = useShareOrigin();
   const author = useAuthor(event.pubkey);
   const metadata = author.data?.metadata;
-  const { feedSettings } = useFeedSettings();
-  const canZapAuthor = feedSettings.showZaps && user && canZap(metadata);
+  const av = useActionVisibility();
+  const canZapAuthor = av.showZap && user && canZap(metadata);
 
   const { data: stats } = useEventStats(event.id, event);
   const repostTotal = (stats?.reposts ?? 0) + (stats?.quotes ?? 0);
@@ -60,42 +60,51 @@ export function PostActionBar({
     if (result === 'copied') toast({ title: 'Link copied to clipboard' });
   }, [event, toast, shareOrigin]);
 
+  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
+  if (!anyButtonVisible) return null;
+
   return (
     <div className={`flex items-center justify-between py-1 border-t border-b border-border${className ? ` ${className}` : ''}`}>
       {/* Reply / Comments */}
-      <button
-        className="flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-        title={replyLabel}
-        onClick={onReply}
-      >
-        <MessageCircle className="size-5" />
-        {stats?.replies ? (
-          <span className="text-sm tabular-nums">{formatNumber(stats.replies)}</span>
-        ) : null}
-      </button>
+      {av.showReply && (
+        <button
+          className="flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+          title={replyLabel}
+          onClick={onReply}
+        >
+          <MessageCircle className="size-5" />
+          {stats?.replies ? (
+            <span className="text-sm tabular-nums">{formatNumber(stats.replies)}</span>
+          ) : null}
+        </button>
+      )}
 
       {/* Repost */}
-      <RepostMenu event={event}>
-        {(isReposted: boolean) => (
-          <button
-            className={`flex items-center gap-1.5 p-2 rounded-full transition-colors ${isReposted ? 'text-accent hover:text-accent/80 hover:bg-accent/10' : 'text-muted-foreground hover:text-accent hover:bg-accent/10'}`}
-            title={isReposted ? 'Undo repost' : 'Repost'}
-          >
-            <RepostIcon className="size-5" />
-            {repostTotal > 0 ? (
-              <span className="text-sm tabular-nums">{formatNumber(repostTotal)}</span>
-            ) : null}
-          </button>
-        )}
-      </RepostMenu>
+      {av.showRepost && (
+        <RepostMenu event={event}>
+          {(isReposted: boolean) => (
+            <button
+              className={`flex items-center gap-1.5 p-2 rounded-full transition-colors ${isReposted ? 'text-accent hover:text-accent/80 hover:bg-accent/10' : 'text-muted-foreground hover:text-accent hover:bg-accent/10'}`}
+              title={isReposted ? 'Undo repost' : 'Repost'}
+            >
+              <RepostIcon className="size-5" />
+              {repostTotal > 0 ? (
+                <span className="text-sm tabular-nums">{formatNumber(repostTotal)}</span>
+              ) : null}
+            </button>
+          )}
+        </RepostMenu>
+      )}
 
       {/* React */}
-      <ReactionButton
-        eventId={event.id}
-        eventPubkey={event.pubkey}
-        eventKind={event.kind}
-        reactionCount={stats?.reactions}
-      />
+      {av.showReaction && (
+        <ReactionButton
+          eventId={event.id}
+          eventPubkey={event.pubkey}
+          eventKind={event.kind}
+          reactionCount={stats?.reactions}
+        />
+      )}
 
       {/* Zap */}
       {canZapAuthor && (
@@ -113,22 +122,26 @@ export function PostActionBar({
       )}
 
       {/* Share */}
-      <button
-        className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors sidebar:hidden"
-        title="Share"
-        onClick={handleShare}
-      >
-        <Share2 className="size-5" />
-      </button>
+      {av.showShare && (
+        <button
+          className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors sidebar:hidden"
+          title="Share"
+          onClick={handleShare}
+        >
+          <Share2 className="size-5" />
+        </button>
+      )}
 
       {/* More */}
-      <button
-        className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-        title="More"
-        onClick={onMore}
-      >
-        <MoreHorizontal className="size-5" />
-      </button>
+      {av.showMore && (
+        <button
+          className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+          title="More"
+          onClick={onMore}
+        >
+          <MoreHorizontal className="size-5" />
+        </button>
+      )}
     </div>
   );
 }

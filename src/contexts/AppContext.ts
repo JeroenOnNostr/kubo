@@ -158,6 +158,16 @@ export interface FeedSettings {
   followsFeedShowReplies: boolean;
   /** Show the Zap button on posts (NIP-57). When false, the zap action is hidden everywhere. */
   showZaps: boolean;
+  /** Show the Reply/Comment button on posts. */
+  showReplyAction: boolean;
+  /** Show the Repost button on posts. */
+  showRepostAction: boolean;
+  /** Show the Reaction (like/emoji) button on posts. */
+  showReactionAction: boolean;
+  /** Show the Share button on posts. */
+  showShareAction: boolean;
+  /** Show the More menu button on posts. */
+  showMoreAction: boolean;
   /** Show the Blobbi virtual pet companion + sidebar entry. */
   showBlobbi: boolean;
   /** Show the Letters (encrypted personal letters, kind 8211) sidebar entry. */

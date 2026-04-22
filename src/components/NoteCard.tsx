@@ -96,6 +96,7 @@ import { useProfileUrl } from "@/hooks/useProfileUrl";
 import { useShareOrigin } from "@/hooks/useShareOrigin";
 import { toast } from "@/hooks/useToast";
 import { useEventStats } from "@/hooks/useTrending";
+import { useActionVisibility } from "@/hooks/useActionVisibility";
 import { canZap } from "@/lib/canZap";
 import { extractZapAmount, extractZapSender, extractZapMessage } from "@/hooks/useEventInteractions";
 import { getContentWarning } from "@/lib/contentWarning";
@@ -349,8 +350,10 @@ export const NoteCard = memo(function NoteCard({
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
 
+  const av = useActionVisibility();
+
   // Check if the current user can zap this event's author
-  const canZapAuthor = user && canZap(metadata);
+  const canZapAuthor = av.showZap && user && canZap(metadata);
 
   const { onClick: openPost, onAuxClick: auxOpenPost } = useOpenPost(
     `/${encodedId}`,
@@ -750,44 +753,51 @@ export const NoteCard = memo(function NoteCard({
   );
 
   // ── Shared action buttons (used in all layouts) ──
-  const actionButtons = (
+  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
+  const actionButtons = anyButtonVisible ? (
     <div className="flex items-center gap-5 mt-3 -ml-2">
-      <button
-        className="flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-        title="Reply"
-        onClick={(e) => {
-          e.stopPropagation();
-          setReplyOpen(true);
-        }}
-      >
-        <MessageCircle className="size-5" />
-            {stats?.replies ? (
-              <span className="text-sm tabular-nums">{formatNumber(stats.replies)}</span>
-            ) : null}
-          </button>
+      {av.showReply && (
+        <button
+          className="flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+          title="Reply"
+          onClick={(e) => {
+            e.stopPropagation();
+            setReplyOpen(true);
+          }}
+        >
+          <MessageCircle className="size-5" />
+          {stats?.replies ? (
+            <span className="text-sm tabular-nums">{formatNumber(stats.replies)}</span>
+          ) : null}
+        </button>
+      )}
 
-          <RepostMenu event={event}>
-            {(isReposted: boolean) => (
-              <button
-                className={`flex items-center gap-1.5 p-2 rounded-full transition-colors ${isReposted ? "text-accent hover:text-accent/80 hover:bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10"}`}
-                title={isReposted ? "Undo repost" : "Repost"}
-              >
-                <RepostIcon className="size-5" />
-                {stats?.reposts || stats?.quotes ? (
-                  <span className="text-sm tabular-nums">
-                    {formatNumber((stats?.reposts ?? 0) + (stats?.quotes ?? 0))}
-                  </span>
-                ) : null}
-              </button>
-            )}
-          </RepostMenu>
+      {av.showRepost && (
+        <RepostMenu event={event}>
+          {(isReposted: boolean) => (
+            <button
+              className={`flex items-center gap-1.5 p-2 rounded-full transition-colors ${isReposted ? "text-accent hover:text-accent/80 hover:bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10"}`}
+              title={isReposted ? "Undo repost" : "Repost"}
+            >
+              <RepostIcon className="size-5" />
+              {stats?.reposts || stats?.quotes ? (
+                <span className="text-sm tabular-nums">
+                  {formatNumber((stats?.reposts ?? 0) + (stats?.quotes ?? 0))}
+                </span>
+              ) : null}
+            </button>
+          )}
+        </RepostMenu>
+      )}
 
-          <ReactionButton
-        eventId={event.id}
-        eventPubkey={event.pubkey}
-        eventKind={event.kind}
-        reactionCount={stats?.reactions}
-      />
+      {av.showReaction && (
+        <ReactionButton
+          eventId={event.id}
+          eventPubkey={event.pubkey}
+          eventKind={event.kind}
+          reactionCount={stats?.reactions}
+        />
+      )}
 
       {canZapAuthor && (
         <ZapDialog target={event}>
@@ -805,32 +815,36 @@ export const NoteCard = memo(function NoteCard({
         </ZapDialog>
       )}
 
-      <button
-        className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors sidebar:hidden"
-        title="Share"
-        onClick={async (e) => {
-          e.stopPropagation();
-          impactLight();
-          const url = `${shareOrigin}/${encodedId}`;
-          const result = await shareOrCopy(url);
-          if (result === "copied") toast({ title: "Link copied to clipboard" });
-        }}
-      >
-        <Share2 className="size-5" />
-      </button>
+      {av.showShare && (
+        <button
+          className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors sidebar:hidden"
+          title="Share"
+          onClick={async (e) => {
+            e.stopPropagation();
+            impactLight();
+            const url = `${shareOrigin}/${encodedId}`;
+            const result = await shareOrCopy(url);
+            if (result === "copied") toast({ title: "Link copied to clipboard" });
+          }}
+        >
+          <Share2 className="size-5" />
+        </button>
+      )}
 
-      <button
-        className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-        title="More"
-        onClick={(e) => {
-          e.stopPropagation();
-          setMoreMenuOpen(true);
-        }}
-      >
-        <MoreHorizontal className="size-5" />
-      </button>
+      {av.showMore && (
+        <button
+          className="p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+          title="More"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMoreMenuOpen(true);
+          }}
+        >
+          <MoreHorizontal className="size-5" />
+        </button>
+      )}
     </div>
-  );
+  ) : null;
 
   // ── Vanish layout (kind 62) — dramatic card, no author row ──
   if (isVanish) {

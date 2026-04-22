@@ -125,6 +125,11 @@ const hardcodedConfig: AppConfig = {
     // Kubo: new visibility toggles. Hardcoded defaults match upstream Ditto's
     // "everything on" stance; kubo.json overrides flip these off for our build.
     showZaps: true,
+    showReplyAction: true,
+    showRepostAction: true,
+    showReactionAction: true,
+    showShareAction: true,
+    showMoreAction: true,
     showBlobbi: true,
     showLetters: true,
     showAIChat: true,

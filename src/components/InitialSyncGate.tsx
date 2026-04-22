@@ -117,6 +117,11 @@ const DEFAULT_KUBO_FEED_SETTINGS = {
   // The build-time kubo.json overrides flip these to false; this onboarding
   // path is only reached when no kubo.json override exists for the user yet.
   showZaps: true,
+  showReplyAction: true,
+  showRepostAction: true,
+  showReactionAction: true,
+  showShareAction: true,
+  showMoreAction: true,
   showBlobbi: true,
   showLetters: true,
   showAIChat: true,
