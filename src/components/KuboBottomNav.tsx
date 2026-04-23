@@ -39,7 +39,7 @@ export function KuboBottomNav() {
   const location = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 sidebar:hidden">
+    <nav className="fixed max-w-sm mx-auto bottom-0 left-0 right-0 z-40">
       <div className="relative">
         <ArcBackground variant="up" />
         <div className="h-11 flex items-center relative">
