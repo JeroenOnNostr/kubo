@@ -52,6 +52,33 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-037: Set up Android release-signing keystore**
   v0.1.0 and v0.1.1 APKs are debug-signed (shared dev key across all developers' machines) — fine for personal testing but blocks Play Store distribution, means users can't cleanly update to a release-signed build later, and gives no signing-identity guarantee. Run `npm run keygen` to generate an upload keystore, fill in `android/key.properties` with the alias/passwords, and the existing `signingConfigs.release` block in `android/app/build.gradle` will pick it up. Store the keystore + passwords somewhere durable (losing them means losing the ability to update the app). Only unblock once we're ready to distribute beyond Jeroen's own device.
 
+- **KUBO-052: Parent feed view — wire the search bar or remove it**
+  The search pill on `/parent/feed` (`ParentFeedPage.tsx:64-68`) is a placeholder ("wired in a later pass"). Either wire it to filter the source list / do a NIP-50 search, or delete it. Decide whether it's actually needed at this level — sources are already listed below it.
+
+- **KUBO-053: Parent feed view — untruncate descriptions on "Edit feed settings" and "Feed preview" tiles**
+  The two tiles at the top of `/parent/feed` have their descriptions clipped (line-clamp / truncate). Let them wrap fully so the subtitle is readable.
+
+- **KUBO-054: Parent home — merge "Today's usage" bar into the Kids activity chart**
+  On `/parent/home` (`KidDashboardPage.tsx:111-131` and `KidDashboardPage.tsx:153-175`) the "Today" used/limit bar and the Day tab of the Kids activity card show essentially the same thing. Condense to a single block to save vertical space — e.g. drop the standalone "Today" card, or fold its progress bar into the Day tab.
+
+- **KUBO-057: Select communities page — improve search reliability**
+  On `/parent/feed/communities` (`CommunitiesSourcePage.tsx`) the search pill (`CommunitiesSourcePage.tsx:58-64`) returns inconsistent results for kind-34550 community queries. Audit the NIP-50 query, relay set, and result dedupe.
+
+- **KUBO-059: Parent feed profiles — expandable tiles and profile picture navigation**
+  On the parent feed profiles page, profile tiles should be tappable to expand downward and reveal the profile's description/about text. Tapping the profile picture (avatar) should navigate to the full profile view screen. Currently neither interaction is wired up — tiles are static and avatars don't link anywhere.
+
+- **KUBO-060: Kid view — Favorites navbar item has no "add to favorites" affordance**
+  The kid view's bottom navbar has a Favorites tab but there is no way to actually mark a post as a favorite from anywhere in the kid UI. Explore whether to reuse the existing bookmarks functionality (NIP-51 kind:10003 bookmark list, or kind:30003 categorized bookmarks) or design a kid-specific mechanism. Decide on the data model first, then add the "favorite" affordance on cards/video tiles in the kid feed and wire the Favorites tab to read from it.
+
+- **KUBO-061: Kid view — add Blobby section to navbar (Home · Blobby · Favorites)**
+  The kid navbar should have three sections. Currently missing a middle Blobby tab where the kid takes care of their own blobby (pet/companion). Order: Home · Blobby · Favorites. Scope: add the route + nav entry + a stub page; the actual Blobby care mechanics are a separate design task.
+
+- **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
+  The kid selector pill in the top-right of the parent view has a placeholder circle for the selected kid's profile picture, but it isn't reading the actual picture from the kid's kind:0 metadata. Wire it to the selected kid's profile picture (via the existing profile/metadata hook used elsewhere in the app), with a sensible fallback when the kid has no picture set yet.
+
+- **KUBO-063: Kid feed — "Next post" button as alternative to infinite scroll**
+  Add an explicit "Next post" button on the kid feed so the kid advances one post at a time with an intentional tap, rather than endlessly scrolling. Goal is to remove the infinite-scroll loop from the kid experience (attention/time-on-app concern). Design decision: does the button replace scrolling entirely (one post at a time, full-screen), or coexist with a bounded scroll? Likely one-post-at-a-time fits the kid mode best. Wire it onto the existing feed query's pagination (advance cursor / index into the fetched pages, fetch next page when approaching the end).
+
 ## Deferred to post-MVP
 
 - **KUBO-002: Separate devices** — parent and kid on distinct devices rather than sharing one; requires some transport between them (pairing, key sync, etc.).
