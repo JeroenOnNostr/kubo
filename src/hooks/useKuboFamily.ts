@@ -254,10 +254,11 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   age: 6,
   // Safe-by-default parental posture: on a fresh install a kid can see their
   // feed but can't tap into threads, comment, repost, react, zap, share, or
-  // open the more menu. Parents opt in to more interactivity per-kid on
-  // /parent/kid-settings.
+  // open the more menu. Blobbi tab and tap-to-advance (next-post) are on so
+  // the kid has something interactive that isn't infinite scroll. Parents opt
+  // in to more interactivity per-kid on /parent/kid-settings.
   viewOnly: true,
-  showBlobbiTab: false,
+  showBlobbiTab: true,
   showReplyAction: false,
   showRepostAction: false,
   showReactionAction: false,
@@ -266,7 +267,7 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   showMoreAction: false,
   showNip05: false,
   showPostTimestamp: false,
-  nextPostButton: false,
+  nextPostButton: true,
 };
 
 export async function setKidSettings(
