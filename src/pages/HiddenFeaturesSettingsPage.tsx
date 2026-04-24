@@ -63,6 +63,14 @@ const CATEGORIES: ToggleCategory[] = [
     ],
   },
   {
+    title: 'Note display',
+    description: 'Control which metadata appears in the byline of each note tile.',
+    toggles: [
+      { key: 'showNip05', label: 'NIP-05 identifier', description: 'Verified handle like @name@domain on note tiles' },
+      { key: 'showPostTimestamp', label: 'Post timestamp', description: 'Relative time (e.g. "2h") on note tiles' },
+    ],
+  },
+  {
     title: 'Customization',
     description: 'Personalization features that change how the app looks or feels.',
     toggles: [

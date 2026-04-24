@@ -130,6 +130,8 @@ const hardcodedConfig: AppConfig = {
     showReactionAction: true,
     showShareAction: true,
     showMoreAction: true,
+    showNip05: false,
+    showPostTimestamp: false,
     showBlobbi: true,
     showLetters: true,
     showAIChat: true,

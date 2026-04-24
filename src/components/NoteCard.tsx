@@ -718,17 +718,22 @@ export const NoteCard = memo(function NoteCard({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 pr-2">
-        {nip05 && nip05Pending && <Skeleton className="h-3 w-24" />}
-        {nip05 && nip05Pending && <span className="shrink-0">·</span>}
-        {nip05 && nip05Verified && (
-          <Nip05Badge nip05={nip05} pubkey={event.pubkey} />
-        )}
-        {nip05 && nip05Verified && <span className="shrink-0">·</span>}
-        <span className="shrink-0 hover:underline whitespace-nowrap">
-          {timeAgo(event.created_at)}
-        </span>
-      </div>
+      {(av.showNip05 || av.showPostTimestamp) && (
+        <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 pr-2">
+          {av.showNip05 && nip05 && nip05Pending && <Skeleton className="h-3 w-24" />}
+          {av.showNip05 && nip05 && nip05Verified && (
+            <Nip05Badge nip05={nip05} pubkey={event.pubkey} />
+          )}
+          {av.showNip05 && av.showPostTimestamp && nip05 && (nip05Pending || nip05Verified) && (
+            <span className="shrink-0">·</span>
+          )}
+          {av.showPostTimestamp && (
+            <span className="shrink-0 hover:underline whitespace-nowrap">
+              {timeAgo(event.created_at)}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 

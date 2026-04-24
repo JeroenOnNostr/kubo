@@ -44,6 +44,8 @@
     "feedIncludeBadgeAwards": false,
     "feedIncludeBlobbi": false,
     "showZaps": false,
+    "showNip05": false,
+    "showPostTimestamp": false,
     "showBlobbi": false,
     "showLetters": false,
     "showAIChat": false,

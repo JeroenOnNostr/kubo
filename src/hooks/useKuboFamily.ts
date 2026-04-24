@@ -30,6 +30,10 @@ export interface KidSettings {
   showZapAction?: boolean;
   showShareAction?: boolean;
   showMoreAction?: boolean;
+  // Per-kid note-tile byline visibility (NIP-05 handle + relative timestamp).
+  // Same inherit-when-undefined semantics as the post-action flags above.
+  showNip05?: boolean;
+  showPostTimestamp?: boolean;
 }
 
 export interface KidFeedSources {
@@ -250,6 +254,8 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   showZapAction: false,
   showShareAction: false,
   showMoreAction: false,
+  showNip05: false,
+  showPostTimestamp: false,
 };
 
 export async function setKidSettings(

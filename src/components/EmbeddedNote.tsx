@@ -26,6 +26,7 @@ import { getAvatarShape } from '@/lib/avatarShape';
 import { genUserName } from '@/lib/genUserName';
 import { formatNumber } from '@/lib/formatNumber';
 import { timeAgo } from '@/lib/timeAgo';
+import { useActionVisibility } from '@/hooks/useActionVisibility';
 import { cn } from '@/lib/utils';
 import { useAppContext } from '@/hooks/useAppContext';
 import { IMAGE_URL_REGEX, IMETA_MEDIA_URL_TEST_REGEX, extractVideoUrls, extractAudioUrls } from '@/lib/mediaUrls';
@@ -128,6 +129,7 @@ function EmbeddedBadgeAwardCard({ event, className, disableHoverCards }: { event
   const issuerMeta = issuer.data?.metadata;
   const issuerName = issuerMeta?.name || genUserName(event.pubkey);
   const issuerProfileUrl = useProfileUrl(event.pubkey, issuerMeta);
+  const { showPostTimestamp } = useActionVisibility();
 
   return (
     <div
@@ -175,9 +177,11 @@ function EmbeddedBadgeAwardCard({ event, className, disableHoverCards }: { event
               </Link>
             </MaybeHoverCard>
             <span className="text-sm text-muted-foreground">awarded a badge</span>
-            <span className="text-xs text-muted-foreground shrink-0">
-              · {timeAgo(event.created_at)}
-            </span>
+            {showPostTimestamp && (
+              <span className="text-xs text-muted-foreground shrink-0">
+                · {timeAgo(event.created_at)}
+              </span>
+            )}
           </div>
           <p className="text-xs text-muted-foreground truncate mt-0.5">
             {badgeName}
@@ -206,6 +210,7 @@ function EmbeddedZapCard({ event, className, disableHoverCards }: { event: Nostr
   const senderName = senderMeta?.name || (senderPubkey ? genUserName(senderPubkey) : 'Someone');
   const senderShape = getAvatarShape(senderMeta);
   const senderProfileUrl = useProfileUrl(senderPubkey, senderMeta);
+  const { showPostTimestamp } = useActionVisibility();
 
   return (
     <div
@@ -272,9 +277,11 @@ function EmbeddedZapCard({ event, className, disableHoverCards }: { event: Nostr
                 {formatNumber(amountSats)} {amountSats === 1 ? 'sat' : 'sats'}
               </span>
             )}
-            <span className="text-xs text-muted-foreground shrink-0">
-              · {timeAgo(event.created_at)}
-            </span>
+            {showPostTimestamp && (
+              <span className="text-xs text-muted-foreground shrink-0">
+                · {timeAgo(event.created_at)}
+              </span>
+            )}
           </div>
           {message && (
             <p className="text-xs text-muted-foreground italic mt-0.5 line-clamp-2">

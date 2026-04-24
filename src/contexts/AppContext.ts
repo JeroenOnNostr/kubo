@@ -168,6 +168,10 @@ export interface FeedSettings {
   showShareAction: boolean;
   /** Show the More menu button on posts. */
   showMoreAction: boolean;
+  /** Show the NIP-05 verified identifier on note tiles. */
+  showNip05: boolean;
+  /** Show the relative timestamp on note tiles. */
+  showPostTimestamp: boolean;
   /** Show the Blobbi virtual pet companion + sidebar entry. */
   showBlobbi: boolean;
   /** Show the Letters (encrypted personal letters, kind 8211) sidebar entry. */

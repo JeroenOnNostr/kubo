@@ -50,6 +50,8 @@ export function EditKidSettingsPage() {
   const [showZap,      setShowZap]      = useState(true);
   const [showShare,    setShowShare]    = useState(true);
   const [showMore,     setShowMore]     = useState(true);
+  const [showNip05,         setShowNip05]         = useState(false);
+  const [showPostTimestamp, setShowPostTimestamp] = useState(false);
 
   // Gate auto-save until after the mount-load effect has hydrated state,
   // so the load itself doesn't trigger a redundant write.
@@ -72,6 +74,8 @@ export function EditKidSettingsPage() {
     setShowZap(     s.showZapAction      ?? globalOn(feedSettings.showZaps));
     setShowShare(   s.showShareAction    ?? globalOn(feedSettings.showShareAction));
     setShowMore(    s.showMoreAction     ?? globalOn(feedSettings.showMoreAction));
+    setShowNip05(        s.showNip05         ?? globalOn(feedSettings.showNip05));
+    setShowPostTimestamp(s.showPostTimestamp ?? globalOn(feedSettings.showPostTimestamp));
     hasLoadedRef.current = true;
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -88,9 +92,12 @@ export function EditKidSettingsPage() {
     showZapAction:      showZap,
     showShareAction:    showShare,
     showMoreAction:     showMore,
+    showNip05,
+    showPostTimestamp,
   }), [
     age, dailyLimit, windowStart, windowEnd, viewOnly,
     showReply, showRepost, showReaction, showZap, showShare, showMore,
+    showNip05, showPostTimestamp,
   ]);
 
   // Per-field immediate persist (Ditto's settings-page convention).
@@ -333,6 +340,26 @@ export function EditKidSettingsPage() {
             label="More"
             checked={showMore}
             onChange={(v) => { setShowMore(v);     saveField({ showMoreAction:     v }); }}
+          />
+        </div>
+      </div>
+
+      {/* Note display — per-kid byline metadata visibility */}
+      <div className="flex flex-col gap-2">
+        <Label>Note display</Label>
+        <p className="text-[11px] text-muted-foreground">
+          Show or hide metadata in the byline of each note tile.
+        </p>
+        <div className="flex flex-col rounded-xl bg-card divide-y divide-border/40 overflow-hidden">
+          <ActionToggleRow
+            label="NIP-05"
+            checked={showNip05}
+            onChange={(v) => { setShowNip05(v);         saveField({ showNip05:         v }); }}
+          />
+          <ActionToggleRow
+            label="Timestamp"
+            checked={showPostTimestamp}
+            onChange={(v) => { setShowPostTimestamp(v); saveField({ showPostTimestamp: v }); }}
           />
         </div>
       </div>

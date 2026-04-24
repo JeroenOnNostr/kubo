@@ -103,7 +103,7 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
       <NavTile
         icon={<Settings className="size-5" />}
         title="Edit kid settings"
-        subtitle="Age, time limits, moderation"
+        subtitle="Age, time limits, post actions"
         onClick={() => nav('/parent/kid-settings')}
       />
 
