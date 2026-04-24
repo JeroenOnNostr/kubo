@@ -26,6 +26,7 @@ function normalizeUrl(url: string): string {
  */
 export const APP_RELAYS: RelayMetadata = {
   relays: [
+    { url: 'wss://relay.kubo.watch/', read: true, write: true },
     { url: 'wss://relay.ditto.pub/', read: true, write: true },
     { url: 'wss://relay.dreamith.to/', read: true, write: true },
     { url: 'wss://relay.primal.net/', read: true, write: true },
