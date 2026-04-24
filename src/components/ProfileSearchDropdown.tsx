@@ -31,6 +31,12 @@ interface ProfileSearchDropdownProps {
   inputClassName?: string;
   autoFocus?: boolean;
   onSelect?: (profile: SearchProfile) => void;
+  /**
+   * Called with the resolved profile when an identifier row (npub/nprofile/nip05/hex)
+   * is picked, instead of navigating. Falls back to `onNavigate` if the profile is
+   * not yet resolved. Non-profile identifier types (note/nevent/naddr) always navigate.
+   */
+  onSelectIdentifier?: (profile: SearchProfile) => void;
   /** When true, pressing Enter without a profile selected navigates to the search page */
   enableTextSearch?: boolean;
   /** When true, country suggestions are hidden from the dropdown */
@@ -43,6 +49,7 @@ export function ProfileSearchDropdown({
   inputClassName,
   autoFocus,
   onSelect,
+  onSelectIdentifier,
   enableTextSearch,
   hideCountry = false,
 }: ProfileSearchDropdownProps) {
@@ -103,11 +110,11 @@ export function ProfileSearchDropdown({
   // Show dropdown when we have results, or when text search is enabled and there's a query
   useEffect(() => {
     if (query.trim().length > 0) {
-      if (enableTextSearch || (profiles && profiles.length > 0) || countryMatch || navItems.length > 0 || wikipediaResult || archiveResult) {
+      if (enableTextSearch || (profiles && profiles.length > 0) || identifierMatch || countryMatch || navItems.length > 0 || wikipediaResult || archiveResult) {
         setOpen(true);
       }
     }
-  }, [profiles, query, enableTextSearch, countryMatch, navItems, wikipediaResult, archiveResult]);
+  }, [profiles, query, enableTextSearch, identifierMatch, countryMatch, navItems, wikipediaResult, archiveResult]);
 
   // Reset selected index when results change
   useEffect(() => {
@@ -204,6 +211,13 @@ export function ProfileSearchDropdown({
     navigate(path);
   }, [navigate]);
 
+  const handleIdentifierPick = useCallback((profile: SearchProfile) => {
+    setOpen(false);
+    setQuery('');
+    inputRef.current?.blur();
+    onSelectIdentifier?.(profile);
+  }, [onSelectIdentifier]);
+
   const handleSelectNavItem = useCallback((item: SidebarItemDef) => {
     setOpen(false);
     setQuery('');
@@ -299,7 +313,7 @@ export function ProfileSearchDropdown({
             }
           }}
           onFocus={() => {
-            if (query.trim().length > 0 && (enableTextSearch || (profiles && profiles.length > 0))) {
+            if (query.trim().length > 0 && (enableTextSearch || (profiles && profiles.length > 0) || identifierMatch)) {
               setOpen(true);
             }
           }}
@@ -339,6 +353,7 @@ export function ProfileSearchDropdown({
                 match={identifierMatch!}
                 isSelected={selectedIndex === identifierIndex}
                 onNavigate={handleSelectIdentifier}
+                onSelectProfile={onSelectIdentifier ? handleIdentifierPick : undefined}
               />
             )}
             {hasCountry && countryAtTop && (
@@ -419,6 +434,7 @@ export function ProfileSearchDropdown({
                 match={identifierMatch!}
                 isSelected={selectedIndex === identifierIndex}
                 onNavigate={handleSelectIdentifier}
+                onSelectProfile={onSelectIdentifier ? handleIdentifierPick : undefined}
               />
             )}
 
@@ -532,17 +548,20 @@ function IdentifierItem({
   match,
   isSelected,
   onNavigate,
+  onSelectProfile,
 }: {
   match: IdentifierMatch;
   isSelected: boolean;
   onNavigate: (path: string) => void;
+  /** When provided, profile-shaped identifier rows call this with the resolved profile instead of navigating. */
+  onSelectProfile?: (profile: SearchProfile) => void;
 }) {
   switch (match.type) {
     case 'nip05':
-      return <Nip05IdentifierItem identifier={match.identifier} isSelected={isSelected} onNavigate={onNavigate} />;
+      return <Nip05IdentifierItem identifier={match.identifier} isSelected={isSelected} onNavigate={onNavigate} onSelectProfile={onSelectProfile} />;
     case 'npub':
     case 'nprofile':
-      return <PubkeyIdentifierItem pubkey={match.pubkey} raw={match.raw} isSelected={isSelected} onNavigate={onNavigate} />;
+      return <PubkeyIdentifierItem pubkey={match.pubkey} raw={match.raw} isSelected={isSelected} onNavigate={onNavigate} onSelectProfile={onSelectProfile} />;
     case 'note':
       return <EventIdentifierItem eventId={match.eventId} raw={match.raw} isSelected={isSelected} onNavigate={onNavigate} />;
     case 'nevent':
@@ -550,7 +569,7 @@ function IdentifierItem({
     case 'naddr':
       return <AddrIdentifierItem addr={match.addr} relays={match.relays} raw={match.raw} isSelected={isSelected} onNavigate={onNavigate} />;
     case 'hex':
-      return <HexIdentifierItem hex={match.hex} isSelected={isSelected} onNavigate={onNavigate} />;
+      return <HexIdentifierItem hex={match.hex} isSelected={isSelected} onNavigate={onNavigate} onSelectProfile={onSelectProfile} />;
   }
 }
 
@@ -558,10 +577,12 @@ function Nip05IdentifierItem({
   identifier,
   isSelected,
   onNavigate,
+  onSelectProfile,
 }: {
   identifier: string;
   isSelected: boolean;
   onNavigate: (path: string) => void;
+  onSelectProfile?: (profile: SearchProfile) => void;
 }) {
   const { data: pubkey, isLoading } = useNip05Resolve(identifier);
   const author = useAuthor(pubkey ?? undefined);
@@ -586,6 +607,14 @@ function Nip05IdentifierItem({
 
   if (!pubkey) return null; // NIP-05 didn't resolve — don't show
 
+  const handleClick = () => {
+    if (onSelectProfile && metadata && author.data?.event) {
+      onSelectProfile({ pubkey, metadata, event: author.data.event });
+    } else {
+      onNavigate(`/${identifier}`);
+    }
+  };
+
   return (
     <button
       data-search-item
@@ -595,7 +624,7 @@ function Nip05IdentifierItem({
         'w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer',
         isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-secondary/60',
       )}
-      onClick={() => onNavigate(`/${identifier}`)}
+      onClick={handleClick}
       onMouseDown={(e) => e.preventDefault()}
     >
       <Avatar shape={getAvatarShape(metadata)} className="size-10 shrink-0">
@@ -619,16 +648,26 @@ function PubkeyIdentifierItem({
   raw,
   isSelected,
   onNavigate,
+  onSelectProfile,
 }: {
   pubkey: string;
   raw: string;
   isSelected: boolean;
   onNavigate: (path: string) => void;
+  onSelectProfile?: (profile: SearchProfile) => void;
 }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || metadata?.display_name || genUserName(pubkey);
   const tags = author.data?.event?.tags ?? [];
+
+  const handleClick = () => {
+    if (onSelectProfile && metadata && author.data?.event) {
+      onSelectProfile({ pubkey, metadata, event: author.data.event });
+    } else {
+      onNavigate(`/${raw}`);
+    }
+  };
 
   return (
     <button
@@ -639,7 +678,7 @@ function PubkeyIdentifierItem({
         'w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer',
         isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-secondary/60',
       )}
-      onClick={() => onNavigate(`/${raw}`)}
+      onClick={handleClick}
       onMouseDown={(e) => e.preventDefault()}
     >
       <Avatar shape={getAvatarShape(metadata)} className="size-10 shrink-0">
@@ -780,11 +819,29 @@ function HexIdentifierItem({
   hex,
   isSelected,
   onNavigate,
+  onSelectProfile,
 }: {
   hex: string;
   isSelected: boolean;
   onNavigate: (path: string) => void;
+  onSelectProfile?: (profile: SearchProfile) => void;
 }) {
+  // When onSelectProfile is set (profile-picker context), treat the hex as a
+  // pubkey and delegate to PubkeyIdentifierItem so the row shows the author's
+  // avatar/name and clicks commit the resolved SearchProfile. Default behavior
+  // — "Go to identifier" row that navigates to /{hex} — is preserved for
+  // callers that haven't opted in.
+  if (onSelectProfile) {
+    return (
+      <PubkeyIdentifierItem
+        pubkey={hex}
+        raw={hex}
+        isSelected={isSelected}
+        onNavigate={onNavigate}
+        onSelectProfile={onSelectProfile}
+      />
+    );
+  }
   return (
     <button
       data-search-item
