@@ -36,6 +36,13 @@ export interface KidSettings {
   // Same inherit-when-undefined semantics as the post-action flags above.
   showNip05?: boolean;
   showPostTimestamp?: boolean;
+  /**
+   * When true, the kid feed is scroll-capped: only the first post is
+   * visible initially, and a "Next post" FAB unlocks one more post per tap.
+   * Cap grows monotonically — the kid can always scroll back up, but never
+   * further down than the most recently unlocked post.
+   */
+  nextPostButton?: boolean;
 }
 
 export interface KidFeedSources {
@@ -259,6 +266,7 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   showMoreAction: false,
   showNip05: false,
   showPostTimestamp: false,
+  nextPostButton: false,
 };
 
 export async function setKidSettings(

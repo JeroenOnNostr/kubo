@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import type { MutableRefObject } from 'react';
 
 import { NoteCard } from '@/components/NoteCard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,6 +12,14 @@ import { shouldHideFeedEvent } from '@/lib/feedUtils';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
 import type { FeedItem } from '@/lib/feedUtils';
+
+/**
+ * Pixel gap between the top of the viewport and the top of the
+ * most-recently-unlocked post when the scroll-cap is active.
+ * Also the height of the "peek" strip shown for the next locked post.
+ * The `NextPostFAB` smooth-scroll target uses this same constant.
+ */
+export const KID_FEED_PEEK_PX = 12;
 
 /**
  * Shared feed list for the kid home screen (`/kid`) and the parent feed
@@ -42,9 +51,25 @@ interface KidFeedListProps {
   variant: 'kid' | 'parent';
   /** Empty-state message when no events come back. */
   emptyMessage: string;
+  /**
+   * When set, cap the feed at this number of fully-visible posts:
+   *  - posts 0..capAtIndex-1 render normally
+   *  - post at index `capAtIndex` shows only a KID_FEED_PEEK_PX peek (the next locked post)
+   *  - posts past that are hidden entirely
+   * This is how the "Next post" FAB limits the kid's scroll distance —
+   * the page itself becomes shorter, so the browser can't scroll past the
+   * end. No scroll-clamping fight, no flicker.
+   */
+  capAtIndex?: number;
+  /**
+   * Optional array ref populated with each rendered post's wrapper
+   * element, keyed by feed index. Used by `NextPostFAB` to resolve the
+   * scroll target for the newly-unlocked post without DOM string queries.
+   */
+  postRefs?: MutableRefObject<(HTMLElement | null)[]>;
 }
 
-export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
+export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: KidFeedListProps) {
   const { user } = useCurrentUser();
   const {
     data,
@@ -88,6 +113,17 @@ export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
     fetchNextPage,
     pageCount: data?.pages.length,
   });
+
+  // In tap-to-advance mode the IntersectionObserver sentinel is unmounted
+  // (no more infinite scroll), so page-fetching is driven by the cap itself:
+  // prefetch when the kid is within 2 posts of the edge of loaded data.
+  useEffect(() => {
+    if (typeof capAtIndex !== 'number') return;
+    if (!hasNextPage || isFetchingNextPage) return;
+    if (capAtIndex >= feedItems.length - 2) {
+      fetchNextPage();
+    }
+  }, [capAtIndex, feedItems.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const showSkeleton = isPending || (isLoading && !data);
 
@@ -133,23 +169,55 @@ export function KidFeedList({ variant, emptyMessage }: KidFeedListProps) {
     );
   }
 
+  const isCapped = capAtIndex !== undefined;
+
   return (
     <div className="flex flex-col gap-3">
-      {feedItems.map((item) => (
-        <div
-          key={
-            item.repostedBy
-              ? `repost-${item.repostedBy}-${item.event.id}`
-              : item.event.id
+      {feedItems.map((item, idx) => {
+        // When the "Next post" FAB is on, only posts 0..capAtIndex-1 render
+        // at full height. The post at capAtIndex shows a KID_FEED_PEEK_PX
+        // peek so the scroll-cap lands with the next locked post's top just
+        // visible. Anything beyond is cut entirely — shrinking the document
+        // so the browser's own end-of-page is the scroll wall (no
+        // listener-based clamping, no flicker).
+        let capStyle: React.CSSProperties | undefined;
+        let ariaHidden: true | undefined;
+        if (capAtIndex !== undefined) {
+          if (idx > capAtIndex) {
+            capStyle = { display: 'none' };
+            ariaHidden = true;
+          } else if (idx === capAtIndex) {
+            capStyle = {
+              maxHeight: KID_FEED_PEEK_PX,
+              overflow: 'hidden',
+              pointerEvents: 'none',
+            };
+            ariaHidden = true;
           }
-          className={cardWrapperClass}
-        >
-          <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} />
-        </div>
-      ))}
-      {/* Infinite-scroll sentinel */}
-      <div ref={scrollRef} className="h-1" aria-hidden />
-      {isFetchingNextPage && (
+        }
+        return (
+          <div
+            key={
+              item.repostedBy
+                ? `repost-${item.repostedBy}-${item.event.id}`
+                : item.event.id
+            }
+            ref={(el) => {
+              if (postRefs) postRefs.current[idx] = el;
+            }}
+            data-kid-feed-item={idx}
+            className={cardWrapperClass}
+            style={capStyle}
+            aria-hidden={ariaHidden}
+          >
+            <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} />
+          </div>
+        );
+      })}
+      {/* Infinite-scroll sentinel. Hidden when capped — in tap-to-advance
+          mode pagination is driven explicitly by the FAB, not by scroll. */}
+      {!isCapped && <div ref={scrollRef} className="h-1" aria-hidden />}
+      {isFetchingNextPage && !isCapped && (
         <div
           className={cn(
             'text-center text-xs py-2',

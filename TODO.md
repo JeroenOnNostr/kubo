@@ -76,9 +76,6 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
   The kid selector pill in the top-right of the parent view has a placeholder circle for the selected kid's profile picture, but it isn't reading the actual picture from the kid's kind:0 metadata. Wire it to the selected kid's profile picture (via the existing profile/metadata hook used elsewhere in the app), with a sensible fallback when the kid has no picture set yet.
 
-- **KUBO-063: Kid feed — "Next post" button as alternative to infinite scroll**
-  Add an explicit "Next post" button on the kid feed so the kid advances one post at a time with an intentional tap, rather than endlessly scrolling. Goal is to remove the infinite-scroll loop from the kid experience (attention/time-on-app concern). Design decision: does the button replace scrolling entirely (one post at a time, full-screen), or coexist with a bounded scroll? Likely one-post-at-a-time fits the kid mode best. Wire it onto the existing feed query's pagination (advance cursor / index into the fetched pages, fetch next page when approaching the end).
-
 ## Deferred to post-MVP
 
 - **KUBO-002: Separate devices** — parent and kid on distinct devices rather than sharing one; requires some transport between them (pairing, key sync, etc.).

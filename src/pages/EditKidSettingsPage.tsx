@@ -41,6 +41,7 @@ export function EditKidSettingsPage() {
   const [windowEnd, setWEnd]      = useState('19:00');
   const [viewOnly, setViewOnly]   = useState(false);
   const [showBlobbiTab, setShowBlobbiTab] = useState(false);
+  const [nextPostButton, setNextPostButton] = useState(false);
 
   // Post-action button visibility, per-kid. Initialized from each kid's
   // override if present, otherwise from the global FeedSettings toggle
@@ -69,6 +70,7 @@ export function EditKidSettingsPage() {
     setWEnd(s.windowEnd);
     setViewOnly(s.viewOnly ?? false);
     setShowBlobbiTab(s.showBlobbiTab ?? false);
+    setNextPostButton(s.nextPostButton ?? false);
     const globalOn = (v: boolean) => v !== false;
     setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
     setShowRepost(  s.showRepostAction   ?? globalOn(feedSettings.showRepostAction));
@@ -81,7 +83,7 @@ export function EditKidSettingsPage() {
     hasLoadedRef.current = true;
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Assembled snapshot of all 12 fields, used when building the patch to persist.
+  // Assembled snapshot of all fields, used when building the patch to persist.
   const currentSettings = useMemo<KidSettings>(() => ({
     age,
     dailyLimitMin: dailyLimit,
@@ -89,6 +91,7 @@ export function EditKidSettingsPage() {
     windowEnd,
     viewOnly,
     showBlobbiTab,
+    nextPostButton,
     showReplyAction:    showReply,
     showRepostAction:   showRepost,
     showReactionAction: showReaction,
@@ -98,7 +101,7 @@ export function EditKidSettingsPage() {
     showNip05,
     showPostTimestamp,
   }), [
-    age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab,
+    age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab, nextPostButton,
     showReply, showRepost, showReaction, showZap, showShare, showMore,
     showNip05, showPostTimestamp,
   ]);
@@ -322,6 +325,25 @@ export function EditKidSettingsPage() {
             saveField({ showBlobbiTab: v });
           }}
           aria-label="Show Blobbi tab"
+        />
+      </div>
+
+      {/* Next-post button (scroll-cap) */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>"Next post" button</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Replaces infinite scroll with a tap-to-advance button. The kid
+            sees one post at a time; each tap unlocks the next.
+          </p>
+        </div>
+        <Switch
+          checked={nextPostButton}
+          onCheckedChange={(v) => {
+            setNextPostButton(v);
+            saveField({ nextPostButton: v });
+          }}
+          aria-label={`"Next post" button`}
         />
       </div>
 

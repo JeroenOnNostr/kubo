@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { Clock, Settings, Play, Inbox, Star } from 'lucide-react';
 
@@ -8,6 +8,7 @@ import { useScreenTime } from '@/hooks/useScreenTime';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
+import { NextPostFAB } from '@/components/kid/NextPostFAB';
 import { KidFeedList } from '@/components/feed/KidFeedList';
 
 /**
@@ -56,7 +57,27 @@ export function KidHomePage() {
   const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
   const { remainingMinutes } = useScreenTime();
   const { family } = useKuboFamily();
-  const showBlobbiTab = !!(user && family?.kidSettings?.[user.pubkey]?.showBlobbiTab);
+  const kidSettings = user ? family?.kidSettings?.[user.pubkey] : undefined;
+  const showBlobbiTab = !!kidSettings?.showBlobbiTab;
+  const nextPostButtonOn = !!kidSettings?.nextPostButton;
+
+  // KUBO-063: scroll-cap state for the "Next post" FAB. `unlockedCount`
+  // starts at 1 (just post 0 visible) and only grows. It's passed into
+  // KidFeedList as `capAtIndex` — see that component for the clipping
+  // logic that makes the cap a hard wall without a scroll listener.
+  const [unlockedCount, setUnlockedCount] = useState(1);
+  // Reset the cap whenever the active signer changes (e.g. parent swaps
+  // to a different kid via signer-swap, or a kid logs in). Without this
+  // the next kid starts with the previous kid's progress already unlocked.
+  useEffect(() => {
+    setUnlockedCount(1);
+    window.scrollTo(0, 0);
+  }, [user?.pubkey]);
+  const postRefs = useRef<(HTMLElement | null)[]>([]);
+  const getPostElement = useCallback(
+    (idx: number) => postRefs.current[idx] ?? null,
+    [],
+  );
 
   // Lock screen is handled at the layout level (KuboKidLayout) so it covers
   // every /kid/* route uniformly.
@@ -207,12 +228,22 @@ export function KidHomePage() {
         <KidFeedList
           variant="kid"
           emptyMessage="Nothing here yet — ask a grown-up!"
+          capAtIndex={nextPostButtonOn ? unlockedCount : undefined}
+          postRefs={nextPostButtonOn ? postRefs : undefined}
         />
       </div>
 
       <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
 
       <KuboKidBottomNav showBlobbi={showBlobbiTab} />
+
+      {nextPostButtonOn && (
+        <NextPostFAB
+          unlockedCount={unlockedCount}
+          onAdvance={() => setUnlockedCount((n) => n + 1)}
+          getPostElement={getPostElement}
+        />
+      )}
     </div>
   );
 }
