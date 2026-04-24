@@ -69,7 +69,16 @@ export function ExpandableSourceRow({
       }
     >
       <AccordionItem value={rowKey} className="border-none">
-        <div className="flex items-center gap-2 pr-3">
+        {/*
+          Outer flex row. AccordionTrigger renders as `<h3 class="flex"> >
+          <button>…</button></h3>`; Tailwind classes passed to <AccordionTrigger />
+          apply to the inner button, NOT the <h3> wrapper. Without an explicit
+          `flex-1` on the wrapping <h3>, the header sizes to its content and
+          the Switch drifts left/right as titles vary. We force the header to
+          grow with `[&>h3]:flex-1 [&>h3]:min-w-0` so the Switch slot is
+          consistently pushed to the right edge across all rows.
+        */}
+        <div className="flex items-stretch pr-3 [&>h3]:flex-1 [&>h3]:min-w-0">
           <AccordionTrigger
             className="flex-1 min-w-0 px-3 py-3 hover:no-underline"
             aria-label={`Expand ${title}`}
@@ -95,11 +104,13 @@ export function ExpandableSourceRow({
               </div>
             </div>
           </AccordionTrigger>
-          <Switch
-            checked={enabled}
-            onCheckedChange={onToggle}
-            aria-label={`Toggle ${title}`}
-          />
+          <div className="shrink-0 flex items-center justify-end pl-2 w-[52px]">
+            <Switch
+              checked={enabled}
+              onCheckedChange={onToggle}
+              aria-label={`Toggle ${title}`}
+            />
+          </div>
         </div>
         <AccordionContent className="px-3 pb-3 pt-0">
           <div className="text-[12px] text-muted-foreground leading-relaxed">

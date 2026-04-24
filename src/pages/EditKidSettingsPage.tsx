@@ -19,7 +19,7 @@ import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
 import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
-import type { KidSettings, KuboModeration } from '@/hooks/useKuboFamily';
+import type { KidSettings } from '@/hooks/useKuboFamily';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -28,8 +28,7 @@ import { useDebounce } from '@/hooks/useDebounce';
  *
  * Fields are persisted to the family record via setKidSettings().
  * Layout matches screen 04 in the contact sheet
- * (kid header, daily-limit slider, allowed-window inputs,
- * moderation radio).
+ * (kid header, daily-limit slider, allowed-window inputs).
  */
 export function EditKidSettingsPage() {
   const nav = useNavigate();
@@ -40,7 +39,6 @@ export function EditKidSettingsPage() {
   const [dailyLimit, setDaily]    = useState(45); // minutes
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
-  const [moderation, setMod]      = useState<KuboModeration>('mid');
   const [viewOnly, setViewOnly]   = useState(false);
 
   // Post-action button visibility, per-kid. Initialized from each kid's
@@ -66,7 +64,6 @@ export function EditKidSettingsPage() {
     setDaily(s.dailyLimitMin);
     setWStart(s.windowStart);
     setWEnd(s.windowEnd);
-    setMod(s.moderation);
     setViewOnly(s.viewOnly ?? false);
     const globalOn = (v: boolean) => v !== false;
     setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
@@ -84,7 +81,6 @@ export function EditKidSettingsPage() {
     dailyLimitMin: dailyLimit,
     windowStart,
     windowEnd,
-    moderation,
     viewOnly,
     showReplyAction:    showReply,
     showRepostAction:   showRepost,
@@ -93,7 +89,7 @@ export function EditKidSettingsPage() {
     showShareAction:    showShare,
     showMoreAction:     showMore,
   }), [
-    age, dailyLimit, windowStart, windowEnd, moderation, viewOnly,
+    age, dailyLimit, windowStart, windowEnd, viewOnly,
     showReply, showRepost, showReaction, showZap, showShare, showMore,
   ]);
 
@@ -281,43 +277,6 @@ export function EditKidSettingsPage() {
           <span className="text-muted-foreground">–</span>
           <TimeInput value={windowEnd}   onChange={setWEnd}   aria-label="Window end" />
         </div>
-      </div>
-
-      {/* Moderation */}
-      <div className="flex flex-col gap-2">
-        <Label>Moderation level</Label>
-        <div
-          className="grid grid-cols-3 gap-2"
-          role="radiogroup"
-          aria-label="Moderation level"
-        >
-          {(['low', 'mid', 'high'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="radio"
-              aria-checked={moderation === m}
-              onClick={() => {
-                setMod(m);
-                saveField({ moderation: m });
-              }}
-              className={cn(
-                'h-11 rounded-xl text-sm font-medium capitalize transition-colors',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                moderation === m
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-card text-foreground hover:bg-card/80',
-              )}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          {moderation === 'low'  && 'Only content flagged as unsafe is hidden.'}
-          {moderation === 'mid'  && 'Balanced — blocks unsafe and borderline content.'}
-          {moderation === 'high' && 'Strict — only content from the inner-circle graph.'}
-        </p>
       </div>
 
       {/* View-only mode */}

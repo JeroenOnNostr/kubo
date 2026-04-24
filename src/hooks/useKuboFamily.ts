@@ -15,14 +15,11 @@ export interface KuboKid {
 
 export type KuboTrustLevel = 'extend' | 'interact' | 'view';
 
-export type KuboModeration = 'low' | 'mid' | 'high';
-
 export interface KidSettings {
   dailyLimitMin: number;        // 15-180
   windowStart: string;           // "HH:MM"
   windowEnd: string;             // "HH:MM"
   age: number;
-  moderation: KuboModeration;
   viewOnly?: boolean;
   // Per-kid post-action visibility. When undefined, the corresponding global
   // FeedSettings flag applies (so kids that predate this field inherit the
@@ -60,7 +57,7 @@ export interface KuboFamily {
       [targetPubkey: string]: KuboTrustLevel;
     };
   };
-  /** Per-kid settings (time limits, moderation, age). */
+  /** Per-kid settings (time limits, age, post-action visibility). */
   kidSettings?: { [kidPubkey: string]: KidSettings };
   /**
    * Per-kid enabled feed sources for relays/communities/packs. Profiles are
@@ -242,7 +239,6 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   windowStart: '16:00',
   windowEnd: '19:00',
   age: 6,
-  moderation: 'mid',
   // Safe-by-default parental posture: on a fresh install a kid can see their
   // feed but can't tap into threads, comment, repost, react, zap, share, or
   // open the more menu. Parents opt in to more interactivity per-kid on
