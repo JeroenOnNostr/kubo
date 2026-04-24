@@ -40,6 +40,7 @@ export function EditKidSettingsPage() {
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
   const [viewOnly, setViewOnly]   = useState(false);
+  const [showBlobbiTab, setShowBlobbiTab] = useState(false);
 
   // Post-action button visibility, per-kid. Initialized from each kid's
   // override if present, otherwise from the global FeedSettings toggle
@@ -67,6 +68,7 @@ export function EditKidSettingsPage() {
     setWStart(s.windowStart);
     setWEnd(s.windowEnd);
     setViewOnly(s.viewOnly ?? false);
+    setShowBlobbiTab(s.showBlobbiTab ?? false);
     const globalOn = (v: boolean) => v !== false;
     setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
     setShowRepost(  s.showRepostAction   ?? globalOn(feedSettings.showRepostAction));
@@ -86,6 +88,7 @@ export function EditKidSettingsPage() {
     windowStart,
     windowEnd,
     viewOnly,
+    showBlobbiTab,
     showReplyAction:    showReply,
     showRepostAction:   showRepost,
     showReactionAction: showReaction,
@@ -95,7 +98,7 @@ export function EditKidSettingsPage() {
     showNip05,
     showPostTimestamp,
   }), [
-    age, dailyLimit, windowStart, windowEnd, viewOnly,
+    age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab,
     showReply, showRepost, showReaction, showZap, showShare, showMore,
     showNip05, showPostTimestamp,
   ]);
@@ -301,6 +304,24 @@ export function EditKidSettingsPage() {
             saveField({ viewOnly: v });
           }}
           aria-label="View-only mode"
+        />
+      </div>
+
+      {/* Blobbi tab */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>Show Blobbi tab</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Adds a virtual-pet tab to this kid's nav bar.
+          </p>
+        </div>
+        <Switch
+          checked={showBlobbiTab}
+          onCheckedChange={(v) => {
+            setShowBlobbiTab(v);
+            saveField({ showBlobbiTab: v });
+          }}
+          aria-label="Show Blobbi tab"
         />
       </div>
 

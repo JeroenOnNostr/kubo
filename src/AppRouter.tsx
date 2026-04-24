@@ -62,7 +62,7 @@ import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
 import { GroupViewPage } from "@/pages/GroupViewPage";
 import { WoTScorePage } from "@/pages/WoTScorePage";
 import { KuboKidLayout } from "@/components/KuboKidLayout";
-import { KidHomePage } from "@/pages/KidHomePage";
+import { renderKuboKidRoutes } from "@/kuboKidRoutes";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -352,8 +352,7 @@ export function AppRouter() {
 
           {/* ─── Kid app ──────────────────────────────────────────────────── */}
           <Route element={<KuboKidLayout />}>
-            <Route path="/kid"           element={<KidHomePage />} />
-            <Route path="/kid/favorites" element={<KidHomePage />} />
+            {renderKuboKidRoutes()}
           </Route>
         </Routes>
       </BrowserRouter>

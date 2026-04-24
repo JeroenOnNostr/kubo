@@ -1,0 +1,88 @@
+/*
+ * Kid-app skin for Ditto's BlobbiPage.
+ *
+ * BlobbiPage (upstream) is styled for the global Ditto palette — it uses
+ * shadcn/ui semantic tokens like .bg-background, .text-muted-foreground
+ * and .bg-card that resolve to near-white backgrounds with dark text.
+ * Under the kid app's deep-blue (#1E3A8A) wash, those tokens produce
+ * low-contrast, muddy chrome: pale text on pale card on dark background.
+ *
+ * Strategy: a CSS-only override scoped under .kubo-kid-blobbi (set by
+ * src/components/KuboKidBlobbiPage.tsx). No edits to BlobbiPage itself —
+ * if Ditto renames a class, we see a visual regression in-browser but
+ * never a build error. That's the forward-compat tradeoff we want.
+ *
+ * Keep selectors role-based (.text-muted-foreground, .bg-card) rather
+ * than structural (`div > div > button`); role-based selectors survive
+ * BlobbiPage reorganizations that change the DOM shape but not the
+ * semantic tokens.
+ */
+
+.kubo-kid-blobbi {
+  /*
+   * DashboardShell uses `max-sidebar:top-mobile-bar`, which resolves to
+   * var(--top-bar-height). Under MainLayout that's the MobileTopBar
+   * height; under KuboKidLayout there is no top bar, so zero it out to
+   * eliminate the 2.5rem gap at the top of the Blobbi page.
+   */
+  --top-bar-height: 0px;
+
+  /*
+   * Most BlobbiPage surfaces are `bg-background` (with opacity variants
+   * like /85, /90). Make them transparent so the deep-blue kid wash from
+   * KuboKidLayout shows through instead of a near-white card.
+   */
+  & .bg-background,
+  & [class*="bg-background/"] {
+    background-color: transparent !important;
+  }
+
+  /* Secondary card surfaces — lift with translucent white on the blue wash. */
+  & .bg-card,
+  & .bg-muted,
+  & [class*="bg-muted/"] {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Borders tuned for a light palette disappear on blue; fake them. */
+  & .border,
+  & .border-border {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  /* Text tokens — foreground to near-white, muted to a legible mid. */
+  & .text-foreground {
+    color: rgb(255 255 255);
+  }
+  & .text-muted-foreground {
+    color: rgba(255, 255, 255, 0.72);
+  }
+  /* Opacity variants of muted foreground (e.g. text-muted-foreground/30 for
+     the room nav chevrons) use currentColor with an alpha channel — bumping
+     the base color above carries through. */
+
+  /*
+   * SubHeaderBar (Quests / Blobbis tab bar). Its surface uses .bg-popover
+   * and its tab text uses text-foreground + text-muted-foreground. The
+   * base color bumps above fix the text; we also need to replace the
+   * cream popover surface so active/hover states don't look washed out.
+   */
+  & [data-slot="sub-header-bar"],
+  & .bg-popover {
+    background-color: rgba(20, 46, 107, 0.92) !important;
+    color: rgb(255 255 255);
+  }
+  & .text-popover-foreground {
+    color: rgb(255 255 255);
+  }
+
+  /*
+   * Room-hero name + stats caption ("Bobby", "Home") render at
+   * text-primary / text-muted-foreground on the near-white card. With
+   * the surface now transparent they sit on the blue wash — bump the
+   * primary color so the name reads clearly.
+   */
+  & .text-primary {
+    color: rgb(147 197 253); /* light blue, high contrast on #1E3A8A */
+  }
+}

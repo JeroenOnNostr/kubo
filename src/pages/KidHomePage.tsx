@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { Clock, Settings, Play, Lock, Inbox, Star } from 'lucide-react';
+import { Clock, Settings, Play, Inbox, Star } from 'lucide-react';
 
 import { getDisplayName } from '@/lib/getDisplayName';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useScreenTime } from '@/hooks/useScreenTime';
+import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { KidFeedList } from '@/components/feed/KidFeedList';
@@ -53,37 +54,12 @@ export function KidHomePage() {
 
   const { user, metadata } = useCurrentUser();
   const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
-  const { remainingMinutes, isLocked, isOutsideWindow, settings } = useScreenTime();
+  const { remainingMinutes } = useScreenTime();
+  const { family } = useKuboFamily();
+  const showBlobbiTab = !!(user && family?.kidSettings?.[user.pubkey]?.showBlobbiTab);
 
-  // Data-driven lock — overrides any ?state= param and favorites view.
-  if (isLocked) {
-    return (
-      <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
-        <div
-          className="size-16 rounded-2xl flex items-center justify-center"
-          style={{ background: '#F97316' }}
-        >
-          <Lock className="size-8 text-white" strokeWidth={2.5} />
-        </div>
-        <h1 className="text-xl font-bold">
-          {isOutsideWindow ? 'Not right now!' : 'See you tomorrow!'}
-        </h1>
-        <p className="text-[14px] text-white/70 max-w-[260px] leading-relaxed">
-          {isOutsideWindow
-            ? `Come back at ${settings?.windowStart ?? '4:00 pm'}.`
-            : 'Your watch time is done for today.'}
-        </p>
-        <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-        <button
-          type="button"
-          onClick={() => setGateOpen(true)}
-          className="mt-4 h-10 px-6 rounded-full text-[12px] text-white/60 border border-white/20 active:scale-95 transition-transform"
-        >
-          I'm a parent
-        </button>
-      </div>
-    );
-  }
+  // Lock screen is handled at the layout level (KuboKidLayout) so it covers
+  // every /kid/* route uniformly.
 
   if (isFavorites) {
     return (
@@ -115,7 +91,7 @@ export function KidHomePage() {
         </div>
 
         <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-        <KuboKidBottomNav />
+        <KuboKidBottomNav showBlobbi={showBlobbiTab} />
       </div>
     );
   }
@@ -195,7 +171,7 @@ export function KidHomePage() {
         </div>
 
         <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-        <KuboKidBottomNav />
+        <KuboKidBottomNav showBlobbi={showBlobbiTab} />
       </div>
     );
   }
@@ -236,7 +212,7 @@ export function KidHomePage() {
 
       <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
 
-      <KuboKidBottomNav />
+      <KuboKidBottomNav showBlobbi={showBlobbiTab} />
     </div>
   );
 }

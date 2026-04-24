@@ -21,6 +21,8 @@ export interface KidSettings {
   windowEnd: string;             // "HH:MM"
   age: number;
   viewOnly?: boolean;
+  /** When true, the kid's bottom nav shows a "Blobbi" tab (Ditto's virtual pet). */
+  showBlobbiTab?: boolean;
   // Per-kid post-action visibility. When undefined, the corresponding global
   // FeedSettings flag applies (so kids that predate this field inherit the
   // parent's global choices). When set, overrides the global flag for this kid.
@@ -248,6 +250,7 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   // open the more menu. Parents opt in to more interactivity per-kid on
   // /parent/kid-settings.
   viewOnly: true,
+  showBlobbiTab: false,
   showReplyAction: false,
   showRepostAction: false,
   showReactionAction: false,
