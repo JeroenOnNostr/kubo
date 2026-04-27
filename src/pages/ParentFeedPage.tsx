@@ -50,13 +50,11 @@ export function ParentFeedPage() {
         <NavTile
           icon={<SlidersHorizontal className="size-5" />}
           title="Edit feed settings"
-          subtitle="Kinds & visibility"
           onClick={() => nav('/parent/feed-settings')}
         />
         <NavTile
           icon={<Eye className="size-5" />}
           title="Feed preview"
-          subtitle="See what your kid sees"
           onClick={() => nav('/parent/feed/preview')}
         />
       </div>

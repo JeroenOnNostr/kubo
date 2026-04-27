@@ -6,7 +6,7 @@ export function NavTile({
 }: {
   icon: ReactNode;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   onClick: () => void;
 }) {
   return (
@@ -20,7 +20,9 @@ export function NavTile({
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold">{title}</div>
-        <div className="text-[11px] text-muted-foreground truncate">{subtitle}</div>
+        {subtitle && (
+          <div className="text-[11px] text-muted-foreground truncate">{subtitle}</div>
+        )}
       </div>
       <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" aria-hidden />
     </button>

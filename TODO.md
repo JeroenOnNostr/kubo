@@ -31,20 +31,11 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-022: Videos tab — infinite scroll**
   Follow-up to KUBO-020. `VideosTab` only renders the first `useProfileMedia` page (~20 events). Wire an IntersectionObserver sentinel at the bottom of the grid that calls `fetchNextPage()` when visible, using the hook's already-implemented `getNextPageParam`.
 
-- **KUBO-027: Kid mode "view only" interaction gate**
-  Follow-up to KUBO-026. Kids currently follow Ditto's `NoteCard` default tap behavior — tapping a non-video card navigates to a detail page, tapping a profile avatar navigates to a profile page, etc. For strict "view-only" kid mode, intercept these to either do nothing or require a parent gate. Design decision required: global toggle or per-kind ("can navigate to profiles but not to articles")? Also define whether the kid should see interaction affordances at all (zap buttons, reply icons) on a view-only screen.
-
 - **KUBO-028: Real video categorization model**
   Category chips (All / Animals / Music / Craft / Stories) were removed in KUBO-026 because NIP-71 video events rarely carry `#t` topic tags, making non-"All" selections return empty feeds. Reintroduce once there's a backing data model: our own addressable event, a NIP-50 search query per category, an ML-based classifier running on thumbnails/titles, or an adopted `#t` convention. Until then, the chips were misleading UI.
 
-- **KUBO-024: Restructure parent home — drop redundant tiles, move Backup keys, add activity placeholders**
-  On `/parent/home`, removed the three nav tiles that duplicate bottom-nav destinations (Trust · People → Trust tab, Trust · Places → Trust tab, Activity & alerts → Alerts tab) and moved the Backup keys tile into `/parent/kid-settings` where it belongs with the per-kid config knobs. Extracted `NavTile` from `KidDashboardPage.tsx` to `components/NavTile.tsx` so both pages can share it. Added two placeholder sections below the remaining tiles on the home page: **Kids watch history** (horizontal row of 3 dummy thumbnail cards) and **Kids activity** (shadcn Tabs for Week/Day + a recharts BarChart with 3 kids × 7 days of hardcoded sample data, plus a legend). Visual-only — no data wiring. Follow-up in KUBO-025.
-
 - **KUBO-025: Wire Kids watch history + Kids activity placeholders to real data**
   Follow-up to KUBO-024. Replace the hardcoded `ACTIVITY_DATA` + 3 dummy watch-history cards on `/parent/home` with live readings. Watch history: recent-views from the active kid's signer (kind TBD — likely the same events that feed `/kid`'s tile tap, ordered by `created_at`). Activity chart: per-kid daily watch time aggregated from kid-settings/usage events across the parent's kids (iterate `useKuboFamily().kids`, switch signer per kid or query by pubkey). Week tab aggregates by day-of-week, Day tab aggregates by hour. "Watch full history" span becomes a link once the target route exists.
-
-- **KUBO-035: Prune inherited Ditto feature branches from the fork**
-  The GitHub fork (converted 2026-04-21 from the pre-existing `JeroenOnNostr/ditto` fork) carries ~50 branches from upstream Ditto (`ios-haptics`, `planet`, `reactions`, `bluesky`, `develop`, `dms`, all the `feat/blobbi-*`, etc.). These clutter the branch list and aren't Kubo work. Delete them from `origin`; they still exist on `upstream` (soapbox-pub/ditto) so nothing is lost. Leave `main`, `brand/main`, and any active `feat/kubo-*` branches alone.
 
 - **KUBO-036: Merge upstream Ditto v2.10.3 into `brand/main`**
   Upstream Ditto has 7 commits on `main` that aren't in `brand/main` yet: lightbox swipe-to-dismiss flicker fix, release 2.10.3, iOS status-bar text color fix on light theme, envelope-card mobile tap fixes, swipe-to-dismiss on lightbox overlays, wall compose-box clearing, autoplay-videos setting. Local `main` has already been fast-forwarded to `upstream/main`; follow the flow in memory note [kubo.md](../../.claude/projects/-home-jeroen-VScode-workspace-for-building-nostr-apps/memory/kubo.md): `git checkout brand/main && git merge main`, resolve any brand-specific conflicts, `git push origin brand/main`. Watch for conflicts on files Kubo has rebranded/customized.
@@ -55,12 +46,6 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-052: Parent feed view — wire the search bar or remove it**
   The search pill on `/parent/feed` (`ParentFeedPage.tsx:64-68`) is a placeholder ("wired in a later pass"). Either wire it to filter the source list / do a NIP-50 search, or delete it. Decide whether it's actually needed at this level — sources are already listed below it.
 
-- **KUBO-053: Parent feed view — untruncate descriptions on "Edit feed settings" and "Feed preview" tiles**
-  The two tiles at the top of `/parent/feed` have their descriptions clipped (line-clamp / truncate). Let them wrap fully so the subtitle is readable.
-
-- **KUBO-054: Parent home — merge "Today's usage" bar into the Kids activity chart**
-  On `/parent/home` (`KidDashboardPage.tsx:111-131` and `KidDashboardPage.tsx:153-175`) the "Today" used/limit bar and the Day tab of the Kids activity card show essentially the same thing. Condense to a single block to save vertical space — e.g. drop the standalone "Today" card, or fold its progress bar into the Day tab.
-
 - **KUBO-057: Select communities page — improve search reliability**
   On `/parent/feed/communities` (`CommunitiesSourcePage.tsx`) the search pill (`CommunitiesSourcePage.tsx:58-64`) returns inconsistent results for kind-34550 community queries. Audit the NIP-50 query, relay set, and result dedupe.
 
@@ -70,11 +55,14 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-060: Kid view — Favorites navbar item has no "add to favorites" affordance**
   The kid view's bottom navbar has a Favorites tab but there is no way to actually mark a post as a favorite from anywhere in the kid UI. Explore whether to reuse the existing bookmarks functionality (NIP-51 kind:10003 bookmark list, or kind:30003 categorized bookmarks) or design a kid-specific mechanism. Decide on the data model first, then add the "favorite" affordance on cards/video tiles in the kid feed and wire the Favorites tab to read from it.
 
-- **KUBO-061: Kid view — add Blobby section to navbar (Home · Blobby · Favorites)**
-  The kid navbar should have three sections. Currently missing a middle Blobby tab where the kid takes care of their own blobby (pet/companion). Order: Home · Blobby · Favorites. Scope: add the route + nav entry + a stub page; the actual Blobby care mechanics are a separate design task.
-
 - **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
   The kid selector pill in the top-right of the parent view has a placeholder circle for the selected kid's profile picture, but it isn't reading the actual picture from the kid's kind:0 metadata. Wire it to the selected kid's profile picture (via the existing profile/metadata hook used elsewhere in the app), with a sensible fallback when the kid has no picture set yet.
+
+## Completed
+
+- **KUBO-053: Parent feed view — remove descriptions on "Edit feed settings" and "Feed preview" tiles**
+- **KUBO-054: Parent home — merge "Today's usage" bar into the Kids activity chart**
+- **KUBO-061: Kid view — add Blobby section to navbar (Home · Blobby · Favorites)**
 
 ## Deferred to post-MVP
 
