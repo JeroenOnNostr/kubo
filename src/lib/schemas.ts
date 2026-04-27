@@ -188,6 +188,7 @@ export const FeedSettingsSchema = z.looseObject({
   showReplyAction: z.boolean().optional(),
   showRepostAction: z.boolean().optional(),
   showReactionAction: z.boolean().optional(),
+  showFavoriteAction: z.boolean().optional(),
   showShareAction: z.boolean().optional(),
   showMoreAction: z.boolean().optional(),
   showNip05: z.boolean().optional(),

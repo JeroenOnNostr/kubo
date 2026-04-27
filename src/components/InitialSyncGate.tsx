@@ -120,6 +120,7 @@ const DEFAULT_KUBO_FEED_SETTINGS = {
   showReplyAction: true,
   showRepostAction: true,
   showReactionAction: true,
+  showFavoriteAction: true,
   showShareAction: true,
   showMoreAction: true,
   showNip05: false,

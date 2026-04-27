@@ -31,6 +31,9 @@ export function useActionVisibility() {
     showReply:         pick(kid?.showReplyAction,    feedSettings.showReplyAction),
     showRepost:        pick(kid?.showRepostAction,   feedSettings.showRepostAction),
     showReaction:      pick(kid?.showReactionAction, feedSettings.showReactionAction),
+    // Favorite (star) is kid-only — gate hard on isKid so the button never
+    // appears for parent / non-Kubo accounts even if the global toggle is on.
+    showFavorite:      isKid && pick(kid?.showFavoriteAction, feedSettings.showFavoriteAction),
     showZap:           pick(kid?.showZapAction,      feedSettings.showZaps),
     showShare:         pick(kid?.showShareAction,    feedSettings.showShareAction),
     showMore:          pick(kid?.showMoreAction,     feedSettings.showMoreAction),

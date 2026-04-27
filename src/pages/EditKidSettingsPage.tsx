@@ -49,6 +49,7 @@ export function EditKidSettingsPage() {
   const [showReply,    setShowReply]    = useState(true);
   const [showRepost,   setShowRepost]   = useState(true);
   const [showReaction, setShowReaction] = useState(true);
+  const [showFavorite, setShowFavorite] = useState(true);
   const [showZap,      setShowZap]      = useState(true);
   const [showShare,    setShowShare]    = useState(true);
   const [showMore,     setShowMore]     = useState(true);
@@ -75,6 +76,7 @@ export function EditKidSettingsPage() {
     setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
     setShowRepost(  s.showRepostAction   ?? globalOn(feedSettings.showRepostAction));
     setShowReaction(s.showReactionAction ?? globalOn(feedSettings.showReactionAction));
+    setShowFavorite(s.showFavoriteAction ?? globalOn(feedSettings.showFavoriteAction));
     setShowZap(     s.showZapAction      ?? globalOn(feedSettings.showZaps));
     setShowShare(   s.showShareAction    ?? globalOn(feedSettings.showShareAction));
     setShowMore(    s.showMoreAction     ?? globalOn(feedSettings.showMoreAction));
@@ -95,6 +97,7 @@ export function EditKidSettingsPage() {
     showReplyAction:    showReply,
     showRepostAction:   showRepost,
     showReactionAction: showReaction,
+    showFavoriteAction: showFavorite,
     showZapAction:      showZap,
     showShareAction:    showShare,
     showMoreAction:     showMore,
@@ -102,7 +105,7 @@ export function EditKidSettingsPage() {
     showPostTimestamp,
   }), [
     age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab, nextPostButton,
-    showReply, showRepost, showReaction, showZap, showShare, showMore,
+    showReply, showRepost, showReaction, showFavorite, showZap, showShare, showMore,
     showNip05, showPostTimestamp,
   ]);
 
@@ -368,6 +371,11 @@ export function EditKidSettingsPage() {
             label="Reactions"
             checked={showReaction}
             onChange={(v) => { setShowReaction(v); saveField({ showReactionAction: v }); }}
+          />
+          <ActionToggleRow
+            label="Favorite (star)"
+            checked={showFavorite}
+            onChange={(v) => { setShowFavorite(v); saveField({ showFavoriteAction: v }); }}
           />
           <ActionToggleRow
             label="Zaps"

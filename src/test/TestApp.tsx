@@ -98,6 +98,7 @@ export function TestApp({ children }: TestAppProps) {
       showReplyAction: false,
       showRepostAction: false,
       showReactionAction: false,
+      showFavoriteAction: false,
       showShareAction: false,
       showMoreAction: false,
       showNip05: false,

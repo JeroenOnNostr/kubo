@@ -97,6 +97,7 @@ import { useShareOrigin } from "@/hooks/useShareOrigin";
 import { toast } from "@/hooks/useToast";
 import { useEventStats } from "@/hooks/useTrending";
 import { useActionVisibility } from "@/hooks/useActionVisibility";
+import { FavoriteStarButton } from "@/components/FavoriteStarButton";
 import { canZap } from "@/lib/canZap";
 import { extractZapAmount, extractZapSender, extractZapMessage } from "@/hooks/useEventInteractions";
 import { getContentWarning } from "@/lib/contentWarning";
@@ -763,7 +764,7 @@ export const NoteCard = memo(function NoteCard({
   );
 
   // ── Shared action buttons (used in all layouts) ──
-  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
+  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || av.showFavorite || canZapAuthor || av.showShare || av.showMore;
   const actionButtons = anyButtonVisible ? (
     <div className="flex items-center gap-5 mt-3 -ml-2">
       {av.showReply && (
@@ -808,6 +809,8 @@ export const NoteCard = memo(function NoteCard({
           reactionCount={stats?.reactions}
         />
       )}
+
+      {av.showFavorite && <FavoriteStarButton eventId={event.id} />}
 
       {canZapAuthor && (
         <ZapDialog target={event}>

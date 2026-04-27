@@ -164,6 +164,8 @@ export interface FeedSettings {
   showRepostAction: boolean;
   /** Show the Reaction (like/emoji) button on posts. */
   showReactionAction: boolean;
+  /** Show the Favorite (star) button on posts. Kid-mode only — writes a NIP-51 kind-30003 list under d='favorites'. */
+  showFavoriteAction: boolean;
   /** Show the Share button on posts. */
   showShareAction: boolean;
   /** Show the More menu button on posts. */
