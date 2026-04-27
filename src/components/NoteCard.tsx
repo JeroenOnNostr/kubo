@@ -765,7 +765,7 @@ export const NoteCard = memo(function NoteCard({
   );
 
   // ── Shared action buttons (used in all layouts) ──
-  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || av.showFavorite || canZapAuthor || av.showShare || av.showMore;
+  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
   const actionButtons = anyButtonVisible ? (
     <div className="flex items-center gap-5 mt-3 -ml-2">
       {av.showReply && (
@@ -810,8 +810,6 @@ export const NoteCard = memo(function NoteCard({
           reactionCount={stats?.reactions}
         />
       )}
-
-      {av.showFavorite && <FavoriteStarButton eventId={event.id} />}
 
       {canZapAuthor && (
         <ZapDialog target={event}>
@@ -860,6 +858,10 @@ export const NoteCard = memo(function NoteCard({
     </div>
   ) : null;
 
+  const favoriteOverlay = av.showFavorite && !compact ? (
+    <FavoriteStarButton eventId={event.id} overlay />
+  ) : null;
+
   // ── Vanish layout (kind 62) — dramatic card, no author row ──
   if (isVanish) {
     // Threaded vanish (ancestor in a reply thread — needs connector line + avatar column)
@@ -867,7 +869,7 @@ export const NoteCard = memo(function NoteCard({
       return (
         <article
           className={cn(
-            "px-4 pt-3 transition-colors overflow-hidden",
+            "relative px-4 pt-3 transition-colors overflow-hidden",
             !viewOnly && "hover:bg-secondary/30 cursor-pointer",
             threaded ? "pb-0" : "pb-3 border-b border-border",
             className,
@@ -875,6 +877,7 @@ export const NoteCard = memo(function NoteCard({
           onClick={handleCardClick}
           onAuxClick={handleAuxClick}
         >
+          {favoriteOverlay}
           <div className="flex gap-3">
             <div className="flex flex-col items-center">
               {avatarElement}
@@ -900,13 +903,14 @@ export const NoteCard = memo(function NoteCard({
     return (
       <article
         className={cn(
-          "px-4 py-3 border-b border-border transition-colors overflow-hidden",
+          "relative px-4 py-3 border-b border-border transition-colors overflow-hidden",
           !viewOnly && "hover:bg-secondary/30 cursor-pointer",
           className,
         )}
         onClick={handleCardClick}
         onAuxClick={handleAuxClick}
       >
+        {favoriteOverlay}
         <VanishCardCompact event={event} />
         {!compact && (
           <>
@@ -1058,7 +1062,7 @@ export const NoteCard = memo(function NoteCard({
     return (
       <article
         className={cn(
-          "px-4 pt-3 transition-colors overflow-hidden",
+          "relative px-4 pt-3 transition-colors overflow-hidden",
           !viewOnly && "hover:bg-secondary/30 cursor-pointer",
           threaded ? "pb-0" : "pb-3 border-b border-border",
           className,
@@ -1066,6 +1070,7 @@ export const NoteCard = memo(function NoteCard({
         onClick={handleCardClick}
         onAuxClick={handleAuxClick}
       >
+        {favoriteOverlay}
         {threadedKindHeader}
         <div className="flex gap-3">
           <div className="flex flex-col items-center">
@@ -1098,7 +1103,7 @@ export const NoteCard = memo(function NoteCard({
   return (
     <article
       className={cn(
-        "px-4 py-3 border-b border-border transition-colors overflow-hidden",
+        "relative px-4 py-3 border-b border-border transition-colors overflow-hidden",
         !viewOnly && "hover:bg-secondary/30 cursor-pointer",
         highlight && "animate-highlight-fade",
         className,
@@ -1106,6 +1111,7 @@ export const NoteCard = memo(function NoteCard({
       onClick={handleCardClick}
       onAuxClick={handleAuxClick}
     >
+      {favoriteOverlay}
       {/* Action header — repost takes priority, otherwise derived from event kind */}
       {repostedBy ? (
         <EventActionHeader
