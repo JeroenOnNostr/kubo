@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Eye,
   Radio,
-  Search,
   SlidersHorizontal,
   Users,
   UsersRound,
@@ -57,14 +56,6 @@ export function ParentFeedPage() {
           title="Feed preview"
           onClick={() => nav('/parent/feed/preview')}
         />
-      </div>
-
-      {/* Search pill — placeholder, wired in a later pass */}
-      <div className="mx-4 flex items-center gap-2 h-11 px-4 rounded-full bg-card">
-        <Search className="size-4 text-muted-foreground" aria-hidden />
-        <span className="text-[13px] text-muted-foreground">
-          Search sources…
-        </span>
       </div>
 
       {/* Source tiles */}

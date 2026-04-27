@@ -43,8 +43,8 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-037: Set up Android release-signing keystore**
   v0.1.0 and v0.1.1 APKs are debug-signed (shared dev key across all developers' machines) — fine for personal testing but blocks Play Store distribution, means users can't cleanly update to a release-signed build later, and gives no signing-identity guarantee. Run `npm run keygen` to generate an upload keystore, fill in `android/key.properties` with the alias/passwords, and the existing `signingConfigs.release` block in `android/app/build.gradle` will pick it up. Store the keystore + passwords somewhere durable (losing them means losing the ability to update the app). Only unblock once we're ready to distribute beyond Jeroen's own device.
 
-- **KUBO-052: Parent feed view — wire the search bar or remove it**
-  The search pill on `/parent/feed` (`ParentFeedPage.tsx:64-68`) is a placeholder ("wired in a later pass"). Either wire it to filter the source list / do a NIP-50 search, or delete it. Decide whether it's actually needed at this level — sources are already listed below it.
+- **KUBO-052: Parent feed view — re-add search bar with real functionality**
+  Placeholder search pill on `/parent/feed` was removed from `ParentFeedPage.tsx` (it never did anything). When re-adding, decide what it should actually search: filter the visible source list locally, run a NIP-50 query across enabled sources, or jump straight to a results screen. Also decide whether it belongs on this source-picker level at all — sources are already listed below — or whether it should live one level deeper inside each source-category page.
 
 - **KUBO-057: Select communities page — improve search reliability**
   On `/parent/feed/communities` (`CommunitiesSourcePage.tsx`) the search pill (`CommunitiesSourcePage.tsx:58-64`) returns inconsistent results for kind-34550 community queries. Audit the NIP-50 query, relay set, and result dedupe.
