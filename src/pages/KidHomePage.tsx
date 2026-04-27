@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { Clock, Settings, Play, Inbox, Star } from 'lucide-react';
+import { Settings, Play, Inbox, Star } from 'lucide-react';
 
-import { getDisplayName } from '@/lib/getDisplayName';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useScreenTime } from '@/hooks/useScreenTime';
-import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { getKidSettings, useKuboFamily } from '@/hooks/useKuboFamily';
+import { useKidFavorites } from '@/hooks/useKidFavorites';
+import { useKidLayoutOptions } from '@/contexts/KuboKidLayoutContext';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { NextPostFAB } from '@/components/kid/NextPostFAB';
 import { KidFeedList } from '@/components/feed/KidFeedList';
+import { NoteCard } from '@/components/NoteCard';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /**
  * /kid — the kid app entry point.
@@ -45,6 +47,10 @@ export function KidHomePage() {
   const { pathname } = useLocation();
   const isFavorites = pathname === '/kid/favorites';
 
+  // Home scrolls vertically through the feed; the shared top bar should
+  // hide on scroll-down and reappear on scroll-up.
+  useKidLayoutOptions({ scrollAware: true });
+
   const [params, setParams] = useSearchParams();
   const stateParam = params.get('state') as KidState | null;
   const state: KidState = stateParam && ['loaded','locked','playing','inbox'].includes(stateParam)
@@ -53,9 +59,7 @@ export function KidHomePage() {
 
   const [gateOpen, setGateOpen] = useState(false);
 
-  const { user, metadata } = useCurrentUser();
-  const kidName = user ? getDisplayName(metadata, user.pubkey) : '';
-  const { remainingMinutes } = useScreenTime();
+  const { user } = useCurrentUser();
   const { family } = useKuboFamily();
   const kidSettings = user ? family?.kidSettings?.[user.pubkey] : undefined;
   const showBlobbiTab = !!kidSettings?.showBlobbiTab;
@@ -83,38 +87,7 @@ export function KidHomePage() {
   // every /kid/* route uniformly.
 
   if (isFavorites) {
-    return (
-      <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-4">
-        <header className="flex items-center justify-between">
-          <h1 className="text-[24px] font-bold leading-none">Favorites</h1>
-          <button
-            type="button"
-            onClick={() => setGateOpen(true)}
-            aria-label="Parent access"
-            className="size-9 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-            style={{ background: 'rgba(255,255,255,0.15)' }}
-          >
-            <Settings className="size-5" />
-          </button>
-        </header>
-
-        <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-4">
-          <div
-            className="size-16 rounded-2xl flex items-center justify-center"
-            style={{ background: 'rgba(255,255,255,0.15)' }}
-          >
-            <Star className="size-8 text-white" strokeWidth={2.5} />
-          </div>
-          <h2 className="text-[18px] font-bold">No favorites yet</h2>
-          <p className="text-[13px] text-white/70 max-w-[260px] leading-relaxed">
-            Tap the star on a video you love and it'll show up here.
-          </p>
-        </div>
-
-        <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-        <KuboKidBottomNav showBlobbi={showBlobbiTab} />
-      </div>
-    );
+    return <KidFavoritesView showBlobbiTab={showBlobbiTab} />;
   }
 
   if (state === 'playing') {
@@ -197,31 +170,10 @@ export function KidHomePage() {
     );
   }
 
-  // Loaded (default)
+  // Loaded (default). The top bar (Hi {name}! + time + gear) is rendered
+  // by KuboKidLayout — pt-2 is just enough breathing room below it.
   return (
-    <div className="min-h-dvh pb-24 flex flex-col gap-3 px-5 pt-12">
-      <header className="flex items-center justify-between">
-        <h1 className="text-[24px] font-bold leading-none">Hi {kidName}!</h1>
-        <div className="flex items-center gap-2">
-          <div
-            className="h-9 px-3 rounded-full flex items-center gap-1.5 text-[13px] font-semibold"
-            style={{ background: 'rgba(255,255,255,0.2)' }}
-          >
-            <Clock className="size-4" />
-            {remainingMinutes}
-          </div>
-          <button
-            type="button"
-            onClick={() => setGateOpen(true)}
-            aria-label="Parent access"
-            className="size-9 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-            style={{ background: 'rgba(255,255,255,0.15)' }}
-          >
-            <Settings className="size-5" />
-          </button>
-        </div>
-      </header>
-
+    <div className="min-h-dvh pb-24 flex flex-col gap-3 px-5 pt-2">
       {/* Scrollable feed — Nostr events from the kid's follow list, kinds
           driven by feedSettings. Videos play inline via NoteCard + VideoPlayer. */}
       <div className="flex-1">
@@ -233,8 +185,6 @@ export function KidHomePage() {
         />
       </div>
 
-      <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
-
       <KuboKidBottomNav showBlobbi={showBlobbiTab} />
 
       {nextPostButtonOn && (
@@ -244,6 +194,92 @@ export function KidHomePage() {
           getPostElement={getPostElement}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * /kid/favorites — kid's saved-favorites tab.
+ *
+ * Reads the kid's NIP-51 kind-30003 list addressed by `d='favorites'`. Items
+ * live NIP-44-encrypted in `content` (see useKidFavorites). Empty state is
+ * preserved from the original placeholder. View-only mode follows the same
+ * resolution as KidFeedList — getKidSettings(user.pubkey).viewOnly === true
+ * suppresses card-click navigation on each NoteCard.
+ */
+function KidFavoritesView({
+  showBlobbiTab,
+}: {
+  showBlobbiTab: boolean;
+}) {
+  // Favorites scrolls through saved posts — match Home's hide-on-scroll bar.
+  useKidLayoutOptions({ scrollAware: true });
+
+  const { user } = useCurrentUser();
+  const { events, isLoading, isLoadingEvents, favoritedIds } = useKidFavorites();
+  const isViewOnly = !!user?.pubkey && getKidSettings(user.pubkey).viewOnly === true;
+
+  // Three render states. The list-but-refetching case keeps showing cached
+  // events instead of flashing skeletons over them, so we only show the
+  // loader while there are no events to show.
+  const viewState: 'loading' | 'list' | 'empty' =
+    (isLoading || (favoritedIds.length > 0 && isLoadingEvents)) && events.length === 0 ? 'loading'
+    : events.length > 0                                                                ? 'list'
+    :                                                                                    'empty';
+
+  return (
+    <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-2">
+      {viewState === 'loading' && (
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-2xl p-3"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+            >
+              <div className="flex gap-3">
+                <Skeleton className="size-11 rounded-full shrink-0 bg-white/20" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32 bg-white/20" />
+                  <Skeleton className="h-4 w-full bg-white/20" />
+                  <Skeleton className="h-32 w-full rounded-xl bg-white/20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewState === 'list' && (
+        <div className="flex flex-col gap-3">
+          {events.map((event) => (
+            <div
+              key={event.id}
+              className="rounded-2xl overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.1)' }}
+            >
+              <NoteCard event={event} viewOnly={isViewOnly} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewState === 'empty' && (
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 px-4">
+          <div
+            className="size-16 rounded-2xl flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.15)' }}
+          >
+            <Star className="size-8 text-white" strokeWidth={2.5} />
+          </div>
+          <h2 className="text-[18px] font-bold">No favorites yet</h2>
+          <p className="text-[13px] text-white/70 max-w-[260px] leading-relaxed">
+            Tap the star on a video you love and it'll show up here.
+          </p>
+        </div>
+      )}
+
+      <KuboKidBottomNav showBlobbi={showBlobbiTab} />
     </div>
   );
 }

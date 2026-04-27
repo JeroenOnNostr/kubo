@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 
@@ -7,7 +7,15 @@ import { useScreenTime } from '@/hooks/useScreenTime';
 import { start, stopTracker } from '@/lib/screenTimeTracker';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { KuboKidErrorFallback } from '@/components/KuboErrorFallbacks';
+import {
+  KuboKidTopBar,
+  KuboKidScrollAwareTopBar,
+} from '@/components/KuboKidTopBar';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
+import {
+  KuboKidLayoutContext,
+  type KuboKidLayoutOptions,
+} from '@/contexts/KuboKidLayoutContext';
 
 /**
  * Layout shell for all /kid/* routes.
@@ -26,11 +34,26 @@ import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
  * and /kid/favorites all show the same "see you tomorrow" fallback when the
  * daily limit is hit or the allowed window is closed — nothing past the
  * layout renders while `isLocked`.
+ *
+ * Provides a tiny KuboKidLayoutContext so pages can opt into a scroll-aware
+ * top bar via useKidLayoutOptions({ scrollAware: true }) — Home and
+ * Favorites do; Blobbi (which doesn't window-scroll) leaves it pinned.
  */
 export function KuboKidLayout() {
   const { user } = useCurrentUser();
   const { isLocked, isOutsideWindow, settings } = useScreenTime();
   const [gateOpen, setGateOpen] = useState(false);
+
+  const [options, setOptions] = useState<KuboKidLayoutOptions>({});
+  // Stable identity so useEffect in useKidLayoutOptions doesn't loop.
+  const setOptionsStable = useCallback(
+    (next: KuboKidLayoutOptions) => setOptions(next),
+    [],
+  );
+  const ctxValue = useMemo(
+    () => ({ setOptions: setOptionsStable }),
+    [setOptionsStable],
+  );
 
   useEffect(() => {
     if (user?.pubkey) {
@@ -44,7 +67,13 @@ export function KuboKidLayout() {
   return (
     <div
       className="min-h-dvh text-white safe-area-top"
-      style={{ background: '#1E3A8A' }}
+      style={{
+        background: '#1E3A8A',
+        // Single source of truth for the top bar height — KuboKidTopBar
+        // reads this, and the kubo-kid-blobbi.css skin maps it onto
+        // Ditto's --top-bar-height so BlobbiPage internals align below.
+        ['--kubo-kid-top-bar-height' as string]: '3rem',
+      }}
     >
       {isLocked ? (
         <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -80,7 +109,14 @@ export function KuboKidLayout() {
           so upstream Ditto merges stay conflict-free.
         */
         <ErrorBoundary fallback={<KuboKidErrorFallback />}>
-          <Outlet />
+          <KuboKidLayoutContext.Provider value={ctxValue}>
+            {options.scrollAware ? (
+              <KuboKidScrollAwareTopBar />
+            ) : (
+              <KuboKidTopBar />
+            )}
+            <Outlet />
+          </KuboKidLayoutContext.Provider>
         </ErrorBoundary>
       )}
     </div>

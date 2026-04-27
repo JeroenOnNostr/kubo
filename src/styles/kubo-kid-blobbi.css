@@ -22,10 +22,12 @@
   /*
    * DashboardShell uses `max-sidebar:top-mobile-bar`, which resolves to
    * var(--top-bar-height). Under MainLayout that's the MobileTopBar
-   * height; under KuboKidLayout there is no top bar, so zero it out to
-   * eliminate the 2.5rem gap at the top of the Blobbi page.
+   * height; under KuboKidLayout it's KuboKidTopBar's height — read from
+   * the layout's --kubo-kid-top-bar-height so resizing the bar updates
+   * both surfaces from a single source of truth. Falls back to 3rem if
+   * the variable hasn't been set yet (e.g. during initial paint).
    */
-  --top-bar-height: 0px;
+  --top-bar-height: var(--kubo-kid-top-bar-height, 3rem);
 
   /*
    * Most BlobbiPage surfaces are `bg-background` (with opacity variants
