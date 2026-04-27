@@ -4,6 +4,11 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-04-27
+
+- **KUBO-062: Wire kid selector pill avatar to real profile picture** — `cea698f5`
+  The pill in the parent header and both dropdown lists ("Switch to kid view" / "Switch to parent view") on [src/components/KuboKidSelector.tsx](src/components/KuboKidSelector.tsx) now reuse the existing [KidAvatar](src/components/KidAvatar.tsx) component (which itself uses [useAuthor](src/hooks/useAuthor.ts) → [profileCache](src/lib/profileCache.ts) IndexedDB-backed cache) instead of placeholder circles, so each kid's `kind:0` `picture` shows through. Indigo initial-letter fallback when no picture is set, and the original `<UserRound>` placeholder is preserved for the empty (no kid selected) state. No new hooks, no new fetches in the hot path — `KidAvatar` is already mounted on `KidDashboardPage`/`KidKeysPage`/`ParentFeedPage`, so the cache is virtually always warm before the selector renders. Three call sites, one file changed (+24/-17). `tsc --noEmit` clean; Vite compiled the file and `/` returned 200; full browser drive-through (logging in as a parent with kids whose `kind:0` carries a picture, opening the dropdown) was NOT performed and is still recommended before treating this as fully verified.
+
 ## 2026-04-24
 
 - **KUBO-067: Default feed to visual kinds only on fresh install** — `56c24284`

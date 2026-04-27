@@ -55,14 +55,12 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-060: Kid view — Favorites navbar item has no "add to favorites" affordance**
   The kid view's bottom navbar has a Favorites tab but there is no way to actually mark a post as a favorite from anywhere in the kid UI. Explore whether to reuse the existing bookmarks functionality (NIP-51 kind:10003 bookmark list, or kind:30003 categorized bookmarks) or design a kid-specific mechanism. Decide on the data model first, then add the "favorite" affordance on cards/video tiles in the kid feed and wire the Favorites tab to read from it.
 
-- **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
-  The kid selector pill in the top-right of the parent view has a placeholder circle for the selected kid's profile picture, but it isn't reading the actual picture from the kid's kind:0 metadata. Wire it to the selected kid's profile picture (via the existing profile/metadata hook used elsewhere in the app), with a sensible fallback when the kid has no picture set yet.
-
 ## Completed
 
 - **KUBO-053: Parent feed view — remove descriptions on "Edit feed settings" and "Feed preview" tiles**
 - **KUBO-054: Parent home — merge "Today's usage" bar into the Kids activity chart**
 - **KUBO-061: Kid view — add Blobby section to navbar (Home · Blobby · Favorites)**
+- **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
 
 ## Deferred to post-MVP
 
