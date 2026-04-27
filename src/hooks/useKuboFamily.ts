@@ -248,9 +248,9 @@ export async function clearTrustLevel(
 // ─── Kid settings ────────────────────────────────────────────────────────────
 
 export const DEFAULT_KID_SETTINGS: KidSettings = {
-  dailyLimitMin: 45,
-  windowStart: '16:00',
-  windowEnd: '19:00',
+  dailyLimitMin: 60,
+  windowStart: '08:00',
+  windowEnd: '21:00',
   age: 6,
   // Safe-by-default parental posture: on a fresh install a kid can see their
   // feed but can't tap into threads, comment, repost, react, zap, share, or
