@@ -48,6 +48,7 @@ import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
 import { AddKidPage } from "@/pages/AddKidPage";
 import { KidDashboardPage } from "@/pages/KidDashboardPage";
+import { KidWatchHistoryPage } from "@/pages/KidWatchHistoryPage";
 import { KidKeysPage } from "@/pages/KidKeysPage";
 import { EditKidSettingsPage } from "@/pages/EditKidSettingsPage";
 import { EditKidFeedSettingsPage } from "@/pages/EditKidFeedSettingsPage";
@@ -327,6 +328,7 @@ export function AppRouter() {
           <Route element={<KuboParentLayout />}>
             <Route path="/parent"               element={<Navigate to="/parent/home" replace />} />
             <Route path="/parent/home"          element={<KidDashboardPage    />} />
+            <Route path="/parent/watch-history" element={<KidWatchHistoryPage />} />
             <Route path="/parent/feed"          element={<ParentFeedPage      />} />
             {renderKuboFeedSourcesRoutes()}
             <Route path="/parent/upload"        element={<ContentUploaderPage />} />

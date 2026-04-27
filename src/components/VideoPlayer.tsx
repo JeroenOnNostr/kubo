@@ -21,6 +21,8 @@ interface VideoPlayerProps {
   title?: string;
   /** Artist / author name shown in OS media controls. */
   artist?: string;
+  /** Fires once per mount, the first time the underlying <video> emits `play`. */
+  onFirstPlay?: () => void;
 }
 
 /** Parses a NIP-94 `dim` string like "1280x720" into `{ width, height }`. */
@@ -72,10 +74,11 @@ function useHls(videoRef: React.RefObject<HTMLVideoElement | null>, src: string)
   return { isHls };
 }
 
-export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist }: VideoPlayerProps) {
+export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist, onFirstPlay }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasFiredFirstPlayRef = useRef(false);
   const { src, onError: onBlossomError } = useBlossomFallback(originalSrc);
   const { isHls } = useHls(videoRef, src);
 
@@ -235,7 +238,14 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
         {...({ 'webkit-playsinline': 'true' } as React.HTMLAttributes<HTMLVideoElement>)}
         {...({ 'x-webkit-airplay': 'allow' } as React.HTMLAttributes<HTMLVideoElement>)}
         onClick={handleVideoClick}
-        onPlay={() => { setIsPlaying(true); setHasStarted(true); }}
+        onPlay={() => {
+          setIsPlaying(true);
+          setHasStarted(true);
+          if (!hasFiredFirstPlayRef.current) {
+            hasFiredFirstPlayRef.current = true;
+            onFirstPlay?.();
+          }
+        }}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime ?? 0)}
         onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}

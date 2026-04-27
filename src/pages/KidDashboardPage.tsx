@@ -11,6 +11,7 @@ import {
 import { NavTile } from '@/components/NavTile';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { KidAvatar } from '@/components/KidAvatar';
+import { WatchHistoryStrip } from '@/pages/KidDashboardPage.WatchHistoryStrip';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
@@ -107,25 +108,7 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
         onClick={() => nav('/parent/kid-settings')}
       />
 
-      {/* Kids watch history — placeholder */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Kids watch history</h2>
-          <span className="text-[12px] text-muted-foreground">Watch full history</span>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col gap-2 shrink-0 w-40">
-              <div className="aspect-video w-full rounded-xl bg-muted" aria-hidden />
-              <div className="text-[12px] font-medium leading-tight">Lorem ipsum dolor sit amet</div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="size-3 rounded-full bg-muted-foreground/30" aria-hidden />
-                tanel
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <WatchHistoryStrip kidPubkey={kidPubkey} />
 
       {/* Kids activity */}
       <section className="flex flex-col gap-3">

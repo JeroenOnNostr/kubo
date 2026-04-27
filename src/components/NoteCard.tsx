@@ -92,6 +92,7 @@ import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNip05Verify } from "@/hooks/useNip05Verify";
 import { useOpenPost } from "@/hooks/useOpenPost";
+import { useRecordWatch } from "@/hooks/useRecordWatch";
 import { useProfileUrl } from "@/hooks/useProfileUrl";
 import { useShareOrigin } from "@/hooks/useShareOrigin";
 import { toast } from "@/hooks/useToast";
@@ -1319,7 +1320,7 @@ function PhotoContent({ event }: { event: NostrEvent }) {
 // ── NIP-71 Video content (kinds 21 & 22) ──────────────────────────────────────
 
 /** Parse the primary video url and thumbnail from NIP-71 imeta tags. */
-function parseVideoImeta(tags: string[][]): {
+export function parseVideoImeta(tags: string[][]): {
   url?: string;
   thumbnail?: string;
   duration?: string;
@@ -1371,6 +1372,35 @@ function VideoContent({ event }: { event: NostrEvent }) {
   const isShort = event.kind === 22;
   const formattedDuration = fmtDuration(duration);
   const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
+  const recordWatch = useRecordWatch();
+  // Resolve author name lazily for the watch-history snapshot. The cache is
+  // shared with NoteCard's own header lookup, so this is effectively free.
+  const author = useAuthor(event.pubkey);
+  const authorName = getDisplayName(author.data?.metadata, event.pubkey);
+
+  const handleFirstPlay = useCallback(() => {
+    if (event.kind !== 21 && event.kind !== 22) return;
+    const durationSec = duration ? parseFloat(duration) : undefined;
+    recordWatch({
+      eventId: event.id,
+      kind: event.kind,
+      authorPubkey: event.pubkey,
+      authorName,
+      title: title ?? "",
+      thumbnailUrl: thumbnail,
+      durationSec:
+        durationSec && !Number.isNaN(durationSec) ? durationSec : undefined,
+    });
+  }, [
+    recordWatch,
+    event.id,
+    event.kind,
+    event.pubkey,
+    authorName,
+    title,
+    thumbnail,
+    duration,
+  ]);
 
   if (!url) return null;
 
@@ -1383,7 +1413,12 @@ function VideoContent({ event }: { event: NostrEvent }) {
           isShort ? "max-w-[280px]" : "",
         )}
       >
-        <VideoPlayer src={url} poster={thumbnail} title={title ?? undefined} />
+        <VideoPlayer
+          src={url}
+          poster={thumbnail}
+          title={title ?? undefined}
+          onFirstPlay={handleFirstPlay}
+        />
         {formattedDuration && (
           <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded font-medium pointer-events-none">
             {formattedDuration}
