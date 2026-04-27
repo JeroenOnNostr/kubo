@@ -30,7 +30,7 @@ interface NextPostFABProps {
   getPostElement: (idx: number) => HTMLElement | null;
 }
 
-const COOLDOWN_MS = 3000;
+const COOLDOWN_MS = 2000;
 
 export function NextPostFAB({
   onAdvance,
