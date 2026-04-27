@@ -79,8 +79,9 @@ export function NextPostFAB({
       disabled={isCoolingDown}
       aria-label="Next post"
       aria-busy={isCoolingDown}
-      className="fixed right-4 bottom-[72px] z-50 size-14 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform disabled:active:scale-100"
+      className="fixed right-4 z-50 size-14 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform disabled:active:scale-100"
       style={{
+        bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
         background: '#F97316',
         opacity: isCoolingDown ? 0.6 : 1,
       }}
