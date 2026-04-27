@@ -1,5 +1,9 @@
 # Project Overview
 
+## PRIORITY: Maintain Forward-Compatibility with Ditto
+
+Kubo is a soft fork of [Ditto](https://github.com/soapbox-pub/ditto) and pulls `upstream/main` periodically. **Every bugfix, feature, refactor, or UI change in this repo must be designed to survive future upstream Ditto merges cleanly.** Prefer wrapping/composing over rewriting Ditto code, keep diffs to Ditto-owned files surgical, and favor new Kubo-owned files over edits to shared ones. When proposing an approach, call out its forward-compat implication explicitly.
+
 This project is a Nostr client application built with React 18.x, TailwindCSS 3.x, Vite, shadcn/ui, and Nostrify.
 
 ## Technology Stack
