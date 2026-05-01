@@ -1,36 +1,68 @@
-# Ditto
+# Kubo
 
-Your content. Your vibe. Your rules. A fun, customizable [Nostr](https://nostr.com/) client that puts you in control.
+Safe social for kids. A child-safe video platform built on [Nostr](https://nostr.com/) that lets parents curate their child's content world through Web of Trust filters.
 
-**[ditto.pub](https://ditto.pub)** | **[Docs](https://docs.ditto.pub)** | **[Source](https://gitlab.com/soapbox-pub/ditto)**
+**[kubo.watch](https://kubo.watch)** | **[Source](https://github.com/JeroenOnNostr/kubo)**
 
 ## About
 
-Ditto is an open-source, decentralized social media client built on the Nostr protocol. It's designed for people who want to have fun online without feeding the Big Tech machine. Express yourself with custom themes, Lightning payments, and an ever-growing set of content types -- all while owning your identity and data.
+Kubo gives parents full agency over what their children can watch. Instead of relying on opaque algorithms, Kubo uses real relationships to curate content -- you explicitly approve family members, friends, and communities who can contribute to your child's content experience. Built on the Trust Extended Permissions Protocol (TEPP) and the Nostr protocol, every piece of content is traceable back to someone you trust.
 
-Made by [Soapbox](https://soapbox.pub).
+Build your child's content world from the inside out -- starting with your inner circle, expanding to friends of friends, and extending it with communities.
 
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/home.jpg" alt="Parent dashboard" width="200" />
-  <img src="screenshots/kid-feed.jpg" alt="Kid feed view" width="200" />
-  <img src="screenshots/kid-settings.jpg" alt="Kid settings" width="200" />
+  <img src="screenshots/home.jpg" alt="Parent dashboard with watch history and activity" width="200" />
+  <img src="screenshots/kid-feed.jpg" alt="Kid feed — video-first, simple interface" width="200" />
+  <img src="screenshots/kid-settings.jpg" alt="Kid settings — time limits, view-only mode, post actions" width="200" />
 </p>
 <p align="center">
-  <img src="screenshots/feed-settings.jpg" alt="Feed settings" width="200" />
-  <img src="screenshots/upload.jpg" alt="Upload content" width="200" />
+  <img src="screenshots/feed-settings.jpg" alt="Feed sources — relays, communities, follow packs, profiles" width="200" />
+  <img src="screenshots/upload.jpg" alt="Upload video or image content" width="200" />
 </p>
 
 ## Features
 
-- **Theming** -- 9 built-in theme presets, 19 CSS token properties for full customization, and the ability to publish and share themes as Nostr events
-- **Infinite Content Types** -- Text notes, articles, short-form videos (Divines), live streams, polls, follow packs, color moments, magic decks, geocaching, and Webxdc mini-apps
-- **Lightning Payments** -- Zap posts and profiles with sats via Nostr Wallet Connect (NWC) or WebLN
-- **Private Messaging** -- End-to-end encrypted DMs (NIP-04 and NIP-17)
-- **Comments** -- Comment on anything: posts, URLs, profiles, hashtags, books, and more (NIP-22)
-- **Self-Hosting** -- Builds to static HTML/JS/CSS. Deploy anywhere -- GitHub Pages, Netlify, Vercel, a VPS, or a Raspberry Pi
-- **Mobile** -- Android native app via Capacitor, responsive design for all screen sizes
+### Parent controls
+- **Dashboard** -- See your kid's watch history and weekly activity at a glance
+- **Time limits** -- Set daily screen time (15--180 min) and an allowed time window
+- **Per-child settings** -- Each child gets their own profile with age-appropriate controls
+- **Post actions** -- Toggle which actions (reply, repost, reactions, zaps) are visible per child
+- **View-only mode** -- Disable post navigation so kids can only watch, not browse
+- **Scroll cap** -- Replace infinite scroll with a "Next post" button so kids see one post at a time
+
+### Trust system
+- **Three trust levels** -- View, Interact, and Extend -- giving you granular control over who shapes your child's feed
+- **People & places** -- Assign trust to individual profiles or entire communities
+- **Full transparency** -- You see exactly who approved what content
+
+### Kid experience
+- **Video-first feed** -- Clean, distraction-free interface focused on video content
+- **Favorites** -- Kids can star posts they love
+- **Blobbi** -- Optional virtual pet companion tab
+- **Parent gate** -- 6-digit code required for any setting changes
+
+### Feed curation
+- **Relays** -- Pull content from specific Nostr relays
+- **Communities** -- Add moderated NIP-72 communities
+- **Follow packs** -- Import curated people lists others have shared
+- **Profiles** -- Follow individual creators directly
+- **Feed preview** -- Preview your child's feed before they see it
+
+### Built on Nostr
+- **Decentralized** -- No single company controls the content or the platform
+- **Own your identity** -- Parent and child keys are real Nostr keypairs
+- **Content upload** -- Publish videos and images (up to 200 MB) directly from the app
+
+## How it works
+
+1. **Create a parent account** -- Sign up with a Nostr keypair (or create one)
+2. **Add your kids** -- Create a child profile with their own keypair
+3. **Curate their feed** -- Add relays, communities, follow packs, and individual profiles as content sources
+4. **Set trust levels** -- Decide who can contribute content (view, interact, or extend)
+5. **Configure safety** -- Set time limits, allowed hours, and toggle post actions
+6. **Hand over the phone** -- Your kid gets a simple, filtered feed with only the content you approved
 
 ## Getting Started
 
@@ -42,8 +74,8 @@ Made by [Soapbox](https://soapbox.pub).
 ### Development
 
 ```sh
-git clone https://gitlab.com/soapbox-pub/ditto.git
-cd ditto
+git clone https://github.com/JeroenOnNostr/kubo.git
+cd kubo
 npm install
 npm run dev
 ```
@@ -57,61 +89,6 @@ npm run build
 ```
 
 The built site is output to `dist/`.
-
-### Test
-
-Runs type-checking, linting, unit tests, and a production build:
-
-```sh
-npm test
-```
-
-## Configuration
-
-Ditto is configured through a `ditto.json` file at the project root, read at build time. This file is gitignored so each deployment can have its own configuration.
-
-```jsonc
-{
-  "theme": "dark",
-  "relayMetadata": {
-    "relays": [
-      { "url": "wss://relay.ditto.pub", "read": true, "write": true }
-    ]
-  },
-  "blossomServers": ["https://blossom.ditto.pub"],
-  "feedSettings": {
-    "showPosts": true,
-    "showReposts": true,
-    "showArticles": true
-    // ...and more content type toggles
-  }
-}
-```
-
-Configuration is resolved in three layers (highest priority first):
-
-1. **User settings** stored in localStorage
-2. **Build config** from `ditto.json`
-3. **Hardcoded defaults**
-
-Use an alternate config file path with: `CONFIG_FILE=./my-config.json npm run build`
-
-### Custom Branding
-
-For self-hosted instances:
-
-- Replace `public/logo.svg` and `public/logo.png` with your logo
-- Update the app name in `index.html` and `public/manifest.webmanifest`
-- Replace `public/og-image.jpg` for social sharing previews
-- Set default relays and upload servers in `ditto.json`
-
-## Deployment
-
-Ditto builds to static files and can be deployed anywhere that serves HTML.
-
-- **GitHub Pages / GitLab Pages** -- Push to `main` and CI auto-deploys
-- **Netlify / Vercel** -- Connect your fork and deploy. A `_redirects` file is included for SPA routing
-- **VPS / Any web server** -- Build and copy `dist/` to your server. Configure SPA routing (e.g., Nginx `try_files $uri $uri/ /index.html`)
 
 ### Android
 
@@ -137,29 +114,9 @@ npx cap open android
 | Mobile | Capacitor |
 | Testing | Vitest + React Testing Library |
 
-## Project Structure
+## Acknowledgments
 
-```
-src/
-  components/     UI components (100+), including shadcn/ui primitives
-  hooks/          Custom React hooks (65+)
-  pages/          Page components for each route (30+)
-  contexts/       React context providers
-  lib/            Utilities and shared logic
-  test/           Test setup and helpers
-public/           Static assets, icons, manifest
-```
-
-## Contributing
-
-We welcome contributions but have high standards. Please read the full [Contributing Guide](CONTRIBUTING.md) before submitting a merge request. The short version:
-
-- **Bug fixes**: One bug, one MR. Keep it small and focused.
-- **New features**: Must link to an existing issue and align with the [Ditto Philosophy](https://about.ditto.pub/philosophy).
-- **Required**: Live preview URL, before/after screenshots, completed self-review checklist.
-- **Required tools**: Claude Opus 4.6 (or latest frontier model), an AI coding agent with plan mode.
-
-Read the [Ditto Philosophy](https://about.ditto.pub/philosophy) to understand what Ditto is and isn't.
+Kubo is a fork of [Ditto](https://github.com/soapbox-pub/ditto) by [Soapbox](https://soapbox.pub). Ditto provides the excellent Nostr client foundation that Kubo builds its child-safety features on top of.
 
 ## License
 
