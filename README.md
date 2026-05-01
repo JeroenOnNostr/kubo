@@ -10,6 +10,18 @@ Ditto is an open-source, decentralized social media client built on the Nostr pr
 
 Made by [Soapbox](https://soapbox.pub).
 
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/home.jpg" alt="Parent dashboard" width="200" />
+  <img src="screenshots/kid-feed.jpg" alt="Kid feed view" width="200" />
+  <img src="screenshots/kid-settings.jpg" alt="Kid settings" width="200" />
+</p>
+<p align="center">
+  <img src="screenshots/feed-settings.jpg" alt="Feed settings" width="200" />
+  <img src="screenshots/upload.jpg" alt="Upload content" width="200" />
+</p>
+
 ## Features
 
 - **Theming** -- 9 built-in theme presets, 19 CSS token properties for full customization, and the ability to publish and share themes as Nostr events
