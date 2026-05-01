@@ -56,3 +56,21 @@ export function isPlayableVideoEvent(event: NostrEvent): boolean {
   if (event.kind !== 21 && event.kind !== 22) return false;
   return !!parseVideoImeta(event.tags).url;
 }
+
+/** True when the URL points at YouTube's watch / embed / shorts / youtu.be / nocookie domains. */
+export function isYouTubeUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === 'youtube.com' ||
+      host === 'www.youtube.com' ||
+      host === 'm.youtube.com' ||
+      host === 'youtu.be' ||
+      host === 'youtube-nocookie.com' ||
+      host === 'www.youtube-nocookie.com'
+    );
+  } catch {
+    return false;
+  }
+}

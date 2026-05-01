@@ -85,6 +85,9 @@ import { getAvatarShape } from "@/lib/avatarShape";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { YouTubeEmbed } from "@/components/YouTubeEmbed";
+import { extractYouTubeId } from "@/lib/linkEmbed";
+import { isYouTubeUrl } from "@/lib/videoEvent";
 import { VoiceMessagePlayer } from "@/components/VoiceMessagePlayer";
 import { ZapDialog } from "@/components/ZapDialog";
 import { useAppContext } from "@/hooks/useAppContext";
@@ -1410,6 +1413,8 @@ function VideoContent({ event }: { event: NostrEvent }) {
 
   if (!url) return null;
 
+  const youtubeId = isYouTubeUrl(url) ? extractYouTubeId(url) : null;
+
   return (
     <div className="mt-2 space-y-2">
       {title && <p className="font-semibold text-[15px]">{title}</p>}
@@ -1418,14 +1423,19 @@ function VideoContent({ event }: { event: NostrEvent }) {
           "relative rounded-xl overflow-hidden bg-muted",
           isShort ? "max-w-[280px]" : "",
         )}
+        onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
-        <VideoPlayer
-          src={url}
-          poster={thumbnail}
-          title={title ?? undefined}
-          onFirstPlay={handleFirstPlay}
-        />
-        {formattedDuration && (
+        {youtubeId ? (
+          <YouTubeEmbed videoId={youtubeId} />
+        ) : (
+          <VideoPlayer
+            src={url}
+            poster={thumbnail}
+            title={title ?? undefined}
+            onFirstPlay={handleFirstPlay}
+          />
+        )}
+        {formattedDuration && !youtubeId && (
           <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded font-medium pointer-events-none">
             {formattedDuration}
           </div>
