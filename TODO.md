@@ -4,6 +4,9 @@ Issue prefix: `KUBO-xxx`
 
 ## Open
 
+- **KUBO-087: Kid post detail — YouTube videos don't play inline**
+  On `/kid/post/:id`, `KidPostHero` renders kind 21/22 video posts with `<VideoPlayer>` only, which can't play YouTube URLs — the user sees a thumbnail with an inert play button. Feed already handles this via `NoteCard`'s `VideoContent` branch (`isYouTubeUrl` + `extractYouTubeEmbedInfo` → `<YouTubeEmbed>`). Fix: apply the same branch in `KidPostHero` so YouTube posts use `<YouTubeEmbed>` (with `aspect='short'` for kind 22) and non-YouTube URLs keep using `<VideoPlayer>`.
+
 - **KUBO-001: Upload flow — parent posts, signed by kid's key**
   Upload UX lives in the parent app, but the resulting event is signed with the kid's private key (the parent is acting on behalf of the kid, not posting from their own identity). Relevant to PR 4 (Upload). Figure out key-access model: does the parent hold the kid's nsec, unlock it per-upload, or sign via a delegation/NIP-46-style handoff?
 
@@ -61,6 +64,9 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-054: Parent home — merge "Today's usage" bar into the Kids activity chart**
 - **KUBO-061: Kid view — add Blobby section to navbar (Home · Blobby · Favorites)**
 - **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
+- **KUBO-085: Kid-themed profile viewer (`/kid/profile/:npub`)**
+- **KUBO-086: Kid-themed post detail (`/kid/post/:id`) + `KidNavigationInterceptor`**
+- **KUBO-088: Fix kid lock-screen stuck on fresh load (screen-time tracker race)**
 
 ## Deferred to post-MVP
 
