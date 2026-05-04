@@ -206,6 +206,7 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: Kid
               if (postRefs) postRefs.current[idx] = el;
             }}
             data-kid-feed-item={idx}
+            data-kubo-hide-video-desc
             className={cardWrapperClass}
             style={capStyle}
             aria-hidden={ariaHidden}

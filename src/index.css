@@ -734,3 +734,35 @@
   50% { transform: translateX(3px); }
 }
 
+/* Kid main feed: hide the NIP-71 (kind 21/22) video description and
+   hashtag list. Kids only see those after opening the note (when
+   view-only is off). The video container <div> rendered by Ditto's
+   VideoContent always wraps either a <video>, an <iframe>, or
+   YouTubeEmbed's pre-click <button> facade — but several wrapper levels
+   deep, so :has() uses descendant (no `>`). The description <p> sits as
+   the next sibling, then the hashtag <div> after that. Scoped to the kid
+   feed wrapper, so all other surfaces (PostDetailPage, Videos page, etc.)
+   keep showing the description and hashtags normally. Structural selector
+   means no Tailwind class names — survives upstream Ditto refactors.
+
+   The leading `div >` is load-bearing (KUBO-075): both VideoContent's
+   outer `mt-2 space-y-2` wrapper and its inner playable container have
+   the playable element as a descendant, so a bare `div:has(video)` would
+   match BOTH — and the outer wrapper's next sibling is the action-button
+   row, which would then get hidden along with the description. Requiring
+   the matched div to itself be a child of a div keeps only the inner
+   container in scope: the outer wrapper's parent is `<article>`, not a
+   div, so it (and the action-buttons row, also a child of `<article>`)
+   are excluded. */
+[data-kubo-hide-video-desc] div > div:has(video) + p,
+[data-kubo-hide-video-desc] div > div:has(iframe) + p,
+[data-kubo-hide-video-desc] div > div:has(button[aria-label="Play video"]) + p,
+[data-kubo-hide-video-desc] div > div:has(video) + p + div,
+[data-kubo-hide-video-desc] div > div:has(iframe) + p + div,
+[data-kubo-hide-video-desc] div > div:has(button[aria-label="Play video"]) + p + div,
+[data-kubo-hide-video-desc] div > div:has(video) + div,
+[data-kubo-hide-video-desc] div > div:has(iframe) + div,
+[data-kubo-hide-video-desc] div > div:has(button[aria-label="Play video"]) + div {
+  display: none;
+}
+
