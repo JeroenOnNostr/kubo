@@ -259,7 +259,7 @@ function KidFavoritesView({
               style={{ background: 'rgba(255,255,255,0.1)' }}
               data-kubo-hide-video-desc
             >
-              <NoteCard event={event} viewOnly={isViewOnly} />
+              <NoteCard event={event} viewOnly={isViewOnly} className="border-b-0" />
             </div>
           ))}
         </div>

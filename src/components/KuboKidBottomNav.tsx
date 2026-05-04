@@ -23,9 +23,9 @@ export function KuboKidBottomNav({ showBlobbi = false }: KuboKidBottomNavProps) 
   const location = useLocation();
 
   const tabs = [
-    { to: '/kid',           icon: Home, label: 'Home'      },
-    ...(showBlobbi ? [{ to: '/kid/blobbi', icon: Egg, label: 'Blobbi' }] : []),
-    { to: '/kid/favorites', icon: Star, label: 'Favorites' },
+    { to: '/kid',           icon: Home, label: 'Home',      activeColor: 'text-white'       },
+    ...(showBlobbi ? [{ to: '/kid/blobbi', icon: Egg, label: 'Blobbi', activeColor: 'text-fuchsia-400' }] : []),
+    { to: '/kid/favorites', icon: Star, label: 'Favorites', activeColor: 'text-yellow-400'  },
   ] as const;
 
   return (
@@ -34,7 +34,7 @@ export function KuboKidBottomNav({ showBlobbi = false }: KuboKidBottomNavProps) 
       style={{ background: '#142E6B', borderTop: '1px solid rgba(255,255,255,0.08)' }}
     >
       <div className="h-14 flex items-center">
-        {tabs.map(({ to, icon: Icon, label }) => {
+        {tabs.map(({ to, icon: Icon, label, activeColor }) => {
           const active = location.pathname === to;
           return (
             <NavLink
@@ -44,10 +44,10 @@ export function KuboKidBottomNav({ showBlobbi = false }: KuboKidBottomNavProps) 
               end={to === '/kid'}
               className={cn(
                 'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors',
-                active ? 'text-white' : 'text-white/60',
+                active ? activeColor : 'text-white/60',
               )}
             >
-              <Icon className="size-6" />
+              <Icon className="size-6" fill={active ? 'currentColor' : 'none'} />
               <span className="text-[11px] font-semibold">{label}</span>
             </NavLink>
           );

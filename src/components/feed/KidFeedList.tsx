@@ -211,7 +211,7 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: Kid
             style={capStyle}
             aria-hidden={ariaHidden}
           >
-            <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} />
+            <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} className="border-b-0" />
           </div>
         );
       })}
