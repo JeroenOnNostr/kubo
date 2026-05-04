@@ -6,6 +6,15 @@ Completed work, most recent first.
 
 ## 2026-05-04
 
+- **KUBO-082: Per-tab accent color in kid bottom nav + drop tile borders** — `b29bf701`
+  Each tab in `KuboKidBottomNav` now lights up in its own color when active, with the icon also fill-rendered (not just outlined): Home stays white, Blobbi turns fuchsia, Favorites turns yellow. Inactive icons remain `text-white/60` outlines. Also passes `border-b-0` on the `NoteCard` rendered inside `KidFeedList` and `KidHomePage`'s Favorites grid so the universal note-card border doesn't double up against the kid-feed wrapper's own divider/spacing.
+
+- **KUBO-081: Letterbox video tiles in black, kill YouTube hairline gap** — `2d446086`
+  `VideoContent` wraps its player in `bg-black` (was `bg-muted`) so the `rounded-xl` tile letterboxes any aspect mismatch in black instead of the surrounding muted-gray. Passes `mt-0 rounded-xl border-0` to `VideoPlayer` so its default top margin and border don't fight the outer wrapper's clip. `YouTubeEmbed` switches from a `padding-bottom`-percentage aspect trick to CSS `aspect-ratio`, drops the outer border, and stretches the iframe by 1px on the bottom and right edges of its absolutely positioned container so sub-pixel rounding can't leave the white hairline that was visible on rounded YouTube cards.
+
+- **KUBO-080: Per-kid showHashtags toggle for media tile chip rows** — `88c6967d`
+  Added a `showHashtags` flag to `FeedSettings` and `KidSettings` (defaults: on globally, off per-kid) that gates the chip-row of `#t` tags on photo (kind 20), video (kind 21/22), and Divine (kind 34236) tiles inside `NoteCard`. Inline `#…` hashtags inside kind-1 text content are unaffected. Wired through the standard inherit-when-undefined path: per-kid override on `EditKidSettingsPage`, global default on `HiddenFeaturesSettingsPage`, fallback chain via `useActionVisibility`. Removed the structural CSS hashtag-hiding rule for the kid feed in `index.css` — the React-level toggle supersedes it, and keeping both would silently override the per-kid setting whenever a parent flipped it on.
+
 - **KUBO-079: Hide video description and hashtags on kid Favorites tiles** — `56226aff`
   Follow-up to KUBO-077. The marker attribute `data-kubo-hide-video-desc` was set on the Home feed wrapper in [KidFeedList](src/components/feed/KidFeedList.tsx) but `KidFavoritesView` in [src/pages/KidHomePage.tsx](src/pages/KidHomePage.tsx) builds its own per-event wrapper and was missing the marker, so long YouTube descriptions (e.g. multi-paragraph LTT/Odoo blurbs) still leaked through on the Favorites tab. Added the same attribute to the Favorites wrapper so the existing CSS at [src/index.css:757-767](src/index.css#L757) applies. One-line change. `tsc --noEmit` clean, `eslint` clean. Browser-verified by user.
 
