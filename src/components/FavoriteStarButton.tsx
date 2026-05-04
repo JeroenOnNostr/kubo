@@ -16,15 +16,13 @@ export function FavoriteStarButton({ eventId, overlay }: { eventId: string; over
   const { isFavorited, toggleFavorite } = useKidFavorites();
   const favorited = isFavorited(eventId);
 
-  const colorClasses = favorited
-    ? "text-amber-400 hover:text-amber-400/80 hover:bg-amber-400/10"
-    : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10";
+  const colorClasses = "text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10";
 
   return (
     <button
       className={
         overlay
-          ? `absolute top-2 right-2 z-10 p-2 rounded-full bg-background/80 backdrop-blur-sm shadow-sm transition-colors ${colorClasses}`
+          ? `absolute top-3 right-4 z-10 size-11 flex items-center justify-center rounded-full transition-colors ${colorClasses}`
           : `flex items-center gap-1.5 p-2 rounded-full transition-colors ${colorClasses}`
       }
       title={favorited ? 'Remove favorite' : 'Favorite'}
@@ -35,7 +33,7 @@ export function FavoriteStarButton({ eventId, overlay }: { eventId: string; over
         toggleFavorite.mutate(eventId);
       }}
     >
-      <Star className={`${overlay ? 'size-4' : 'size-5'} ${favorited ? 'fill-current' : ''}`} />
+      <Star className={`${overlay ? 'size-7' : 'size-5'} ${favorited ? 'fill-current' : ''}`} />
     </button>
   );
 }
