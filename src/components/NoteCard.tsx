@@ -379,7 +379,8 @@ export const NoteCard = memo(function NoteCard({
       target.closest("[data-vaul-drawer-overlay]") ||
       target.closest('[data-testid="zap-modal"]') ||
       target.closest("button") ||
-      target.closest("a")
+      target.closest("a") ||
+      target.closest("[data-kubo-video]")
     ) {
       return;
     }
@@ -397,7 +398,8 @@ export const NoteCard = memo(function NoteCard({
       target.closest("[data-vaul-drawer-overlay]") ||
       target.closest('[data-testid="zap-modal"]') ||
       target.closest("button") ||
-      target.closest("a")
+      target.closest("a") ||
+      target.closest("[data-kubo-video]")
     ) {
       return;
     }
@@ -1427,6 +1429,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
     <div className="mt-2 space-y-2">
       {title && <p className="font-semibold text-[15px]">{title}</p>}
       <div
+        data-kubo-video
         className="relative rounded-xl overflow-hidden bg-black"
         onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
@@ -1529,6 +1532,7 @@ function VineMedia({
       {imeta?.url && (
         <div
           ref={containerRef}
+          data-kubo-video
           className="relative mt-3 rounded-2xl overflow-hidden cursor-pointer"
           onClick={handlePlayToggle}
         >

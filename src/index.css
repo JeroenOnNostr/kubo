@@ -765,3 +765,20 @@
   display: none;
 }
 
+/* KUBO-085 / KUBO-086: in view-only kid mode, kill pointer events on
+   profile-link and note-link anchors inside a kid-rendered NoteCard.
+   This is what stops Ditto's upstream <ProfileHoverCard> (a Radix
+   HoverCard whose trigger opens on pointerenter / pointerdown) from
+   popping a profile preview when a kid hovers or taps the avatar /
+   display-name. The interceptor's onClickCapture handles the rest of
+   the navigation surface; pointer-events:none is the only way to defeat
+   the hover trigger without forking ProfileHoverCard or NoteCard. */
+[data-kid-view-only="true"] a[href^="/npub1"],
+[data-kid-view-only="true"] a[href^="/nevent1"],
+[data-kid-view-only="true"] a[href^="/note1"],
+[data-kid-view-only="true"] a[href^="/naddr1"],
+[data-kid-view-only="true"] a[href^="/_@"],
+[data-kid-view-only="true"] a[href*="@"][href^="/"]:not([href*="/t/"]):not([href*="/r/"]):not([href*="/i/"]) {
+  pointer-events: none;
+}
+

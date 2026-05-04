@@ -1,6 +1,8 @@
 import { Route } from 'react-router-dom';
 
 import { KidHomePage } from '@/pages/KidHomePage';
+import { KidPostDetailPage } from '@/pages/kid/KidPostDetailPage';
+import { KidProfileViewPage } from '@/pages/kid/KidProfileViewPage';
 import { KuboKidBlobbiPage } from '@/components/KuboKidBlobbiPage';
 
 /**
@@ -18,9 +20,11 @@ import { KuboKidBlobbiPage } from '@/components/KuboKidBlobbiPage';
 export function renderKuboKidRoutes() {
   return (
     <>
-      <Route path="/kid"           element={<KidHomePage      />} />
-      <Route path="/kid/blobbi"    element={<KuboKidBlobbiPage />} />
-      <Route path="/kid/favorites" element={<KidHomePage      />} />
+      <Route path="/kid"               element={<KidHomePage         />} />
+      <Route path="/kid/blobbi"        element={<KuboKidBlobbiPage   />} />
+      <Route path="/kid/favorites"     element={<KidHomePage         />} />
+      <Route path="/kid/profile/:npub" element={<KidProfileViewPage  />} />
+      <Route path="/kid/post/:id"      element={<KidPostDetailPage   />} />
     </>
   );
 }

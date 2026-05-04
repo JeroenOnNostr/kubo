@@ -112,7 +112,7 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
             title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
             allowFullScreen
-            className="absolute top-0 left-0 -bottom-px -right-px"
+            className="absolute inset-0 w-full h-full -mb-px -mr-px"
           />
         ) : (
           <button

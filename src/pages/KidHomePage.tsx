@@ -10,6 +10,7 @@ import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { NextPostFAB } from '@/components/kid/NextPostFAB';
 import { KidFeedList } from '@/components/feed/KidFeedList';
+import { KidNavigationInterceptor } from '@/components/feed/KidNavigationInterceptor';
 import { NoteCard } from '@/components/NoteCard';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -259,7 +260,13 @@ function KidFavoritesView({
               style={{ background: 'rgba(255,255,255,0.1)' }}
               data-kubo-hide-video-desc
             >
-              <NoteCard event={event} viewOnly={isViewOnly} className="border-b-0" />
+              <KidNavigationInterceptor
+                pubkey={event.pubkey}
+                eventId={event.id}
+                viewOnly={isViewOnly}
+              >
+                <NoteCard event={event} viewOnly={isViewOnly} className="border-b-0" />
+              </KidNavigationInterceptor>
             </div>
           ))}
         </div>

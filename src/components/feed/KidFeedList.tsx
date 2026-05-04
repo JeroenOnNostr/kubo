@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import type { MutableRefObject } from 'react';
 
+import { KidNavigationInterceptor } from '@/components/feed/KidNavigationInterceptor';
 import { NoteCard } from '@/components/NoteCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -211,7 +212,17 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: Kid
             style={capStyle}
             aria-hidden={ariaHidden}
           >
-            <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} className="border-b-0" />
+            {variant === 'kid' ? (
+              <KidNavigationInterceptor
+                pubkey={item.event.pubkey}
+                eventId={item.event.id}
+                viewOnly={isViewOnly}
+              >
+                <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} className="border-b-0" />
+              </KidNavigationInterceptor>
+            ) : (
+              <NoteCard event={item.event} repostedBy={item.repostedBy} viewOnly={isViewOnly} className="border-b-0" />
+            )}
           </div>
         );
       })}
