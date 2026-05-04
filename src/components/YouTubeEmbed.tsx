@@ -96,25 +96,28 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
 
   return (
     <div
-      className={cn('rounded-2xl overflow-hidden border border-border', className)}
+      className={cn('rounded-xl overflow-hidden', className)}
       onClick={(e) => e.stopPropagation()}
     >
       <div
         className="relative w-full"
-        style={{ paddingBottom: aspect === 'short' ? '177.78%' : '56.25%' }}
+        style={{ aspectRatio: aspect === 'short' ? '9 / 16' : '16 / 9' }}
       >
         {activated ? (
+          // Stretched 1px beyond the wrapper on bottom/right to hide the
+          // sub-pixel hairline that aspect-ratio rounding can leave between
+          // the iframe edge and the parent's overflow-hidden clip.
           <iframe
             src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
             title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
             allowFullScreen
-            className="absolute inset-0 w-full h-full"
+            className="absolute top-0 left-0 -bottom-px -right-px"
           />
         ) : (
           <button
             type="button"
-            className="absolute inset-0 w-full h-full cursor-pointer bg-black group"
+            className="block w-full h-full cursor-pointer bg-black group"
             onClick={() => setActivated(true)}
             aria-label="Play video"
           >

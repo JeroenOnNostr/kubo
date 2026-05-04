@@ -1427,7 +1427,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
     <div className="mt-2 space-y-2">
       {title && <p className="font-semibold text-[15px]">{title}</p>}
       <div
-        className="relative rounded-xl overflow-hidden bg-muted"
+        className="relative rounded-xl overflow-hidden bg-black"
         onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
         {youtubeId ? (
@@ -1440,6 +1440,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
             blurhash={blurhash}
             title={title ?? undefined}
             onFirstPlay={handleFirstPlay}
+            className="mt-0 rounded-xl border-0"
           />
         )}
         {formattedDuration && !youtubeId && (
