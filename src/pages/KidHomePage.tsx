@@ -257,6 +257,7 @@ function KidFavoritesView({
               key={event.id}
               className="rounded-2xl overflow-hidden"
               style={{ background: 'rgba(255,255,255,0.1)' }}
+              data-kubo-hide-video-desc
             >
               <NoteCard event={event} viewOnly={isViewOnly} />
             </div>
