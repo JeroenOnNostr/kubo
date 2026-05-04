@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
@@ -117,17 +117,11 @@ export function KidPostDetailPage() {
             onClick={() => nav(`/kid/profile/${authorNpub}`)}
             className="mx-4 flex items-center gap-3 px-3 py-2 rounded-xl text-left bg-white/10 hover:bg-white/15 transition-colors active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           >
-            <div
-              className="size-10 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-sm font-semibold text-white"
-              style={{ backgroundColor: authorPicture ? 'transparent' : '#6366F1' }}
-              aria-hidden
-            >
-              {authorPicture ? (
-                <img src={authorPicture} alt="" className="size-full object-cover" />
-              ) : (
-                authorName[0]?.toUpperCase() || '?'
-              )}
-            </div>
+            <KidAvatar
+              picture={authorPicture}
+              name={authorName}
+              className="size-10 text-sm"
+            />
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold text-white truncate">{authorName}</div>
               <div className="text-[11px] text-white/60 truncate">View profile</div>
@@ -368,17 +362,11 @@ function KidCommentRow({ comment }: { comment: NostrEvent }) {
 
   return (
     <div className="flex gap-3 p-3 rounded-xl bg-white/10">
-      <div
-        className="size-8 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-semibold text-white"
-        style={{ backgroundColor: picture ? 'transparent' : '#6366F1' }}
-        aria-hidden
-      >
-        {picture ? (
-          <img src={picture} alt="" className="size-full object-cover" />
-        ) : (
-          name[0]?.toUpperCase() || '?'
-        )}
-      </div>
+      <KidAvatar
+        picture={picture}
+        name={name}
+        className="size-8 text-xs"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="text-[12px] font-semibold text-white truncate">{name}</span>
@@ -419,6 +407,46 @@ function CenteredMessage({ children }: { children: React.ReactNode }) {
       >
         Go back
       </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Avatar
+// ---------------------------------------------------------------------------
+
+// referrerPolicy="no-referrer" stops referrer-based hotlink rejection
+// (notably YouTube's yt3.ggpht.com), and onError falls back to the
+// initial-letter circle when the image still fails to load.
+function KidAvatar({
+  picture,
+  name,
+  className,
+}: {
+  picture: string | undefined;
+  name: string;
+  className: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const showImage = !!picture && !broken;
+  return (
+    <div
+      className={`rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center font-semibold text-white ${className}`}
+      style={{ backgroundColor: showImage ? 'transparent' : '#6366F1' }}
+      aria-hidden
+    >
+      {showImage ? (
+        <img
+          src={picture}
+          alt=""
+          className="size-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        name[0]?.toUpperCase() || '?'
+      )}
     </div>
   );
 }
