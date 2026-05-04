@@ -46,6 +46,7 @@ import { KuboPlaceholderPage } from "@/components/KuboPlaceholderPage";
 import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
+import { ParentLoginPage } from "@/pages/ParentLoginPage";
 import { AddKidPage } from "@/pages/AddKidPage";
 import { KidDashboardPage } from "@/pages/KidDashboardPage";
 import { KidWatchHistoryPage } from "@/pages/KidWatchHistoryPage";
@@ -349,6 +350,7 @@ export function AppRouter() {
           <Route element={<KuboOnboardLayout />}>
             <Route path="/onboard/welcome"       element={<WelcomePage />} />
             <Route path="/onboard/create-parent" element={<CreateParentAccountPage />} />
+            <Route path="/onboard/login"         element={<ParentLoginPage />} />
             <Route path="/onboard/add-kid"       element={<AddKidPage />} />
           </Route>
 

@@ -10,6 +10,7 @@ import { toast } from '@/hooks/useToast';
 import { useLoginActions } from '@/hooks/useLoginActions';
 import { useAppContext } from '@/hooks/useAppContext';
 import { onboardIdentity } from '@/lib/kuboOnboarding';
+import { setOnboardingParent } from '@/lib/onboardingParent';
 
 /**
  * /onboard/create-parent — one-screen signup (no scary "save your 24 words").
@@ -44,6 +45,10 @@ export function CreateParentAccountPage() {
         clientNaddr: config.client,
       });
       login.nsec(identity.nsec);
+      setOnboardingParent({
+        parentPubkey: identity.pubkey,
+        parentDisplayName: trimmed,
+      });
       nav('/onboard/add-kid', {
         state: {
           parentPubkey: identity.pubkey,

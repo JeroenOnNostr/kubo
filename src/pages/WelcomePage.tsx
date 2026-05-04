@@ -37,7 +37,7 @@ export function WelcomePage() {
           variant="ghost"
           size="lg"
           className="w-full h-12"
-          onClick={() => nav('/login')}
+          onClick={() => nav('/onboard/login')}
         >
           I already have an account
         </Button>

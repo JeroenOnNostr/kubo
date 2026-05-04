@@ -19,6 +19,7 @@ import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { onboardIdentity, publishInitialEncryptedSettings } from '@/lib/kuboOnboarding';
 import { DEFAULT_KID_FEED_SETTINGS } from '@/lib/extraKinds';
 import { parseAuthorEvent } from '@/hooks/useAuthor';
+import { clearOnboardingParent, getOnboardingParent } from '@/lib/onboardingParent';
 
 interface ParentHandoffState {
   parentPubkey?: string;
@@ -49,8 +50,14 @@ export function AddKidPage() {
   const { mutateAsync: publishKidProfile } = usePublishKidProfile();
 
   const handoff = (location.state ?? {}) as ParentHandoffState;
-  const parentPubkey = handoff.parentPubkey ?? family?.parentPubkey;
-  const parentDisplayName = handoff.parentDisplayName ?? family?.parentDisplayName;
+  // Fallback chain: explicit router state (fresh nav) → committed family
+  // record (returning parent with kids) → transient onboarding-parent key
+  // (logged-in parent who reloaded mid-flow before any kid was written).
+  const stashed = !handoff.parentPubkey && !family ? getOnboardingParent() : null;
+  const parentPubkey =
+    handoff.parentPubkey ?? family?.parentPubkey ?? stashed?.parentPubkey;
+  const parentDisplayName =
+    handoff.parentDisplayName ?? family?.parentDisplayName ?? stashed?.parentDisplayName;
 
   const isFirstKid = (family?.kids.length ?? 0) === 0;
 
@@ -172,6 +179,11 @@ export function AddKidPage() {
           } else {
             await addKid({ pubkey: identity.pubkey, displayName: trimmed });
           }
+
+          // Family record is now committed — clear the transient handoff
+          // key. From here on, family?.parentPubkey is the source of truth
+          // for "who is the parent on this device."
+          clearOnboardingParent();
 
           // Make the freshly-created kid the active signer so the parent
           // lands on /parent/home already scoped to them. Nostrify's login

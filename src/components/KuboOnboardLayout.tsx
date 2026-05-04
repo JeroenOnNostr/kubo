@@ -11,15 +11,22 @@ import { KuboOnboardErrorFallback } from '@/components/KuboErrorFallbacks';
  * keeps the layout dumb and the steps independently routable for deep
  * links / back-nav.
  */
+// Each step matches one or more pathnames. The fresh-signup branch
+// (`/onboard/create-parent`) and the existing-account branch
+// (`/onboard/login`) collapse onto the same step-2 dot so the progress
+// indicator stays at 3 dots regardless of which path the parent took.
 const STEPS = [
-  { path: '/onboard/welcome',       label: 'Welcome' },
-  { path: '/onboard/create-parent', label: 'Create account' },
-  { path: '/onboard/add-kid',       label: 'Add a kid' },
+  { paths: ['/onboard/welcome'],                          label: 'Welcome' },
+  { paths: ['/onboard/create-parent', '/onboard/login'],  label: 'Create account' },
+  { paths: ['/onboard/add-kid'],                          label: 'Add a kid' },
 ] as const;
 
 export function KuboOnboardLayout() {
   const { pathname } = useLocation();
-  const currentIndex = Math.max(0, STEPS.findIndex((s) => s.path === pathname));
+  const currentIndex = Math.max(
+    0,
+    STEPS.findIndex((s) => (s.paths as readonly string[]).includes(pathname)),
+  );
 
   return (
     <div className="min-h-dvh bg-background text-foreground flex flex-col">
@@ -29,7 +36,7 @@ export function KuboOnboardLayout() {
       >
         {STEPS.map((s, i) => (
           <span
-            key={s.path}
+            key={s.paths[0]}
             className={cn(
               // Animate width + color so the active pill grows into place
               // when the user advances a step (≈200ms feels snappy, not
