@@ -55,6 +55,7 @@ export function EditKidSettingsPage() {
   const [showMore,     setShowMore]     = useState(true);
   const [showNip05,         setShowNip05]         = useState(false);
   const [showPostTimestamp, setShowPostTimestamp] = useState(false);
+  const [showHashtags,      setShowHashtags]      = useState(false);
 
   // Gate auto-save until after the mount-load effect has hydrated state,
   // so the load itself doesn't trigger a redundant write.
@@ -82,6 +83,7 @@ export function EditKidSettingsPage() {
     setShowMore(    s.showMoreAction     ?? globalOn(feedSettings.showMoreAction));
     setShowNip05(        s.showNip05         ?? globalOn(feedSettings.showNip05));
     setShowPostTimestamp(s.showPostTimestamp ?? globalOn(feedSettings.showPostTimestamp));
+    setShowHashtags(     s.showHashtags      ?? globalOn(feedSettings.showHashtags));
     hasLoadedRef.current = true;
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -103,10 +105,11 @@ export function EditKidSettingsPage() {
     showMoreAction:     showMore,
     showNip05,
     showPostTimestamp,
+    showHashtags,
   }), [
     age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab, nextPostButton,
     showReply, showRepost, showReaction, showFavorite, showZap, showShare, showMore,
-    showNip05, showPostTimestamp,
+    showNip05, showPostTimestamp, showHashtags,
   ]);
 
   // Per-field immediate persist (Ditto's settings-page convention).
@@ -411,6 +414,11 @@ export function EditKidSettingsPage() {
             label="Timestamp"
             checked={showPostTimestamp}
             onChange={(v) => { setShowPostTimestamp(v); saveField({ showPostTimestamp: v }); }}
+          />
+          <ActionToggleRow
+            label="Hashtags"
+            checked={showHashtags}
+            onChange={(v) => { setShowHashtags(v);      saveField({ showHashtags:      v }); }}
           />
         </div>
       </div>

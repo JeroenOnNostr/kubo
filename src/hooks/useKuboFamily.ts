@@ -37,6 +37,10 @@ export interface KidSettings {
   // Same inherit-when-undefined semantics as the post-action flags above.
   showNip05?: boolean;
   showPostTimestamp?: boolean;
+  // Per-kid hashtag chip-row visibility on media tiles (kind 20 photo,
+  // 21/22 NIP-71 video, 34236 Divine). Inline `#…` hashtags inside kind-1
+  // text content are unaffected — those stay readable as part of the prose.
+  showHashtags?: boolean;
   /**
    * When true, the kid feed is scroll-capped: only the first post is
    * visible initially, and a "Next post" FAB unlocks one more post per tap.
@@ -273,6 +277,7 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   showMoreAction: false,
   showNip05: false,
   showPostTimestamp: false,
+  showHashtags: false,
   nextPostButton: true,
 };
 

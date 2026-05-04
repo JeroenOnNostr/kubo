@@ -125,6 +125,7 @@ const DEFAULT_KUBO_FEED_SETTINGS = {
   showMoreAction: true,
   showNip05: false,
   showPostTimestamp: false,
+  showHashtags: true,
   showBlobbi: true,
   showLetters: true,
   showAIChat: true,

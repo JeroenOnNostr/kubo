@@ -174,6 +174,8 @@ export interface FeedSettings {
   showNip05: boolean;
   /** Show the relative timestamp on note tiles. */
   showPostTimestamp: boolean;
+  /** Show the hashtag chip row on media tiles (NIP-68 photo, NIP-71 video, Divine). Inline #… inside kind-1 text content is unaffected. */
+  showHashtags: boolean;
   /** Show the Blobbi virtual pet companion + sidebar entry. */
   showBlobbi: boolean;
   /** Show the Letters (encrypted personal letters, kind 8211) sidebar entry. */

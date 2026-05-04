@@ -39,5 +39,6 @@ export function useActionVisibility() {
     showMore:          pick(kid?.showMoreAction,     feedSettings.showMoreAction),
     showNip05:         pick(kid?.showNip05,          feedSettings.showNip05),
     showPostTimestamp: pick(kid?.showPostTimestamp,  feedSettings.showPostTimestamp),
+    showHashtags:      pick(kid?.showHashtags,       feedSettings.showHashtags),
   };
 }

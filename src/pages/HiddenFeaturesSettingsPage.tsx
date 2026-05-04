@@ -69,6 +69,7 @@ const CATEGORIES: ToggleCategory[] = [
     toggles: [
       { key: 'showNip05', label: 'NIP-05 identifier', description: 'Verified handle like @name@domain on note tiles' },
       { key: 'showPostTimestamp', label: 'Post timestamp', description: 'Relative time (e.g. "2h") on note tiles' },
+      { key: 'showHashtags', label: 'Hashtags', description: 'Hashtag chip row on photo, video, and Divine tiles. Inline #… inside text posts is unaffected.' },
     ],
   },
   {

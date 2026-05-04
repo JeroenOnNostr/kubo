@@ -193,6 +193,7 @@ export const FeedSettingsSchema = z.looseObject({
   showMoreAction: z.boolean().optional(),
   showNip05: z.boolean().optional(),
   showPostTimestamp: z.boolean().optional(),
+  showHashtags: z.boolean().optional(),
   showBlobbi: z.boolean().optional(),
   showLetters: z.boolean().optional(),
   showAIChat: z.boolean().optional(),

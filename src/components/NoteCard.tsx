@@ -1282,6 +1282,7 @@ function PhotoContent({ event }: { event: NostrEvent }) {
   const title = getTag(event.tags, "title");
   const description = event.content;
   const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
+  const { showHashtags } = useActionVisibility();
 
   // Build imetaMap with dim + blurhash so ImageGallery can show blurhash placeholders
   const imetaMap = useMemo(() => {
@@ -1308,7 +1309,7 @@ function PhotoContent({ event }: { event: NostrEvent }) {
           {description}
         </p>
       )}
-      {hashtags.length > 0 && (
+      {showHashtags && hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {hashtags.slice(0, 5).map((tag) => (
             <Link
@@ -1385,6 +1386,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
   const isShort = event.kind === 22;
   const formattedDuration = fmtDuration(duration);
   const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
+  const { showHashtags } = useActionVisibility();
   const recordWatch = useRecordWatch();
   // Resolve author name lazily for the watch-history snapshot. The cache is
   // shared with NoteCard's own header lookup, so this is effectively free.
@@ -1458,7 +1460,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
           {description}
         </p>
       )}
-      {hashtags.length > 0 && (
+      {showHashtags && hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {hashtags.slice(0, 5).map((tag) => (
             <Link
@@ -1487,6 +1489,7 @@ function VineMedia({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const { showHashtags } = useActionVisibility();
 
   // Pause video when scrolled out of view
   useEffect(() => {
@@ -1549,7 +1552,7 @@ function VineMedia({
         </div>
       )}
 
-      {hashtags.length > 0 && (
+      {showHashtags && hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">
           {hashtags.slice(0, 5).map((tag) => (
             <Link

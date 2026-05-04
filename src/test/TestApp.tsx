@@ -103,6 +103,7 @@ export function TestApp({ children }: TestAppProps) {
       showMoreAction: false,
       showNip05: false,
       showPostTimestamp: false,
+      showHashtags: false,
       showBlobbi: false,
       showLetters: false,
       showAIChat: false,
