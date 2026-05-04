@@ -16,7 +16,12 @@ const NPUB_PATH    = /^\/(npub1[023456789acdefghjklmnpqrstuvwxyz]+)/;
 const NEVENT_PATH  = /^\/(nevent1[023456789acdefghjklmnpqrstuvwxyz]+)/;
 const NOTE_PATH    = /^\/(note1[023456789acdefghjklmnpqrstuvwxyz]+)/;
 const NADDR_PATH   = /^\/(naddr1[023456789acdefghjklmnpqrstuvwxyz]+)/;
-const NIP05_PATH   = /^\/([^/?#]+@[^/?#]+|_@[^/?#]+)/;
+// Matches /<user>@<domain> AND /<bare-domain> (single segment with a dot, no @).
+// The bare-domain branch covers verified `_@<domain>` NIP-05 identities — useProfileUrl
+// strips the `_@` prefix, so the rendered href is /<domain> with no @ in the path.
+// Single-segment + must-have-dot keeps Ditto's top-level fixed routes (/settings,
+// /notifications, /letters/compose, etc.) safely out of scope.
+const NIP05_PATH   = /^\/([^/?#]+@[^/?#]+|[^/?#@]+\.[^/?#@]+)$/;
 
 /**
  * Intercepts profile/note/card clicks inside a kid-rendered NoteCard and rewrites
