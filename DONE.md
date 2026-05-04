@@ -4,7 +4,21 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-05-04
+
+- **KUBO-077: Hide video description and hashtags on kid feed tiles** — `2c75d216`
+  Kid feed tiles now suppress the freeform `<p>` description and hashtag chip row that VideoContent/PhotoContent render below the playable container. Implemented as a structural CSS rule scoped to `[data-kubo-hide-video-desc]` (set by [KidFeedList](src/components/feed/KidFeedList.tsx)) so PostDetailPage / Videos page / parent feed are unaffected. The selector uses `div > div:has(video) + p` (with the leading `div >` being load-bearing) to scope `:has()` to only the inner playable container — without that, the outer `mt-2 space-y-2` wrapper also matches, and its next sibling is the action-button row, which would then disappear too. Covers `<video>`, `<iframe>`, and YouTubeEmbed's `<button aria-label="Play video">` facade. No Tailwind class names in the selector — survives upstream Ditto refactors.
+
+- **KUBO-076: Restyle favorite star overlay — bigger, yellow, transparent bg** — `12c77b18`
+  Follow-up to KUBO-072. The previous frosted-glass pill at `size-4` was easy to miss against video posters; the overlay variant of [FavoriteStarButton](src/components/FavoriteStarButton.tsx) now renders a `size-7` saturated-yellow star inside a `size-11` transparent hit target, repositioned to `top-3 right-4`. Inline (non-overlay) usage keeps the original `size-5` styling for action-row contexts.
+
+- **KUBO-075: Render YouTube Shorts in 9:16 portrait aspect** — `de9a08bf`
+  YouTube Shorts now render in their native 9:16 portrait aspect inside the click-to-load facade and the post-activation iframe, instead of being letterboxed inside a 16:9 frame. [extractYouTubeEmbedInfo](src/lib/linkEmbed.ts) replaces `extractYouTubeId` for embed callers and returns `{ id, isShort }` derived from the `/shorts/` path; [YouTubeEmbed](src/components/YouTubeEmbed.tsx) gains an `aspect: 'video' \| 'short'` prop that switches `paddingBottom` between `56.25%` and `177.78%`. [LinkEmbed](src/components/LinkEmbed.tsx) and `VideoContent` in [NoteCard](src/components/NoteCard.tsx) plumb the aspect through. Kind:22 NIP-71 events force `aspect="short"` even when the YouTube URL itself isn't a `/shorts/` link, since kind:22 is the short-form video kind. Iframe `allow` attribute also gains `fullscreen` so the YT player's fullscreen button works.
+
 ## 2026-04-27
+
+- **KUBO-072: Move favorite star from action row to top-right overlay** — `65b144aa`
+  Relocated the kid-mode FavoriteStarButton from the inline action row to an absolute-positioned overlay in the top-right corner of each post tile. Added an `overlay` prop to FavoriteStarButton for the alternate styling (frosted glass pill, smaller icon). Updated all 4 NoteCard article layouts (vanish threaded, vanish non-threaded, threaded, normal) with `relative` positioning and the overlay insertion. Saves vertical space in the action bar. `tsc --noEmit` clean.
 
 - **KUBO-062: Wire kid selector pill avatar to real profile picture** — `cea698f5`
   The pill in the parent header and both dropdown lists ("Switch to kid view" / "Switch to parent view") on [src/components/KuboKidSelector.tsx](src/components/KuboKidSelector.tsx) now reuse the existing [KidAvatar](src/components/KidAvatar.tsx) component (which itself uses [useAuthor](src/hooks/useAuthor.ts) → [profileCache](src/lib/profileCache.ts) IndexedDB-backed cache) instead of placeholder circles, so each kid's `kind:0` `picture` shows through. Indigo initial-letter fallback when no picture is set, and the original `<UserRound>` placeholder is preserved for the empty (no kid selected) state. No new hooks, no new fetches in the hot path — `KidAvatar` is already mounted on `KidDashboardPage`/`KidKeysPage`/`ParentFeedPage`, so the cache is virtually always warm before the selector renders. Three call sites, one file changed (+24/-17). `tsc --noEmit` clean; Vite compiled the file and `/` returned 200; full browser drive-through (logging in as a parent with kids whose `kind:0` carries a picture, opening the dropdown) was NOT performed and is still recommended before treating this as fully verified.
