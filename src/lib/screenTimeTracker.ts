@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 
-import { getKidSettings } from '@/hooks/useKuboFamily';
+import { getKidSettings, subscribeFamily } from '@/hooks/useKuboFamily';
 import { getScreenTimeToday, logScreenTime } from '@/lib/screenTimeStore';
 
 /**
@@ -37,6 +37,7 @@ let state: TrackerState = {
 let tickHandle: ReturnType<typeof setInterval> | null = null;
 let secondsSinceFlush = 0;
 let appStateListener: { remove: () => void } | null = null;
+let familyUnsubscribe: (() => void) | null = null;
 
 const subscribers = new Set<() => void>();
 
@@ -116,18 +117,44 @@ export function start(kidPubkey: string): void {
   }
 
   const stored = getScreenTimeToday(kidPubkey);
+
+  // Compute the lock verdict before the first setState so subscribers never
+  // observe a transient "unlocked" snapshot that gets corrected one tick later.
+  const settings = getKidSettings(kidPubkey);
+  const limitSeconds = settings.dailyLimitMin * 60;
+  const outsideWindow = !isInsideWindow(settings.windowStart, settings.windowEnd);
+  const overLimit = stored >= limitSeconds;
+
   setState({
     kidPubkey,
     usedSeconds: stored,
-    isLocked: false,
-    isOutsideWindow: false,
+    isLocked: outsideWindow || overLimit,
+    isOutsideWindow: outsideWindow,
     running: true,
   });
 
-  evaluateLock();
-
   if (!state.isLocked) {
     tickHandle = setInterval(tick, 1000);
+  }
+
+  // Re-evaluate when the family store finishes its async bootstrap from
+  // secureStorage (or whenever parent settings change). Without this, a fresh
+  // app load that races bootstrap reads DEFAULT_KID_SETTINGS (08:00–21:00) and
+  // gets stuck in the lockout screen even when the parent's real window allows
+  // access right now — there is no other code path that re-runs evaluateLock
+  // on web (resume() only fires on Capacitor appStateChange).
+  if (!familyUnsubscribe) {
+    familyUnsubscribe = subscribeFamily(() => {
+      if (!state.kidPubkey) return;
+      const wasLocked = state.isLocked;
+      evaluateLock();
+      if (wasLocked && !state.isLocked && !tickHandle && state.running) {
+        tickHandle = setInterval(tick, 1000);
+      } else if (!wasLocked && state.isLocked && tickHandle) {
+        clearInterval(tickHandle);
+        tickHandle = null;
+      }
+    });
   }
 
   // Listen for foreground/background on native.
@@ -180,6 +207,11 @@ export function stopTracker(): void {
   if (appStateListener) {
     appStateListener.remove();
     appStateListener = null;
+  }
+
+  if (familyUnsubscribe) {
+    familyUnsubscribe();
+    familyUnsubscribe = null;
   }
 
   setState({
