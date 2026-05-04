@@ -16,6 +16,7 @@ export function parseVideoImeta(tags: string[][]): {
   thumbnail?: string;
   duration?: string;
   blurhash?: string;
+  dim?: string;
 } {
   const standaloneThumb = getTag(tags, 'thumb') ?? getTag(tags, 'image');
 
@@ -33,6 +34,7 @@ export function parseVideoImeta(tags: string[][]): {
         thumbnail: parts.image ?? parts.thumb ?? standaloneThumb,
         duration: parts.duration,
         blurhash: parts.blurhash,
+        dim: parts.dim,
       };
     }
   }

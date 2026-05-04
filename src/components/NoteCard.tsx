@@ -1333,6 +1333,8 @@ export function parseVideoImeta(tags: string[][]): {
   url?: string;
   thumbnail?: string;
   duration?: string;
+  blurhash?: string;
+  dim?: string;
 } {
   for (const tag of tags) {
     if (tag[0] !== "imeta") continue;
@@ -1347,6 +1349,8 @@ export function parseVideoImeta(tags: string[][]): {
         url: parts.url,
         thumbnail: parts.image,
         duration: parts.duration,
+        blurhash: parts.blurhash,
+        dim: parts.dim,
       };
   }
   // Fallback to plain url/thumb tags
@@ -1372,7 +1376,7 @@ function fmtDuration(seconds: string | undefined): string | undefined {
 
 /** Inline video player for NIP-71 kind 21/22 events. */
 function VideoContent({ event }: { event: NostrEvent }) {
-  const { url, thumbnail, duration } = useMemo(
+  const { url, thumbnail, duration, dim, blurhash } = useMemo(
     () => parseVideoImeta(event.tags),
     [event.tags],
   );
@@ -1421,10 +1425,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
     <div className="mt-2 space-y-2">
       {title && <p className="font-semibold text-[15px]">{title}</p>}
       <div
-        className={cn(
-          "relative rounded-xl overflow-hidden bg-muted",
-          isShort ? "max-w-[280px]" : "",
-        )}
+        className="relative rounded-xl overflow-hidden bg-muted"
         onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
         {youtubeId ? (
@@ -1433,6 +1434,8 @@ function VideoContent({ event }: { event: NostrEvent }) {
           <VideoPlayer
             src={url}
             poster={thumbnail}
+            dim={dim}
+            blurhash={blurhash}
             title={title ?? undefined}
             onFirstPlay={handleFirstPlay}
           />

@@ -90,9 +90,16 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
   const [hasStarted, setHasStarted] = useState(false);
   // True once the video has enough data to display a frame (or has a poster/generated thumbnail)
   const [videoReady, setVideoReady] = useState(!!poster);
+  // Aspect ratio measured from the <video> element after metadata loads, used
+  // as a fallback when no NIP-94 `dim` tag was provided.
+  const [measuredAspect, setMeasuredAspect] = useState<string | undefined>(undefined);
 
   const dimensions = parseDim(dim);
-  const aspectRatio = dimensions ? `${dimensions.width} / ${dimensions.height}` : undefined;
+  const explicitAspect = dimensions ? `${dimensions.width} / ${dimensions.height}` : undefined;
+  // Always provide an aspect ratio so the container reserves full card width
+  // (matches YouTubeEmbed). 16/9 is the placeholder until metadata measures the
+  // real aspect; explicit `dim` always wins.
+  const aspectRatio = explicitAspect ?? measuredAspect ?? '16 / 9';
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -201,7 +208,7 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
         'relative mt-3 rounded-2xl overflow-hidden border border-border bg-black group',
         className,
       )}
-      style={aspectRatio ? { aspectRatio } : undefined}
+      style={{ aspectRatio }}
       onMouseMove={revealControls}
       onMouseLeave={() => { if (isPlaying) scheduleHide(); }}
       onClick={(e) => e.stopPropagation()}
@@ -223,16 +230,7 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
         ref={videoRef}
         src={isHls ? undefined : src}
         poster={generatedPoster}
-        className={cn(
-          'w-full cursor-pointer',
-          // When dim is known the container already has the correct aspect ratio,
-          // so the video just needs to fill it (absolute inset-0). Without dim we
-          // fall back to the original constrained height with object-cover so the
-          // player doesn't grow to an unmanageable size.
-          aspectRatio
-            ? 'absolute inset-0 h-full object-cover'
-            : 'max-h-[70vh] object-cover',
-        )}
+        className="absolute inset-0 w-full h-full cursor-pointer object-contain"
         playsInline
         preload="metadata"
         {...({ 'webkit-playsinline': 'true' } as React.HTMLAttributes<HTMLVideoElement>)}
@@ -248,7 +246,14 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
         }}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime ?? 0)}
-        onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}
+        onLoadedMetadata={() => {
+          const v = videoRef.current;
+          if (!v) return;
+          setDuration(v.duration ?? 0);
+          if (!explicitAspect && v.videoWidth > 0 && v.videoHeight > 0) {
+            setMeasuredAspect(`${v.videoWidth} / ${v.videoHeight}`);
+          }
+        }}
         onDurationChange={() => setDuration(videoRef.current?.duration ?? 0)}
         onLoadedData={() => setVideoReady(true)}
         onError={onBlossomError}
