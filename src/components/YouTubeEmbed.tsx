@@ -5,6 +5,12 @@ import { cn } from '@/lib/utils';
 interface YouTubeEmbedProps {
   videoId: string;
   className?: string;
+  /**
+   * Frame aspect ratio. `'video'` (default) renders 16:9 for normal long-form
+   * videos; `'short'` renders 9:16 for YouTube Shorts so they fill the card
+   * in portrait instead of being letterboxed inside a horizontal box.
+   */
+  aspect?: 'video' | 'short';
 }
 
 /**
@@ -73,7 +79,7 @@ function findThumbnail(videoId: string): Promise<string | null> {
  * Probes thumbnail sizes off-screen before rendering so the gray placeholder
  * is never visible to the user.
  */
-export function YouTubeEmbed({ videoId, className }: YouTubeEmbedProps) {
+export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEmbedProps) {
   const [activated, setActivated] = useState(false);
   const [resolvedThumb, setResolvedThumb] = useState<string | null>(null);
 
@@ -93,12 +99,15 @@ export function YouTubeEmbed({ videoId, className }: YouTubeEmbedProps) {
       className={cn('rounded-2xl overflow-hidden border border-border', className)}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+      <div
+        className="relative w-full"
+        style={{ paddingBottom: aspect === 'short' ? '177.78%' : '56.25%' }}
+      >
         {activated ? (
           <iframe
             src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
             title="YouTube video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             className="absolute inset-0 w-full h-full"
           />

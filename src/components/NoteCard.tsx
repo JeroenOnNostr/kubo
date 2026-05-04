@@ -86,7 +86,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { YouTubeEmbed } from "@/components/YouTubeEmbed";
-import { extractYouTubeId } from "@/lib/linkEmbed";
+import { extractYouTubeEmbedInfo } from "@/lib/linkEmbed";
 import { isYouTubeUrl } from "@/lib/videoEvent";
 import { VoiceMessagePlayer } from "@/components/VoiceMessagePlayer";
 import { ZapDialog } from "@/components/ZapDialog";
@@ -1413,7 +1413,9 @@ function VideoContent({ event }: { event: NostrEvent }) {
 
   if (!url) return null;
 
-  const youtubeId = isYouTubeUrl(url) ? extractYouTubeId(url) : null;
+  const youtubeInfo = isYouTubeUrl(url) ? extractYouTubeEmbedInfo(url) : null;
+  const youtubeId = youtubeInfo?.id ?? null;
+  const youtubeAspect = isShort || youtubeInfo?.isShort ? "short" : "video";
 
   return (
     <div className="mt-2 space-y-2">
@@ -1426,7 +1428,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
         onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
         {youtubeId ? (
-          <YouTubeEmbed videoId={youtubeId} />
+          <YouTubeEmbed videoId={youtubeId} aspect={youtubeAspect} />
         ) : (
           <VideoPlayer
             src={url}
