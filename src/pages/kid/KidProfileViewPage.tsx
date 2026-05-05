@@ -13,7 +13,7 @@ import { useProfileMedia } from '@/hooks/useProfileMedia';
 import { useToast } from '@/hooks/useToast';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { FollowButton } from '@/components/FollowButton';
-import { AssignTrustLevelButton } from '@/components/trust/AssignTrustLevelButton';
+import { RequestInteractButton } from '@/components/trust/RequestInteractButton';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { genUserName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
@@ -144,15 +144,16 @@ export function KidProfileViewPage() {
         </div>
       </div>
 
-      {/* Actions — Follow (orange primary) + Assign trust (ghost). FollowButton hides itself
-          on own-profile / logged-out; AssignTrustLevelButton hides without a selected kid. */}
+      {/* Actions — Follow (orange primary) + Request to interact (ghost). FollowButton
+          hides on own-profile / logged-out; RequestInteractButton hides when the creator
+          is already at trust level Interact or Extend. */}
       <div className="px-4 flex gap-2 mt-1">
         <FollowButton
           pubkey={pubkey}
           size="default"
           className="flex-1 h-10 bg-[#F97316] text-white border-0 hover:bg-[#EA580C] data-[following=true]:bg-transparent"
         />
-        <AssignTrustLevelButton
+        <RequestInteractButton
           pubkey={pubkey}
           size="default"
           className="flex-1 h-10 bg-transparent border border-white/30 text-white hover:bg-white/10"

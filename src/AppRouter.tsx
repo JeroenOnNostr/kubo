@@ -56,6 +56,7 @@ import { EditKidFeedSettingsPage } from "@/pages/EditKidFeedSettingsPage";
 import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
 import { ParentTrustIndexPage } from "@/pages/ParentTrustIndexPage";
+import { ParentAlertsPage } from "@/pages/ParentAlertsPage";
 import { ParentFeedPage } from "@/pages/ParentFeedPage";
 import { renderKuboFeedSourcesRoutes } from "@/kuboFeedSourcesRoutes";
 import { VideoViewPage } from "@/pages/VideoViewPage";
@@ -339,7 +340,7 @@ export function AppRouter() {
             <Route path="/parent/trust/people"  element={<TrustPeoplePage     />} />
             <Route path="/parent/trust/places"  element={<TrustPlacesPage     />} />
             <Route path="/parent/groups/:gid"   element={<GroupViewPage       />} />
-            <Route path="/parent/alerts"        element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
+            <Route path="/parent/alerts"        element={<ParentAlertsPage    />} />
             <Route path="/parent/kid-settings"  element={<EditKidSettingsPage />} />
             <Route path="/parent/feed-settings" element={<EditKidFeedSettingsPage />} />
             <Route path="/parent/keys"          element={<KidKeysPage         />} />
