@@ -2,10 +2,9 @@
 
 Issue prefix: `KUBO-xxx`
 
-## Open
+Completed work lives in [DONE.md](DONE.md).
 
-- **KUBO-102: Wire trust assignments to actual feed routing** *(replaces the now-removed KUBO-013)*
-  KUBO-100 introduced `relayTrustAssignments[kid][relayUrl]` and KUBO-097/098/100 cleaned up `trustAssignments[kid][pubkey]`, but both maps are visual-only — they don't yet influence which content the kid sees. Decide the routing model: should `extend` mean "merge this relay's contents into the kid's feed", `interact` allow replies/zaps, `view` gate appearance in the People tab? And do we mirror that to NIP-65 `r`-tags + a kid-scoped `kind:30078` for relays so the assignments survive cross-device login? Once the model is fixed, wire `useFeedSources` / `useKidFeedRelays` to read from these maps instead of the existing per-source toggles, and define what happens to a relay or pubkey that's enabled in a feed-source page but unassigned in trust (and vice versa).
+## Open
 
 - **KUBO-001: Upload flow — parent posts, signed by kid's key**
   Upload UX lives in the parent app, but the resulting event is signed with the kid's private key (the parent is acting on behalf of the kid, not posting from their own identity). Relevant to PR 4 (Upload). Figure out key-access model: does the parent hold the kid's nsec, unlock it per-upload, or sign via a delegation/NIP-46-style handoff?
@@ -37,26 +36,8 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-063: Trust → People — wire up Groups section to real group functionality**
   `TrustPeoplePage` renders a hardcoded `GROUPS` array with two placeholder entries ("Soccer team B3", "Elementary class 4B") that link to placeholder routes under `/parent/groups/:id`. Use case: parents form a group with other parents, or set up a group around the kid's context (sports team, school class) so members can DM each other or share media scoped to the group. Decide the data model first — likely NIP-29 relay-based groups or NIP-51 kind:30000 follow sets — then wire create/join, member list, and group detail page. Likely worth splitting into separate issues once scoped: (a) group data model + create/join flow, (b) group detail screen replacing `/parent/groups/:id` placeholder, (c) group DM thread, (d) group media upload/share. Capture sub-issues as KUBO-063a/b/c/d when ready.
 
-## Completed
-
-- **KUBO-053: Parent feed view — remove descriptions on "Edit feed settings" and "Feed preview" tiles**
-- **KUBO-054: Parent home — merge "Today's usage" bar into the Kids activity chart**
-- **KUBO-061: Kid view — add Blobby section to navbar (Home · Blobby · Favorites)**
-- **KUBO-062: Parent view — kid selector pill avatar not wired to real profile picture**
-- **KUBO-085: Kid-themed profile viewer (`/kid/profile/:npub`)**
-- **KUBO-086: Kid-themed post detail (`/kid/post/:id`) + `KidNavigationInterceptor`**
-- **KUBO-088: Fix kid lock-screen stuck on fresh load (screen-time tracker race)**
-- **KUBO-097: Unify "Assign trust" UX — replace profile bottom-sheet with inline expand**
-- **KUBO-096: Strip App Relays UI from RelayListManager**
-- **KUBO-098: Kid "Request to interact" → parent Alerts inbox**
-- **KUBO-099: NIP-66 relay discovery + collapsible Browse-all + search hide flags**
-- **KUBO-100: Trust → Places trust-relay rows + Trust → People assignment-driven list**
-- **KUBO-101: Record kind-34236 vine plays into kid watch history (naddr-aware)**
-- **KUBO-087: Kid post detail — YouTube videos play inline** *(closed: already fixed in `6c1ee671` as part of KUBO-085/086; entry was stale paperwork)*
-- **KUBO-025: Wire Kids watch history + Kids activity placeholders to real data** *(KUBO-095 + KUBO-101)*
-- **KUBO-060: Kid view — Favorites add-to-favorites affordance** *(landed via FavoriteStarButton overlay; see KUBO-072 / KUBO-076)*
-- **KUBO-059: Parent feed profiles — expandable tiles + avatar nav** *(closed: deferred — equivalent UX now lives on Trust → People per KUBO-100)*
-- **KUBO-009: Handle returning-user-on-new-device case in onboarding** *(closed: cross-device returning-user flow is post-MVP; the silent default-write only happens during onboarding and the user is comfortable with that exposure for now)*
+- **KUBO-102: Wire trust assignments to actual feed routing** *(replaces the now-removed KUBO-013)*
+  KUBO-100 introduced `relayTrustAssignments[kid][relayUrl]` and KUBO-097/098/100 cleaned up `trustAssignments[kid][pubkey]`, but both maps are visual-only — they don't yet influence which content the kid sees. Decide the routing model: should `extend` mean "merge this relay's contents into the kid's feed", `interact` allow replies/zaps, `view` gate appearance in the People tab? And do we mirror that to NIP-65 `r`-tags + a kid-scoped `kind:30078` for relays so the assignments survive cross-device login? Once the model is fixed, wire `useFeedSources` / `useKidFeedRelays` to read from these maps instead of the existing per-source toggles, and define what happens to a relay or pubkey that's enabled in a feed-source page but unassigned in trust (and vice versa).
 
 ## Deferred to post-MVP
 

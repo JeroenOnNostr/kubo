@@ -6,6 +6,15 @@ Completed work, most recent first.
 
 ## 2026-05-05
 
+- **KUBO-009: Replace hardcoded "Ellie" placeholder with real Nostr profile data** — `397e5ba7`
+  Backfilled to DONE during a TODO sweep — entry was missing from this log even though the work shipped earlier. (The KUBO-009 line that lived in TODO into 2026-05-05 was a *separate* concern about silent feed-settings overwrites on fresh-device login; that one was closed without code changes — see the 2026-05-05 close note below.)
+
+- **KUBO-009: Close returning-user-on-new-device case in onboarding** — `44c48bfb` (paperwork only)
+  Closed without code change. Cross-device returning-user flow is post-MVP; the silent default-write only fires during fresh-device onboarding and is an accepted exposure for now. Re-open when cross-device login becomes a real concern.
+
+- **KUBO-087: Kid post detail — YouTube videos play inline** — `6c1ee671` (fixed in KUBO-085/086 batch)
+  Backfilled to DONE during a TODO sweep — entry was stale paperwork. The fix landed alongside [KidPostDetailPage](src/pages/kid/KidPostDetailPage.tsx) when KUBO-085/086 introduced the kid post detail page; line 155 has the `isYouTubeUrl(firstImeta.url) ? <YouTubeEmbed> : <VideoPlayer>` branch.
+
 - **chore: drop redundant page-level headers + tighten dark theme background** — `1720638c`
   Three pages were rendering their own H1 / top-bar at the top of the content while `KuboParentLayout`'s sticky header (with the kid selector + gear) already sits above them, reading as a second header bar. Dropped the "Feed · {kid}" eyebrow on [ParentFeedPage.tsx](src/pages/ParentFeedPage.tsx), the "Home" h1 on [KidDashboardPage.tsx](src/pages/KidDashboardPage.tsx), and the close-button + "Upload content" h1 on [ContentUploaderPage.tsx](src/pages/ContentUploaderPage.tsx). Also tightened the dark theme background in [src/themes.ts](src/themes.ts) from `228 20% 10%` to `222 47% 11%` (#0F172A) to match the Kubo CVI parent palette.
 
@@ -129,6 +138,9 @@ Completed work, most recent first.
 
 ## 2026-04-27
 
+- **KUBO-053: Remove subtitles from "Edit feed settings" and "Feed preview" tiles** — `e8991e57`
+  Trimmed the descriptive subtitle text from both tiles on `/parent/feed` so the tile labels stand on their own. Backfilled to DONE during a TODO sweep — the original Stage-1..3 omnibus entry below covered this work, but the follow-up commit had no separate DONE row.
+
 - **KUBO-072: Move favorite star from action row to top-right overlay** — `65b144aa`
   Relocated the kid-mode FavoriteStarButton from the inline action row to an absolute-positioned overlay in the top-right corner of each post tile. Added an `overlay` prop to FavoriteStarButton for the alternate styling (frosted glass pill, smaller icon). Updated all 4 NoteCard article layouts (vanish threaded, vanish non-threaded, threaded, normal) with `relative` positioning and the overlay insertion. Saves vertical space in the action bar. `tsc --noEmit` clean.
 
@@ -136,6 +148,9 @@ Completed work, most recent first.
   The pill in the parent header and both dropdown lists ("Switch to kid view" / "Switch to parent view") on [src/components/KuboKidSelector.tsx](src/components/KuboKidSelector.tsx) now reuse the existing [KidAvatar](src/components/KidAvatar.tsx) component (which itself uses [useAuthor](src/hooks/useAuthor.ts) → [profileCache](src/lib/profileCache.ts) IndexedDB-backed cache) instead of placeholder circles, so each kid's `kind:0` `picture` shows through. Indigo initial-letter fallback when no picture is set, and the original `<UserRound>` placeholder is preserved for the empty (no kid selected) state. No new hooks, no new fetches in the hot path — `KidAvatar` is already mounted on `KidDashboardPage`/`KidKeysPage`/`ParentFeedPage`, so the cache is virtually always warm before the selector renders. Three call sites, one file changed (+24/-17). `tsc --noEmit` clean; Vite compiled the file and `/` returned 200; full browser drive-through (logging in as a parent with kids whose `kind:0` carries a picture, opening the dropdown) was NOT performed and is still recommended before treating this as fully verified.
 
 ## 2026-04-24
+
+- **KUBO-054: Merge "Today's usage" bar into the Kids activity Day tab** — `6447195f`
+  Backfilled to DONE during a TODO sweep — the Stage-1..3 omnibus below covered the original work, this hash captures the follow-up that merged the standalone usage bar into the Kids-activity chart's Day tab.
 
 - **KUBO-067: Default feed to visual kinds only on fresh install** — `56c24284`
   Added 8 `feedInclude*` overrides to [kubo.json](kubo.json) so a fresh Kubo install shows only photos, normal videos, short videos, and vines in the main feed. Explicitly disables `feedIncludePosts` (kind 1), `feedIncludeComments`, `feedIncludeReposts`, `feedIncludeGenericReposts`, `feedIncludeVoiceMessages`, `feedIncludeBadgeDefinitions`, `feedIncludeProfileBadges`, and `feedIncludeVanish`. Lives in `kubo.json` rather than `hardcodedConfig.feedSettings` in [src/App.tsx](src/App.tsx) to keep the upstream Ditto default ("everything on") untouched — our build overrides via the `DITTO_CONFIG` env injection path, schema-safe because `FeedSettingsSchema` is `z.looseObject`. Existing installs keep their localStorage preferences; only first-run users see the tighter default. `tsc --noEmit` clean.
