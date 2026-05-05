@@ -59,8 +59,6 @@
   var p = document.getElementById('preloader');
   if (p) {
     p.style.background = colors.bg;
-    var logo = p.querySelector('[data-logo]');
-    if (logo) logo.style.background = colors.primary;
     var spinner = p.querySelector('[data-spinner]');
     if (spinner) {
       spinner.style.borderColor = colors.primary.replace(')', ' / 0.25)');
