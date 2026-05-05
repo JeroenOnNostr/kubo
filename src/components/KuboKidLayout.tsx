@@ -16,6 +16,7 @@ import {
   KuboKidLayoutContext,
   type KuboKidLayoutOptions,
 } from '@/contexts/KuboKidLayoutContext';
+import { useKidBackGuard } from '@/hooks/useKidBackGuard';
 
 /**
  * Layout shell for all /kid/* routes.
@@ -64,6 +65,11 @@ export function KuboKidLayout() {
     };
   }, [user?.pubkey]);
 
+  // Android hardware back / gesture: route in-tree back to React Router and
+  // surface ParentGateDialog at the kid-mode boundary so a swipe can never
+  // pop into /parent/* without the PIN.
+  useKidBackGuard({ onRequestExit: () => setGateOpen(true) });
+
   return (
     <div
       className="min-h-dvh text-white safe-area-top"
@@ -75,6 +81,13 @@ export function KuboKidLayout() {
         ['--kubo-kid-top-bar-height' as string]: '3rem',
       }}
     >
+      {/*
+        Mounted at layout level so the back-gesture guard can open it from
+        any /kid/* route (unlocked feed and locked screen alike). The
+        gear-button inside KuboKidTopBar still uses its own local copy for
+        the unlocked path; both eventually converge on the same dialog.
+      */}
+      <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
       {isLocked ? (
         <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
           <div
@@ -91,7 +104,6 @@ export function KuboKidLayout() {
               ? `Come back at ${settings?.windowStart ?? '4:00 pm'}.`
               : 'Your watch time is done for today.'}
           </p>
-          <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
           <button
             type="button"
             onClick={() => setGateOpen(true)}

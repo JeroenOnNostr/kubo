@@ -185,13 +185,16 @@ export function AddKidPage() {
           // for "who is the parent on this device."
           clearOnboardingParent();
 
-          // Make the freshly-created kid the active signer so the parent
-          // lands on /parent/home already scoped to them. Nostrify's login
-          // id for an nsec login is deterministic (`nsec:<pubkey>`), so we
-          // can reconstruct it without reading `logins` (which would be
-          // stale in this same handler).
+          // Make the freshly-created kid the active signer and drop the
+          // parent straight into the kid app, so onboarding ends on a
+          // visible feed rather than the parent dashboard. From here a
+          // later session will overlay tooltips that walk the parent into
+          // configuring the feed. Nostrify's login id for an nsec login is
+          // deterministic (`nsec:<pubkey>`), so we can reconstruct it
+          // without reading `logins` (which would be stale in this same
+          // handler).
           setLogin(`nsec:${identity.pubkey}`);
-          nav('/parent/home', { replace: true });
+          nav('/kid', { replace: true });
         })();
       };
 
@@ -274,13 +277,19 @@ export function AddKidPage() {
   const title = isFirstKid ? 'Add your first kid' : 'Add a kid';
 
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full pt-4 pb-2">
+    <form
+      className="flex-1 flex flex-col max-w-sm mx-auto w-full pt-4 pb-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleAdd();
+      }}
+    >
       <div className="flex-1 flex flex-col gap-6">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="text-sm text-muted-foreground">
-            We'll set up a Kubo identity for them. You'll manage who they
-            follow and who can reach them from your parent dashboard.
+            Just a display name — you can change it anytime. It will be
+            publicly visible.
           </p>
         </div>
 
@@ -367,6 +376,7 @@ export function AddKidPage() {
           <Input
             id="kid-name"
             autoFocus
+            enterKeyHint="go"
             placeholder="Mia"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -374,9 +384,6 @@ export function AddKidPage() {
             className="h-12 rounded-xl text-base"
             disabled={submitting}
           />
-          <p className="text-xs text-muted-foreground">
-            Just a display name — you can change it anytime.
-          </p>
         </div>
       </div>
 
@@ -399,16 +406,16 @@ export function AddKidPage() {
       */}
       {!pendingAvatar && (
         <Button
+          type="submit"
           size="lg"
           className="w-full h-12 rounded-full"
           disabled={!canSubmit}
-          onClick={handleAdd}
         >
           {submitting
             ? <><Loader2 className="size-4 mr-2 animate-spin" /> Adding…</>
             : 'Add kid'}
         </Button>
       )}
-    </div>
+    </form>
   );
 }

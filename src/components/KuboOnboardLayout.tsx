@@ -51,7 +51,7 @@ export function KuboOnboardLayout() {
         ))}
       </header>
 
-      <main className="flex-1 flex flex-col px-6 pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
+      <main className="flex-1 flex flex-col px-6 pb-[calc(env(safe-area-inset-bottom,0px)+env(keyboard-inset-height,0px)+24px)]">
         {/*
           Onboarding-themed fallback — keeps the beige palette consistent
           if something crashes mid-flow (e.g., relay publish failure).

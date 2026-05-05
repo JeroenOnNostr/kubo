@@ -17,12 +17,8 @@ export function WelcomePage() {
       <div className="flex flex-col items-center gap-6">
         <KuboWordmark className="h-16 text-foreground" />
         <h1 className="text-2xl font-semibold tracking-tight">
-          Safe social for kids.
+          Safe video for kids with controls parents trust.
         </h1>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Kubo lets you curate who your kid follows, what they see,
-          and who they can talk to — all from one parent dashboard.
-        </p>
       </div>
 
       <div className="w-full flex flex-col gap-3">
@@ -31,7 +27,7 @@ export function WelcomePage() {
           className="w-full h-12 rounded-full"
           onClick={() => nav('/onboard/create-parent')}
         >
-          Create parent account
+          Create account
         </Button>
         <Button
           variant="ghost"
@@ -39,7 +35,7 @@ export function WelcomePage() {
           className="w-full h-12"
           onClick={() => nav('/onboard/login')}
         >
-          I already have an account
+          Sign in
         </Button>
       </div>
     </div>
