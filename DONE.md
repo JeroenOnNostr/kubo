@@ -6,6 +6,9 @@ Completed work, most recent first.
 
 ## 2026-05-05
 
+- **KUBO-022: Videos tab — infinite scroll** — `__KUBO022_HASH__`
+  `VideosTab` on `/parent/profile/:npub` only rendered the first `useProfileMedia` page (~20 events). Wired a `useInView` sentinel under the 3-column grid (`rootMargin: 400px` so it pre-fetches before the user hits the bottom) that calls `fetchNextPage()` whenever it scrolls into view, gated on `hasNextPage && !isFetchingNextPage`. Reuses the hook's already-implemented `getNextPageParam` cursor — no hook change. Follow-up KUBO-021 (trust-scoped filtering) and KUBO-103 (Next-post FAB) are unaffected.
+
 - **KUBO-009: Replace hardcoded "Ellie" placeholder with real Nostr profile data** — `397e5ba7`
   Backfilled to DONE during a TODO sweep — entry was missing from this log even though the work shipped earlier. (The KUBO-009 line that lived in TODO into 2026-05-05 was a *separate* concern about silent feed-settings overwrites on fresh-device login; that one was closed without code changes — see the 2026-05-05 close note below.)
 

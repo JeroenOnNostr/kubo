@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useInView } from 'react-intersection-observer';
 import { ChevronLeft, Copy, Play } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
@@ -182,7 +183,22 @@ function VideosTab({
   pubkey: string;
   onOpen: (id: string) => void;
 }) {
-  const { data, isLoading, isError } = useProfileMedia(pubkey);
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useProfileMedia(pubkey);
+
+  const { ref: sentinelRef, inView } = useInView({ threshold: 0, rootMargin: '400px' });
+
+  useEffect(() => {
+    if (inView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   if (isLoading) {
     return (
@@ -217,16 +233,19 @@ function VideosTab({
   }
 
   return (
-    <div className="px-4 grid grid-cols-3 gap-2">
-      {events.map((event, i) => (
-        <ProfileMediaTile
-          key={event.id}
-          event={event}
-          fallbackGradient={SKELETON_GRADIENTS[i % SKELETON_GRADIENTS.length]}
-          onClick={() => onOpen(event.id)}
-        />
-      ))}
-    </div>
+    <>
+      <div className="px-4 grid grid-cols-3 gap-2">
+        {events.map((event, i) => (
+          <ProfileMediaTile
+            key={event.id}
+            event={event}
+            fallbackGradient={SKELETON_GRADIENTS[i % SKELETON_GRADIENTS.length]}
+            onClick={() => onOpen(event.id)}
+          />
+        ))}
+      </div>
+      {hasNextPage && <div ref={sentinelRef} className="h-px" aria-hidden />}
+    </>
   );
 }
 
