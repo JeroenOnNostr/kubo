@@ -1,52 +1,61 @@
 import { useMemo } from 'react';
 
-import { useSearchEvents } from '@/hooks/useSearchEvents';
+import { useAppContext } from '@/hooks/useAppContext';
+import { useRelayDiscovery, type DiscoveredRelay } from '@/hooks/useRelayDiscovery';
+import { APP_RELAYS } from '@/lib/appRelays';
 import { normalizeRelayUrl } from '@/lib/relayUrl';
 
 /**
- * Relay discovery via the NIP-65 firehose (kind 10002). We extract `r`-tags
- * from user relay-list events on the pool, dedupe by normalized URL, and
- * rank by frequency (relays that appear in more users' lists come first).
+ * Relay discovery + search. Backed by NIP-66 monitor relays via
+ * useRelayDiscovery (one fetch per session, localStorage-persisted across
+ * sessions). The `query` arg filters the cached catalogue client-side by URL
+ * substring — no per-keystroke network round-trip.
  *
- * When `query` is a substring, filter client-side on the hostname. Relays
- * rarely index kind 10002 for NIP-50 search, so we don't rely on relay-side
- * search; `useSearchEvents` passes `search` in the filter anyway (harmless
- * no-op where unsupported).
+ * Personal-relevance ranking: relays that are already in the parent's NIP-65
+ * list (or APP_RELAYS when useAppRelays is true) sort to the top so "their"
+ * relays appear first regardless of search term.
  *
- * **Hard cap at MAX_RESULTS (default 50).** A single kind-10002 event can
- * carry 20–50 `r` tags, so a `{limit: 100}` query can easily yield 3000+
- * unique URLs. Rendering one row per URL crashed the browser via the
- * per-row NIP-11 HTTP fan-out — see KUBO-050/051 perf regression. The cap
- * keeps top-ranked relays (most-referenced) and discards the long tail.
+ * Cap at MAX_RESULTS=50 after substring + sort (kept from KUBO-050/051: each
+ * row may still trigger lazy NIP-11 fallback when info is missing).
  */
 
 const MAX_RESULTS = 50;
 
-export function useRelays(query: string, { limit = MAX_RESULTS }: { limit?: number } = {}) {
-  const result = useSearchEvents({ kinds: [10002], query, limit: 100 });
+export function useRelays(
+  query: string,
+  { limit = MAX_RESULTS }: { limit?: number } = {},
+) {
+  const { data, isFetching, isError } = useRelayDiscovery();
+  const { config } = useAppContext();
 
-  const ranked = useMemo<string[]>(() => {
-    const counts = new Map<string, number>();
-    for (const event of result.data ?? []) {
-      for (const tag of event.tags) {
-        if (tag[0] !== 'r' || !tag[1]) continue;
-        const url = normalizeRelayUrl(tag[1]);
-        if (!url) continue;
-        counts.set(url, (counts.get(url) ?? 0) + 1);
+  const personalSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of config.relayMetadata.relays) {
+      const n = normalizeRelayUrl(r.url);
+      if (n) s.add(n);
+    }
+    if (config.useAppRelays) {
+      for (const r of APP_RELAYS.relays) {
+        const n = normalizeRelayUrl(r.url);
+        if (n) s.add(n);
       }
     }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([url]) => url);
-  }, [result.data]);
+    return s;
+  }, [config.relayMetadata.relays, config.useAppRelays]);
 
-  const filtered = useMemo<string[]>(() => {
+  const filtered = useMemo<DiscoveredRelay[]>(() => {
+    if (!data) return [];
     const q = query.trim().toLowerCase();
     const matching = q
-      ? ranked.filter((url) => url.toLowerCase().includes(q))
-      : ranked;
-    return matching.slice(0, limit);
-  }, [ranked, query, limit]);
+      ? data.filter((r) => r.url.toLowerCase().includes(q))
+      : data;
+    const sorted = [...matching].sort((a, b) => {
+      const ap = personalSet.has(a.url) ? 0 : 1;
+      const bp = personalSet.has(b.url) ? 0 : 1;
+      return ap - bp;
+    });
+    return sorted.slice(0, limit);
+  }, [data, query, limit, personalSet]);
 
-  return { ...result, relays: filtered };
+  return { relays: filtered, isFetching, isError };
 }

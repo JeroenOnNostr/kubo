@@ -12,6 +12,7 @@ import { ScopedTheme } from '@/components/ScopedTheme';
 import { ParentTour } from '@/components/tour/ParentTour';
 import { TourAnchorProvider } from '@/components/tour/TourAnchorProvider';
 import { EMPTY_FEED_SOURCES, useKuboFamily } from '@/hooks/useKuboFamily';
+import { useRelayDiscovery } from '@/hooks/useRelayDiscovery';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { primeFeedSourcesCache } from '@/lib/primeFeedSourcesCache';
 import { builtinThemes } from '@/themes';
@@ -28,6 +29,9 @@ import { builtinThemes } from '@/themes';
  */
 export function KuboParentLayout() {
   useFeedSourcesPrime();
+  // Warm the NIP-66 relay catalogue while the user browses other parent
+  // pages, so Trust→Places and Feed→Relays open with results already loaded.
+  useRelayDiscovery();
 
   return (
     <ScopedTheme colors={builtinThemes.dark} className="min-h-dvh bg-background text-foreground">

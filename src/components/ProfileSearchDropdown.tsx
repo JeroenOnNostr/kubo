@@ -41,6 +41,22 @@ interface ProfileSearchDropdownProps {
   enableTextSearch?: boolean;
   /** When true, country suggestions are hidden from the dropdown */
   hideCountry?: boolean;
+  /** When true, the Wikipedia top-result row is hidden. */
+  hideWikipedia?: boolean;
+  /** When true, the Internet Archive top-result row is hidden. */
+  hideArchive?: boolean;
+  /** When true, sidebar nav-page suggestions are hidden. */
+  hideNavItems?: boolean;
+  /**
+   * When provided, replaces the default profile-result row renderer. Receives
+   * the profile and selection/follow flags; should return a row element that
+   * fits the dropdown's flat list. Used by Trust > People to embed an
+   * expandable trust-assignment row directly in the search results.
+   */
+  renderProfileItem?: (
+    profile: SearchProfile,
+    state: { isSelected: boolean; isFollowed: boolean },
+  ) => React.ReactNode;
 }
 
 export function ProfileSearchDropdown({
@@ -52,6 +68,10 @@ export function ProfileSearchDropdown({
   onSelectIdentifier,
   enableTextSearch,
   hideCountry = false,
+  hideWikipedia = false,
+  hideArchive = false,
+  hideNavItems = false,
+  renderProfileItem,
 }: ProfileSearchDropdownProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -68,16 +88,19 @@ export function ProfileSearchDropdown({
   const { data: wikipediaResults } = useWikipediaSearch(query);
   const { data: archiveResults } = useArchiveSearch(query);
 
-  // Take at most 1 result from each external source
-  const wikipediaResult: WikipediaSearchResult | null = wikipediaResults?.[0] ?? null;
-  const archiveResult: ArchiveSearchResult | null = archiveResults?.[0] ?? null;
+  // Take at most 1 result from each external source — suppressed via hide flags.
+  const wikipediaResult: WikipediaSearchResult | null = hideWikipedia ? null : (wikipediaResults?.[0] ?? null);
+  const archiveResult: ArchiveSearchResult | null = hideArchive ? null : (archiveResults?.[0] ?? null);
 
   // Country suggestion (local, synchronous) — suppressed when hideCountry is true
   const countryMatchRaw = useMemo(() => searchCountry(query), [query]);
   const countryMatch = hideCountry ? null : countryMatchRaw;
 
-  // Nav item suggestions (local, synchronous)
-  const navItems = useMemo(() => searchSidebarItems(query), [query]);
+  // Nav item suggestions (local, synchronous) — suppressed when hideNavItems is true.
+  const navItems = useMemo<SidebarItemDef[]>(
+    () => (hideNavItems ? [] : searchSidebarItems(query)),
+    [hideNavItems, query],
+  );
 
   // URL detection — show "Comment on" option when query is a full URL
   const queryIsUrl = useMemo(() => isFullUrl(query), [query]);
@@ -363,15 +386,26 @@ export function ProfileSearchDropdown({
                 onClick={handleSelectCountry}
               />
             )}
-            {profiles && profiles.map((profile, index) => (
-              <ProfileItem
-                key={profile.pubkey}
-                profile={profile}
-                isSelected={index + profileStartIndex === selectedIndex}
-                isFollowed={followedPubkeys.has(profile.pubkey)}
-                onClick={handleSelect}
-              />
-            ))}
+            {profiles && profiles.map((profile, index) => {
+              const isSelected = index + profileStartIndex === selectedIndex;
+              const isFollowed = followedPubkeys.has(profile.pubkey);
+              if (renderProfileItem) {
+                return (
+                  <div key={profile.pubkey} data-search-item>
+                    {renderProfileItem(profile, { isSelected, isFollowed })}
+                  </div>
+                );
+              }
+              return (
+                <ProfileItem
+                  key={profile.pubkey}
+                  profile={profile}
+                  isSelected={isSelected}
+                  isFollowed={isFollowed}
+                  onClick={handleSelect}
+                />
+              );
+            })}
             {hasCountry && !countryAtTop && (
               <CountryItem
                 country={countryMatch!.country}
@@ -457,15 +491,26 @@ export function ProfileSearchDropdown({
             )}
 
             {/* Profile results */}
-            {profiles && profiles.length > 0 && profiles.map((profile, index) => (
-              <ProfileItem
-                key={profile.pubkey}
-                profile={profile}
-                isSelected={index + profileStartIndex === selectedIndex}
-                isFollowed={followedPubkeys.has(profile.pubkey)}
-                onClick={handleSelect}
-              />
-            ))}
+            {profiles && profiles.length > 0 && profiles.map((profile, index) => {
+              const isSelected = index + profileStartIndex === selectedIndex;
+              const isFollowed = followedPubkeys.has(profile.pubkey);
+              if (renderProfileItem) {
+                return (
+                  <div key={profile.pubkey} data-search-item>
+                    {renderProfileItem(profile, { isSelected, isFollowed })}
+                  </div>
+                );
+              }
+              return (
+                <ProfileItem
+                  key={profile.pubkey}
+                  profile={profile}
+                  isSelected={isSelected}
+                  isFollowed={isFollowed}
+                  onClick={handleSelect}
+                />
+              );
+            })}
 
             {/* Country result (bottom — prefix match with profiles present) */}
             {hasCountry && !countryAtTop && (

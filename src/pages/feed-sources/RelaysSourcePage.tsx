@@ -1,11 +1,11 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { ExternalLink, Mail, Search, Server, Shield, Zap } from 'lucide-react';
+import { Search, Server } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import { BrowseSectionShell } from '@/components/feed/BrowseSectionShell';
 import { ExpandableSourceRow } from '@/components/feed/ExpandableSourceRow';
 import { NoKidSelected } from '@/components/NoKidSelected';
+import { RelayBadges, RelayFooter } from '@/components/relays/RelayInfoPanel';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useKidFeedSources } from '@/hooks/useKidFeedSources';
 import { useRelayInfo, type RelayInfoDocument } from '@/hooks/useRelayInfo';
@@ -65,27 +65,27 @@ export function RelaysSourcePage() {
   // Compose the browse list: discovered (ranked) first, then baseline
   // relays that aren't already in the discovered list, minus anything the
   // user has already enabled (those render in the Enabled section).
-  const browseList = useMemo<string[]>(() => {
+  // Discovered rows carry inline NIP-11 from kind-30166 so RelayRow can
+  // skip the per-row HTTP fetch (KUBO-054); baseline rows have no info and
+  // fall back to the lazy fetch.
+  const browseList = useMemo<RelayBrowseEntry[]>(() => {
     const seen = new Set<string>([...enabledSet]);
-    const out: string[] = [];
-    const push = (url: string) => {
-      if (seen.has(url)) return;
-      seen.add(url);
-      out.push(url);
+    const out: RelayBrowseEntry[] = [];
+    const push = (entry: RelayBrowseEntry) => {
+      if (seen.has(entry.url)) return;
+      seen.add(entry.url);
+      out.push(entry);
     };
 
-    // Synthetic "pasted URL" row first — if query looks like a URL and isn't
-    // already enabled or in the list.
     if (pastedUrl) {
-      push(pastedUrl);
+      push({ url: pastedUrl });
     }
 
-    for (const url of discoveredRelays) push(url);
+    for (const r of discoveredRelays) push({ url: r.url, info: r.info });
 
-    // Filter baseline by query substring so search behaviour is consistent.
     const q = trimmedQuery.toLowerCase();
     for (const url of baselineRelays) {
-      if (!q || url.toLowerCase().includes(q)) push(url);
+      if (!q || url.toLowerCase().includes(q)) push({ url });
     }
     return out;
   }, [pastedUrl, discoveredRelays, baselineRelays, enabledSet, trimmedQuery]);
@@ -120,7 +120,7 @@ export function RelaysSourcePage() {
         )}
 
         <BrowseSection
-          urls={browseList}
+          entries={browseList}
           isFetching={relaysFetching}
           query={trimmedQuery}
           onToggle={(url) => toggleRelay(url)}
@@ -128,6 +128,12 @@ export function RelaysSourcePage() {
       </div>
     </main>
   );
+}
+
+interface RelayBrowseEntry {
+  url: string;
+  /** Inline NIP-11 from NIP-66 monitor; absent for baseline rows. */
+  info?: RelayInfoDocument;
 }
 
 function EnabledSection({
@@ -146,7 +152,7 @@ function EnabledSection({
         {urls.map((url) => (
           <RelayRow
             key={url}
-            url={url}
+            entry={{ url }}
             enabled
             onToggle={() => onToggle(url)}
           />
@@ -157,68 +163,71 @@ function EnabledSection({
 }
 
 function BrowseSection({
-  urls,
+  entries,
   isFetching,
   query,
   onToggle,
 }: {
-  urls: string[];
+  entries: RelayBrowseEntry[];
   isFetching: boolean;
   query: string;
   onToggle: (url: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Browse all
-      </div>
-      {isFetching && urls.length === 0 ? (
+    <BrowseSectionShell count={entries.length} forceOpen={query.length > 0}>
+      {isFetching && entries.length === 0 ? (
         <EmptyState>Searching…</EmptyState>
-      ) : urls.length === 0 ? (
+      ) : entries.length === 0 ? (
         <EmptyState>
           {query ? `No relays found for "${query}".` : 'No relays discovered yet.'}
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-2">
-          {urls.map((url) => (
+          {entries.map((entry) => (
             <RelayRow
-              key={url}
-              url={url}
+              key={entry.url}
+              entry={entry}
               enabled={false}
-              onToggle={() => onToggle(url)}
+              onToggle={() => onToggle(entry.url)}
             />
           ))}
         </div>
       )}
-    </div>
+    </BrowseSectionShell>
   );
 }
 
 function RelayRow({
-  url,
+  entry,
   enabled,
   onToggle,
 }: {
-  url: string;
+  entry: RelayBrowseEntry;
   enabled: boolean;
   onToggle: () => void;
 }) {
-  // Lazy NIP-11 fetch (KUBO-054 perf fix). The HTTP fan-out was the
-  // culprit behind the page freeze — 50 rows × one HTTP request per row
-  // was too much on mobile. Now:
-  //  - Enabled rows fetch eagerly (the user explicitly chose them, small N).
-  //  - Browse rows fetch only after first expand; stays "activated" across
-  //    collapse so re-expanding is instant.
-  const [activated, setActivated] = useState<boolean>(enabled);
+  // NIP-11 metadata: prefer inline info from the NIP-66 monitor (no HTTP
+  // fetch needed). Fall back to lazy useRelayInfo for baseline relays
+  // (parent's NIP-65 + APP_RELAYS) and enabled rows that aren't in the
+  // discovery set. Enabled rows fetch eagerly (small N, user-chosen);
+  // browse rows fetch only after first expand (KUBO-054 perf fix).
+  const hasInlineInfo = !!entry.info;
+  const [activated, setActivated] = useState<boolean>(enabled || hasInlineInfo);
   const handleOpenChange = useCallback((open: boolean) => {
     if (open) setActivated(true);
   }, []);
-  const { data: relayInfo } = useRelayInfo(activated ? url : undefined);
-  const relayName = relayInfo?.name?.trim() || relayHostOf(url);
+  const { data: fetchedInfo } = useRelayInfo(
+    !hasInlineInfo && activated ? entry.url : undefined,
+  );
+  const relayInfo = entry.info ?? fetchedInfo;
+  const relayName = relayInfo?.name?.trim() || relayHostOf(entry.url);
 
+  // Match the Trust→Places row style: collapsed shows avatar + name + host
+  // (no wss:// prefix, no badges); badges move into the expanded body next
+  // to the Visit/contact links so the row stays scannable.
   return (
     <ExpandableSourceRow
-      rowKey={url}
+      rowKey={entry.url}
       avatar={
         <Avatar className="size-9 border border-border/70">
           <AvatarImage src={relayInfo?.icon} alt="" />
@@ -228,82 +237,18 @@ function RelayRow({
         </Avatar>
       }
       title={relayName}
-      subtitle={url}
-      badges={<RelayBadges info={relayInfo} />}
+      subtitle={relayHostOf(entry.url)}
       description={relayInfo?.description}
-      footer={<RelayFooter url={url} info={relayInfo} />}
+      footer={
+        <div className="flex flex-col gap-2">
+          <RelayBadges info={relayInfo} />
+          <RelayFooter url={entry.url} info={relayInfo} />
+        </div>
+      }
       enabled={enabled}
       onToggle={onToggle}
       onOpenChange={handleOpenChange}
     />
-  );
-}
-
-function RelayBadges({ info }: { info: RelayInfoDocument | undefined }) {
-  const paymentRequired = Boolean(
-    info?.limitation?.payment_required ?? info?.payment_required,
-  );
-  const authRequired = Boolean(
-    info?.limitation?.auth_required ?? info?.auth_required,
-  );
-  const notableNips = (info?.supported_nips ?? []).filter(
-    (nip) => nip === 42 || nip === 50,
-  );
-  if (!paymentRequired && !authRequired && notableNips.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {notableNips.includes(50) && (
-        <Badge variant="outline" className="text-[10px]">NIP-50</Badge>
-      )}
-      {notableNips.includes(42) && (
-        <Badge variant="outline" className="text-[10px]">NIP-42</Badge>
-      )}
-      {authRequired && (
-        <Badge variant="secondary" className="gap-1 text-[10px]">
-          <Shield className="size-2.5" />
-          Auth
-        </Badge>
-      )}
-      {paymentRequired && (
-        <Badge variant="secondary" className="gap-1 text-[10px]">
-          <Zap className="size-2.5" />
-          Paid
-        </Badge>
-      )}
-    </div>
-  );
-}
-
-function RelayFooter({
-  url,
-  info,
-}: {
-  url: string;
-  info: RelayInfoDocument | undefined;
-}) {
-  const contact = info?.contact?.trim();
-  const encoded = encodeURIComponent(url);
-  return (
-    <div className="flex flex-wrap gap-3 text-[12px]">
-      {contact && (
-        <a
-          href={contact.includes('@') ? `mailto:${contact}` : contact}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-primary hover:underline"
-        >
-          <Mail className="size-3" />
-          {contact}
-        </a>
-      )}
-      <Link
-        to={`/r/${encoded}`}
-        className="inline-flex items-center gap-1 text-primary hover:underline"
-      >
-        <ExternalLink className="size-3" />
-        Visit relay
-      </Link>
-    </div>
   );
 }
 

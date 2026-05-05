@@ -70,6 +70,9 @@ export function ProfilesSourcePage() {
           onSelect={handlePick}
           onSelectIdentifier={handlePick}
           hideCountry
+          hideWikipedia
+          hideArchive
+          hideNavItems
           inputClassName="rounded-full bg-card h-11 text-[13px]"
           className="w-full"
         />
