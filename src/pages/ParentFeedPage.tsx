@@ -48,10 +48,6 @@ export function ParentFeedPage() {
 
   return (
     <div className="flex flex-col gap-4 pt-2 pb-6">
-      <div className="px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Feed · {kid.displayName}
-      </div>
-
       {/* Top row: edit settings + preview */}
       <div className="px-4 grid grid-cols-2 gap-3">
         <NavTile

@@ -83,11 +83,6 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
-      {/* Title */}
-      <div className="flex items-center gap-2">
-        <h1 className="text-base font-semibold flex-1">Home</h1>
-      </div>
-
       {/* Kid summary */}
       <div className="flex items-center gap-3 px-1">
         <KidAvatar

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Loader2, Upload, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Upload } from 'lucide-react';
 import { NLogin, NUser, useNostrLogin } from '@nostrify/react/login';
 import { useNostr } from '@nostrify/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -223,20 +223,6 @@ export function ContentUploaderPage() {
 
   return (
     <div className="flex flex-col gap-4 pt-2 pb-6 min-h-dvh">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-full"
-          onClick={() => nav(-1)}
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </Button>
-        <h1 className="text-lg font-semibold flex-1">Upload content</h1>
-      </div>
-
       {/* Drop zone / preview */}
       {previewUrl && selectedFile ? (
         <div className="mx-4 relative aspect-video rounded-2xl overflow-hidden bg-black">
