@@ -6,7 +6,19 @@ Completed work, most recent first.
 
 ## 2026-05-05
 
-- **KUBO-022: Videos tab — infinite scroll** — `__KUBO022_HASH__`
+- **KUBO-106: Shrink adaptive launcher foreground 72dp→54dp for safe zone** — `128b0c46`
+  Pixel launchers zoom adaptive icons during open/close animations and most mask shapes only guarantee the inner 66dp circle of the 108dp canvas, so the previous 72dp foreground was getting its corners clipped. Pulled the foreground down to 54dp (50% of canvas): [drawable-v24/ic_launcher_foreground.xml](android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml) translate 18→27 + scale 1.02857→0.77143; [scripts/generate-icons.mjs](scripts/generate-icons.mjs) content ratio 55%→50% with a comment pointing at the vector that has to stay in sync; all `ic_launcher.png` / `ic_launcher_foreground.png` / `ic_launcher_round.png` across the five density buckets regenerated.
+
+- **fix: invalidate kid-feed query after follow/unfollow on Profiles source** — `f7273544`
+  `handleToggle` and `handlePick` on [ProfilesSourcePage](src/pages/feed-sources/ProfilesSourcePage.tsx) only invalidated `['feed','follows']`, so the kid feed (`['kid-feed']`) wouldn't reflect a new follow for ~60s. Both `useKidFeed` and `useFeed('follows')` deliberately exclude the follow list from their query keys, so explicit invalidation is required. Added the `['kid-feed']` invalidation alongside `['feed','follows']` in both handlers and updated the rationale comment.
+
+- **KUBO-104: Profiles row — split avatar/name from unfollow Switch** — `1bd580c7`
+  `/parent/feed/profiles` rows wrapped the avatar, name, and Switch in a single `<label>`, so tapping the PFP or name silently unfollowed the user via the label's implicit click forwarding. Mirrored the split-zone pattern from Trust → People (`TrustRow` `onProfileClick` mode): row is now a flex `<div>` with a `<button>` wrapping the avatar + name (navigates to `/parent/profile/<npub>`) and the Switch as a sibling. Plumbed `onProfileClick` through `ProfileRow` → `FollowedRow` → `FollowedList`, encoding the npub at the call site via `nip19.npubEncode`.
+
+- **KUBO-001 (partial): Rebuild upload signer from any stored login type** — `020e3701` (still open pending browser verification)
+  `getSignerForPubkey` in [ContentUploaderPage](src/pages/ContentUploaderPage.tsx) previously only resolved a signer when the matching login record was type `'nsec'`, so "Publish as Parent" failed when the parent had logged in via NIP-07 extension or NIP-46 bunker while a kid was the active login. Now the active-user fast path is unchanged (reuses `user.signer` for the live bunker `NConnectSigner`), and the fallback resolves any stored login record by type — nsec via `fromNsecLogin`, extension via `fromExtensionLogin`, bunker via `fromBunkerLogin(login, nostr)`. The "key isn't loaded on this device" toast still fires for the no-record case. Drops the now-unused `NLogin` import. KUBO-001 stays open in TODO until the full Publish-as matrix is browser-verified.
+
+- **KUBO-022: Videos tab — infinite scroll** — `231d89d7`
   `VideosTab` on `/parent/profile/:npub` only rendered the first `useProfileMedia` page (~20 events). Wired a `useInView` sentinel under the 3-column grid (`rootMargin: 400px` so it pre-fetches before the user hits the bottom) that calls `fetchNextPage()` whenever it scrolls into view, gated on `hasNextPage && !isFetchingNextPage`. Reuses the hook's already-implemented `getNextPageParam` cursor — no hook change. Follow-up KUBO-021 (trust-scoped filtering) and KUBO-103 (Next-post FAB) are unaffected.
 
 - **KUBO-009: Replace hardcoded "Ellie" placeholder with real Nostr profile data** — `397e5ba7`

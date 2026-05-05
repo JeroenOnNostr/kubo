@@ -6,9 +6,6 @@ Completed work lives in [DONE.md](DONE.md).
 
 ## Open
 
-- **KUBO-104: Feed Settings → Profiles row — clicking PFP/name should open profile, not unfollow**
-  On `/parent/feed/profiles` (`ProfilesSourcePage.tsx`) the followed-profile rows wrap the avatar, name, and Switch in a `<label>`, so any tap on the avatar/name fires the inner Switch's `onCheckedChange` and unfollows the user. Mirror the split-zone pattern from Trust → People (`TrustRow` `onProfileClick` mode): left zone (avatar + name) is a `<button>` that navigates to `/parent/profile/<npub>`; right zone is the unfollow Switch only. Browser-verify on a kid with at least one followed profile that tapping the picture/name opens the profile and only the Switch unfollows.
-
 - **KUBO-001: Upload flow — verify "Publish as" matrix in browser**
   Implementation landed: `getSignerForPubkey` in `src/pages/ContentUploaderPage.tsx` now rebuilds a signer from any stored login type (nsec / extension / bunker) instead of only `type === 'nsec'`. This should unblock "Publish as Parent" while a kid is the active login when the parent logged in via NIP-07 extension or NIP-46 bunker. Typecheck + lint pass; **not yet browser-verified**. Walk the matrix on `/parent/upload` with `npm run dev` (Pixel 7 emulation): (1) parent-nsec / parent-active / publish-as-parent, (2) parent-nsec / parent-active / publish-as-kid, (3) parent-nsec / kid-active / publish-as-parent, (4) parent-extension / kid-active / publish-as-parent, (5) parent-bunker / kid-active / publish-as-parent, (6) any / any / publish-as-kid. For each row confirm a kind-20/21 event is published and attributed to the right pubkey, and that no KUBO-016 render-loop fires (the fix path deliberately avoids `setLogin`). Negative case: a pubkey with no matching login record should still surface the existing `"That account's key isn't loaded on this device."` toast.
 
@@ -20,9 +17,6 @@ Completed work lives in [DONE.md](DONE.md).
 
 - **KUBO-021: Videos tab — trust-scoped filtering**
   Follow-up to KUBO-020. `VideosTab` on `/parent/profile/:npub` currently shows every media event from the creator, unfiltered. Once KUBO-102 defines the trust → feed-routing mapping, filter `useProfileMedia` results by the current kid's trusted-authors set (or the kid's active trust level) so the grid matches what the kid is allowed to see. Probably a thin wrapper hook `useKidScopedProfileMedia(pubkey, kidId)` that post-filters the infinite query pages.
-
-- **KUBO-022: Videos tab — infinite scroll**
-  Follow-up to KUBO-020. `VideosTab` only renders the first `useProfileMedia` page (~20 events). Wire an IntersectionObserver sentinel at the bottom of the grid that calls `fetchNextPage()` when visible, using the hook's already-implemented `getNextPageParam`.
 
 - **KUBO-103: Profile videos — "Next post" affordance like the kid feed**
   The kid feed uses `NextPostFAB` (`src/components/kid/NextPostFAB.tsx` + `KidFeedList.tsx`) to advance the kid one post at a time as a paced browsing affordance, gated by the per-kid `nextPostButton` setting in `EditKidSettingsPage`. The parent profile `/parent/profile/:npub` Videos tab is a free-scroll 3-column grid — no equivalent "show me the next set" affordance when a creator has a long tail. Add a similar control on the profile Videos tab so users can step through a creator's catalog in chunks rather than scrolling. Open questions: parent profile tab, kid-themed `KidProfileViewPage` `KidVideosTab`, or both? Does "next" advance one tile or a full grid page (~20)? Should it respect the same per-kid `nextPostButton` setting, or always-on for parents? Implementation likely shares the `useProfileMedia` infinite query landed in KUBO-022 — the FAB programmatically calls `fetchNextPage()` and scrolls to the next batch's first tile.
