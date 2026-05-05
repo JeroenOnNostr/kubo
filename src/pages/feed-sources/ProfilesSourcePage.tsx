@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -27,6 +28,7 @@ import { FeedSourceHeader } from './_FeedSourceHeader';
  * Following row below.
  */
 export function ProfilesSourcePage() {
+  const nav = useNavigate();
   const kid = useSelectedKid();
   const { data: followData } = useFollowList();
   const { follow, unfollow, isPending } = useFollowActions();
@@ -80,6 +82,7 @@ export function ProfilesSourcePage() {
         <FollowedList
           pubkeys={followedPubkeys}
           onToggle={handleToggle}
+          onProfileClick={(pubkey) => nav(`/parent/profile/${nip19.npubEncode(pubkey)}`)}
           disabled={isPending}
         />
       </div>
@@ -90,10 +93,12 @@ export function ProfilesSourcePage() {
 function FollowedList({
   pubkeys,
   onToggle,
+  onProfileClick,
   disabled,
 }: {
   pubkeys: string[];
   onToggle: (pubkey: string) => void;
+  onProfileClick: (pubkey: string) => void;
   disabled: boolean;
 }) {
   if (pubkeys.length === 0) {
@@ -113,6 +118,7 @@ function FollowedList({
           key={pubkey}
           pubkey={pubkey}
           onToggle={() => onToggle(pubkey)}
+          onProfileClick={() => onProfileClick(pubkey)}
           disabled={disabled}
         />
       ))}
@@ -123,10 +129,12 @@ function FollowedList({
 function FollowedRow({
   pubkey,
   onToggle,
+  onProfileClick,
   disabled,
 }: {
   pubkey: string;
   onToggle: () => void;
+  onProfileClick: () => void;
   disabled: boolean;
 }) {
   const { data: author } = useAuthor(pubkey);
@@ -143,6 +151,7 @@ function FollowedRow({
       subtitle={subtitle}
       enabled={true}
       onToggle={onToggle}
+      onProfileClick={onProfileClick}
       disabled={disabled}
     />
   );
@@ -154,6 +163,7 @@ function ProfileRow({
   subtitle,
   enabled,
   onToggle,
+  onProfileClick,
   disabled,
 }: {
   picture?: string;
@@ -161,30 +171,38 @@ function ProfileRow({
   subtitle: string;
   enabled: boolean;
   onToggle: () => void;
+  onProfileClick: () => void;
   disabled: boolean;
 }) {
   return (
-    <label className="flex items-center gap-3 p-3 rounded-xl bg-card hover:bg-card/80 transition-colors cursor-pointer">
-      <Avatar className="size-9 shrink-0 border border-border/70">
-        <AvatarImage src={picture} alt="" />
-        <AvatarFallback>
-          <UserRound className="size-4 text-muted-foreground" />
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium leading-tight" title={name}>
-          {name}
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-card hover:bg-card/80 transition-colors">
+      <button
+        type="button"
+        onClick={onProfileClick}
+        className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg"
+        aria-label={`Open ${name}'s profile`}
+      >
+        <Avatar className="size-9 shrink-0 border border-border/70">
+          <AvatarImage src={picture} alt="" />
+          <AvatarFallback>
+            <UserRound className="size-4 text-muted-foreground" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium leading-tight" title={name}>
+            {name}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground" title={subtitle}>
+            {subtitle}
+          </div>
         </div>
-        <div className="truncate text-[11px] text-muted-foreground" title={subtitle}>
-          {subtitle}
-        </div>
-      </div>
+      </button>
       <Switch
         checked={enabled}
         onCheckedChange={onToggle}
         disabled={disabled}
         aria-label={`Toggle ${name}`}
       />
-    </label>
+    </div>
   );
 }
