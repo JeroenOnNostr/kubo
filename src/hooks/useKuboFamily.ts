@@ -66,6 +66,11 @@ export const EMPTY_FEED_SOURCES: KidFeedSources = {
   packs: [],
 };
 
+export interface KuboTrustRequest {
+  /** Unix-ms when the kid created the request. */
+  createdAt: number;
+}
+
 export interface KuboFamily {
   parentPubkey: string;
   parentDisplayName: string;
@@ -74,6 +79,28 @@ export interface KuboFamily {
   trustAssignments?: {
     [kidPubkey: string]: {
       [targetPubkey: string]: KuboTrustLevel;
+    };
+  };
+  /**
+   * Per-kid relay-URL-keyed trust assignments for /parent/trust/places.
+   * Same shape as trustAssignments but keyed by normalized relay URL
+   * (wss://…/) instead of pubkey. Missing entry = unassigned. Visual-only
+   * for now — does not influence routing or content selection (TEPP, future).
+   */
+  relayTrustAssignments?: {
+    [kidPubkey: string]: {
+      [relayUrl: string]: KuboTrustLevel;
+    };
+  };
+  /**
+   * Pending kid → parent requests to upgrade a creator's trust level to
+   * Interact. Same shape as trustAssignments. Missing entry = no pending
+   * request. Local-only for now; KUBO-013/TEPP will replace this with a
+   * gift-wrapped Nostr event.
+   */
+  trustRequests?: {
+    [kidPubkey: string]: {
+      [targetPubkey: string]: KuboTrustRequest;
     };
   };
   /** Per-kid settings (time limits, age, post-action visibility). */
@@ -213,6 +240,10 @@ export async function removeKid(pubkey: string): Promise<void> {
     const { [pubkey]: _removedTrust, ...restTrust } = current.trustAssignments;
     next.trustAssignments = restTrust;
   }
+  if (current.trustRequests && pubkey in current.trustRequests) {
+    const { [pubkey]: _removedReq, ...restReq } = current.trustRequests;
+    next.trustRequests = restReq;
+  }
   if (current.kidSettings && pubkey in current.kidSettings) {
     const { [pubkey]: _removedKid, ...restKid } = current.kidSettings;
     next.kidSettings = restKid;
@@ -263,6 +294,110 @@ export async function clearTrustLevel(
   await writeAndNotify({
     ...current,
     trustAssignments: { ...assignments, [kidPubkey]: rest },
+  });
+}
+
+export async function setRelayTrustLevel(
+  kidPubkey: string,
+  relayUrl: string,
+  level: KuboTrustLevel,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot set relay trust level: no family record exists yet.');
+  }
+  const assignments = current.relayTrustAssignments ?? {};
+  const kidAssignments = assignments[kidPubkey] ?? {};
+  await writeAndNotify({
+    ...current,
+    relayTrustAssignments: {
+      ...assignments,
+      [kidPubkey]: { ...kidAssignments, [relayUrl]: level },
+    },
+  });
+}
+
+export async function clearRelayTrustLevel(
+  kidPubkey: string,
+  relayUrl: string,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  const assignments = current.relayTrustAssignments ?? {};
+  const kidAssignments = assignments[kidPubkey];
+  if (!kidAssignments || !(relayUrl in kidAssignments)) return;
+  const { [relayUrl]: _removed, ...rest } = kidAssignments;
+  await writeAndNotify({
+    ...current,
+    relayTrustAssignments: { ...assignments, [kidPubkey]: rest },
+  });
+}
+
+// ─── Trust requests (kid → parent) ───────────────────────────────────────────
+
+export async function addTrustRequest(
+  kidPubkey: string,
+  targetPubkey: string,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot create trust request: no family record exists yet.');
+  }
+  const requests = current.trustRequests ?? {};
+  const kidRequests = requests[kidPubkey] ?? {};
+  // Idempotent: re-tapping the kid button shouldn't bump createdAt.
+  if (targetPubkey in kidRequests) return;
+  await writeAndNotify({
+    ...current,
+    trustRequests: {
+      ...requests,
+      [kidPubkey]: { ...kidRequests, [targetPubkey]: { createdAt: Date.now() } },
+    },
+  });
+}
+
+export async function clearTrustRequest(
+  kidPubkey: string,
+  targetPubkey: string,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  const requests = current.trustRequests ?? {};
+  const kidRequests = requests[kidPubkey];
+  if (!kidRequests || !(targetPubkey in kidRequests)) return;
+  const { [targetPubkey]: _removed, ...rest } = kidRequests;
+  await writeAndNotify({
+    ...current,
+    trustRequests: { ...requests, [kidPubkey]: rest },
+  });
+}
+
+/**
+ * Atomic approval: clears the request AND sets trustAssignments[kid][target]
+ * to 'interact' in a single writeAndNotify so subscribers see one consistent
+ * transition (no flicker where the row is briefly neither pending nor
+ * assigned).
+ */
+export async function approveTrustRequest(
+  kidPubkey: string,
+  targetPubkey: string,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot approve trust request: no family record exists yet.');
+  }
+  const assignments = current.trustAssignments ?? {};
+  const kidAssignments = assignments[kidPubkey] ?? {};
+  const requests = current.trustRequests ?? {};
+  const kidRequests = requests[kidPubkey] ?? {};
+  const { [targetPubkey]: _removed, ...restRequests } = kidRequests;
+  await writeAndNotify({
+    ...current,
+    trustAssignments: {
+      ...assignments,
+      [kidPubkey]: { ...kidAssignments, [targetPubkey]: 'interact' },
+    },
+    trustRequests: { ...requests, [kidPubkey]: restRequests },
   });
 }
 
@@ -422,6 +557,11 @@ export function useKuboFamily() {
   const clearFamilyCb = useCallback(clearFamily, []);
   const setTrustLevelCb = useCallback(setTrustLevel, []);
   const clearTrustLevelCb = useCallback(clearTrustLevel, []);
+  const setRelayTrustLevelCb = useCallback(setRelayTrustLevel, []);
+  const clearRelayTrustLevelCb = useCallback(clearRelayTrustLevel, []);
+  const addTrustRequestCb = useCallback(addTrustRequest, []);
+  const clearTrustRequestCb = useCallback(clearTrustRequest, []);
+  const approveTrustRequestCb = useCallback(approveTrustRequest, []);
   const setKidSettingsCb = useCallback(setKidSettings, []);
   const markCoachmarksCompleteCb = useCallback(markCoachmarksComplete, []);
 
@@ -433,6 +573,11 @@ export function useKuboFamily() {
     clearFamily: clearFamilyCb,
     setTrustLevel: setTrustLevelCb,
     clearTrustLevel: clearTrustLevelCb,
+    setRelayTrustLevel: setRelayTrustLevelCb,
+    clearRelayTrustLevel: clearRelayTrustLevelCb,
+    addTrustRequest: addTrustRequestCb,
+    clearTrustRequest: clearTrustRequestCb,
+    approveTrustRequest: approveTrustRequestCb,
     setKidSettings: setKidSettingsCb,
     markCoachmarksComplete: markCoachmarksCompleteCb,
   };
