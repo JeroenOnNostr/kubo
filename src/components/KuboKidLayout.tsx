@@ -3,8 +3,10 @@ import { Outlet } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useScreenTime } from '@/hooks/useScreenTime';
 import { start, stopTracker } from '@/lib/screenTimeTracker';
+import { getTourStep, setPinFlowActive, setTourStep } from '@/lib/tourState';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { KuboKidErrorFallback } from '@/components/KuboErrorFallbacks';
 import {
@@ -12,6 +14,8 @@ import {
   KuboKidScrollAwareTopBar,
 } from '@/components/KuboKidTopBar';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
+import { ParentTour } from '@/components/tour/ParentTour';
+import { TourAnchorProvider } from '@/components/tour/TourAnchorProvider';
 import {
   KuboKidLayoutContext,
   type KuboKidLayoutOptions,
@@ -42,8 +46,23 @@ import { useKidBackGuard } from '@/hooks/useKidBackGuard';
  */
 export function KuboKidLayout() {
   const { user } = useCurrentUser();
+  const { family } = useKuboFamily();
   const { isLocked, isOutsideWindow, settings } = useScreenTime();
   const [gateOpen, setGateOpen] = useState(false);
+
+  // First-run tour trigger (KUBO-092). Fires once when this layout mounts
+  // with a family record that has at least one kid but no completion flag —
+  // i.e. the parent has just finished AddKidPage and landed on /kid for the
+  // first time. The flag in the family record is the "never show again" gate;
+  // once written, subsequent visits to /kid (including kid-handoff sessions
+  // initiated from the kid-selector pill) won't re-trigger.
+  useEffect(() => {
+    if (!family) return;
+    if (family.coachmarksCompletedAt) return;
+    if (family.kids.length === 0) return;
+    if (getTourStep() !== 0) return;
+    setTourStep(1);
+  }, [family]);
 
   const [options, setOptions] = useState<KuboKidLayoutOptions>({});
   // Stable identity so useEffect in useKidLayoutOptions doesn't loop.
@@ -67,8 +86,15 @@ export function KuboKidLayout() {
 
   // Android hardware back / gesture: route in-tree back to React Router and
   // surface ParentGateDialog at the kid-mode boundary so a swipe can never
-  // pop into /parent/* without the PIN.
-  useKidBackGuard({ onRequestExit: () => setGateOpen(true) });
+  // pop into /parent/* without the PIN. The back-gesture path also bumps
+  // the tour's pinFlowActive flag so step 2's popover hides if the tour is
+  // mid-flow when the swipe happens.
+  useKidBackGuard({
+    onRequestExit: () => {
+      setPinFlowActive(true);
+      setGateOpen(true);
+    },
+  });
 
   return (
     <div
@@ -87,7 +113,17 @@ export function KuboKidLayout() {
         gear-button inside KuboKidTopBar still uses its own local copy for
         the unlocked path; both eventually converge on the same dialog.
       */}
-      <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
+      <ParentGateDialog
+        open={gateOpen}
+        onOpenChange={(o) => {
+          setGateOpen(o);
+          // Mirror the gear button's wiring in KuboKidTopBar — clear the
+          // tour's pinFlowActive flag whenever this dialog closes so step 2's
+          // popover can re-anchor on the gear if the parent backed out
+          // without setting a PIN.
+          if (!o) setPinFlowActive(false);
+        }}
+      />
       {isLocked ? (
         <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
           <div
@@ -106,7 +142,10 @@ export function KuboKidLayout() {
           </p>
           <button
             type="button"
-            onClick={() => setGateOpen(true)}
+            onClick={() => {
+              setPinFlowActive(true);
+              setGateOpen(true);
+            }}
             className="mt-4 h-10 px-6 rounded-full text-[12px] text-white/60 border border-white/20 active:scale-95 transition-transform"
           >
             I'm a parent
@@ -121,14 +160,17 @@ export function KuboKidLayout() {
           so upstream Ditto merges stay conflict-free.
         */
         <ErrorBoundary fallback={<KuboKidErrorFallback />}>
-          <KuboKidLayoutContext.Provider value={ctxValue}>
-            {options.scrollAware ? (
-              <KuboKidScrollAwareTopBar />
-            ) : (
-              <KuboKidTopBar />
-            )}
-            <Outlet />
-          </KuboKidLayoutContext.Provider>
+          <TourAnchorProvider>
+            <KuboKidLayoutContext.Provider value={ctxValue}>
+              {options.scrollAware ? (
+                <KuboKidScrollAwareTopBar />
+              ) : (
+                <KuboKidTopBar />
+              )}
+              <Outlet />
+              <ParentTour />
+            </KuboKidLayoutContext.Provider>
+          </TourAnchorProvider>
         </ErrorBoundary>
       )}
     </div>

@@ -1,8 +1,10 @@
+import { useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Home, PlaySquare, Upload, Users, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { selectionChanged } from '@/lib/haptics';
 import { ArcBackground } from '@/components/ArcBackground';
+import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 
 /**
  * Kubo parent-app bottom nav: Home · Feed · Trust · Upload · Alerts.
@@ -38,8 +40,15 @@ const TABS = [
 export function KuboBottomNav() {
   const location = useLocation();
 
+  // KUBO-092 tour anchors: the whole nav (step 3 — five-tab orientation) and
+  // the Feed tab specifically (step 4 — source-types primer).
+  const navRef = useRef<HTMLElement | null>(null);
+  const feedTabRef = useRef<HTMLAnchorElement | null>(null);
+  useRegisterTourAnchor('parentBottomNav', navRef);
+  useRegisterTourAnchor('parentFeedTab', feedTabRef);
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 sidebar:hidden">
+    <nav ref={navRef} className="fixed bottom-0 left-0 right-0 z-40 sidebar:hidden">
       <div className="relative">
         <ArcBackground variant="up" />
         <div className="h-11 flex items-center relative">
@@ -49,6 +58,7 @@ export function KuboBottomNav() {
               <NavLink
                 key={to}
                 to={to}
+                ref={to === '/parent/feed' ? feedTabRef : undefined}
                 onClick={() => selectionChanged()}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors',

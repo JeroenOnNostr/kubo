@@ -83,6 +83,11 @@ export interface KuboFamily {
    * persist-only for these three; Stage-2 wires them into the feed aggregator.
    */
   feedSources?: { [kidPubkey: string]: KidFeedSources };
+  /**
+   * Unix-ms timestamp of when the parent finished (or skipped) the first-run
+   * coachmark tour. Unset = tour has not run yet.
+   */
+  coachmarksCompletedAt?: number;
 }
 
 /**
@@ -250,6 +255,15 @@ export async function clearTrustLevel(
   });
 }
 
+// ─── Coachmark tour completion ───────────────────────────────────────────────
+
+export async function markCoachmarksComplete(): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  if (current.coachmarksCompletedAt) return;
+  await writeAndNotify({ ...current, coachmarksCompletedAt: Date.now() });
+}
+
 // ─── Kid settings ────────────────────────────────────────────────────────────
 
 export const DEFAULT_KID_SETTINGS: KidSettings = {
@@ -398,6 +412,7 @@ export function useKuboFamily() {
   const setTrustLevelCb = useCallback(setTrustLevel, []);
   const clearTrustLevelCb = useCallback(clearTrustLevel, []);
   const setKidSettingsCb = useCallback(setKidSettings, []);
+  const markCoachmarksCompleteCb = useCallback(markCoachmarksComplete, []);
 
   return {
     family: current,
@@ -408,5 +423,6 @@ export function useKuboFamily() {
     setTrustLevel: setTrustLevelCb,
     clearTrustLevel: clearTrustLevelCb,
     setKidSettings: setKidSettingsCb,
+    markCoachmarksComplete: markCoachmarksCompleteCb,
   };
 }

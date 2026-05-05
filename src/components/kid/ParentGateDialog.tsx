@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useParentGatePin } from '@/hooks/useParentGatePin';
 
@@ -145,7 +144,7 @@ export function ParentGateDialog({
   const subtitle = (() => {
     switch (phase) {
       case 'setup-choose':
-        return "You'll use this to switch out of the kid view. Pick something easy for you to remember.";
+        return "Tap 6 digits below. You'll enter them once more on the next screen to confirm.";
       case 'setup-confirm':
         return 'Just to be sure we have it right.';
       default:
@@ -155,11 +154,14 @@ export function ParentGateDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) close(); else onOpenChange(o); }}>
-      <DialogContent className="max-w-[320px] rounded-2xl">
+      <DialogContent
+        className="max-w-[320px] rounded-2xl border-white/15 text-white"
+        style={{ background: '#1E3A8A' }}
+      >
         <DialogHeader>
           <DialogTitle className="text-center">{title}</DialogTitle>
           {subtitle && (
-            <p className="text-center text-[12px] text-muted-foreground -mt-1 leading-relaxed">
+            <p className="text-center text-[12px] text-white/70 -mt-1 leading-relaxed">
               {subtitle}
             </p>
           )}
@@ -178,8 +180,8 @@ export function ParentGateDialog({
               className={cn(
                 'size-3 rounded-full border-2 transition-colors',
                 i < code.length
-                  ? 'bg-primary border-primary'
-                  : 'border-muted-foreground/40',
+                  ? 'bg-[#F97316] border-[#F97316]'
+                  : 'border-white/40',
               )}
             />
           ))}
@@ -203,9 +205,9 @@ export function ParentGateDialog({
                 onClick={() => handleKey(k)}
                 disabled={busy}
                 className={cn(
-                  'h-14 rounded-xl bg-card hover:bg-card/80 active:scale-95',
+                  'h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white active:scale-95',
                   'text-xl font-semibold transition-transform disabled:opacity-40',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/60',
                 )}
               >
                 {k}
@@ -213,15 +215,6 @@ export function ParentGateDialog({
             ),
           )}
         </div>
-
-        <Button
-          variant="ghost"
-          onClick={close}
-          className="mt-2"
-          disabled={busy}
-        >
-          Cancel
-        </Button>
 
         {/* Inline keyframes — no Tailwind config change needed */}
         <style>{`

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Clock, Settings } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -6,6 +6,8 @@ import { useScreenTime } from '@/hooks/useScreenTime';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
+import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
+import { setPinFlowActive } from '@/lib/tourState';
 
 /**
  * Shared kid-app top bar — `Hi {name}!` + time pill + parent-gate gear.
@@ -41,6 +43,13 @@ function TopBarShell({ hidden }: { hidden: boolean }) {
 
   const [gateOpen, setGateOpen] = useState(false);
 
+  // KUBO-092 first-run tour anchor. Step 1 is a centered card with no
+  // anchor; step 2 anchors to the gear. Ref is a no-op outside the
+  // TourAnchorProvider (which only wraps the unlocked-feed branch of
+  // KuboKidLayout), so the lock screen's gear is unaffected.
+  const gearRef = useRef<HTMLButtonElement | null>(null);
+  useRegisterTourAnchor('parentGateGear', gearRef);
+
   return (
     <>
       <header
@@ -66,8 +75,16 @@ function TopBarShell({ hidden }: { hidden: boolean }) {
               {remainingMinutes}
             </div>
             <button
+              ref={gearRef}
               type="button"
-              onClick={() => setGateOpen(true)}
+              onClick={() => {
+                // Tell the tour orchestrator to hide step 2's popover while
+                // the dialog is open. Cleared by the dialog's onOpenChange
+                // below (and also by the route-change effect in ParentTour
+                // for the success path).
+                setPinFlowActive(true);
+                setGateOpen(true);
+              }}
               aria-label="Parent access"
               className="size-9 rounded-full flex items-center justify-center active:scale-95 transition-transform"
               style={{ background: 'rgba(255,255,255,0.15)' }}
@@ -78,7 +95,13 @@ function TopBarShell({ hidden }: { hidden: boolean }) {
         </div>
       </header>
 
-      <ParentGateDialog open={gateOpen} onOpenChange={setGateOpen} />
+      <ParentGateDialog
+        open={gateOpen}
+        onOpenChange={(o) => {
+          setGateOpen(o);
+          if (!o) setPinFlowActive(false);
+        }}
+      />
     </>
   );
 }
