@@ -52,7 +52,7 @@ export function WatchHistoryStrip({ kidPubkey }: WatchHistoryStripProps) {
 
 function WatchHistoryCard({ entry }: { entry: WatchEntry }) {
   const navigate = useNavigate();
-  const path = `/parent/video/${entry.eventId}`;
+  const path = `/parent/video/${entry.naddr ?? entry.eventId}`;
 
   return (
     <button

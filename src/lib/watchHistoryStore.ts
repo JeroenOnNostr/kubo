@@ -13,14 +13,17 @@ import { secureStorage } from '@/lib/secureStorage';
  */
 
 export interface WatchEntry {
-  eventId: string;        // hex
-  kind: 21 | 22;
+  eventId: string;        // hex — used as the dedupe/key, even for addressable events
+  kind: 21 | 22 | 34236;
   authorPubkey: string;   // hex
   authorName: string;     // snapshot at write time, may be empty
   title: string;          // snapshot, may be empty
   thumbnailUrl?: string;
   durationSec?: number;
   viewedAt: number;       // unix seconds, client clock
+  // Set for addressable kinds (34236). Click-through prefers this over eventId
+  // because /parent/video/:id needs an naddr1 to resolve a parameterized event.
+  naddr?: string;
 }
 
 type WatchHistoryData = { [kidPubkey: string]: WatchEntry[] };

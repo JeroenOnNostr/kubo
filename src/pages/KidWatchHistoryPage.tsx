@@ -73,7 +73,7 @@ function Content({ kidPubkey, kidDisplayName }: { kidPubkey: string; kidDisplayN
 
 function WatchHistoryRow({ entry }: { entry: WatchEntry }) {
   const navigate = useNavigate();
-  const path = `/parent/video/${entry.eventId}`;
+  const path = `/parent/video/${entry.naddr ?? entry.eventId}`;
 
   return (
     <li>

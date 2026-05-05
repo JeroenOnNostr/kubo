@@ -536,11 +536,7 @@ export const NoteCard = memo(function NoteCard({
   }, [event, isReply]);
   const parentEventId = parentHints?.id;
 
-  // Kind 34236 specific
-  const imeta = useMemo(
-    () => (isVine ? parseImeta(event.tags) : undefined),
-    [event.tags, isVine],
-  );
+  // Kind 34236 specific (VineMedia parses its own imeta from event.tags)
   const vineTitle = isVine ? getTag(event.tags, "title") : undefined;
   const hashtags = isVine
     ? event.tags.filter(([n]) => n === "t").map(([, v]) => v)
@@ -597,7 +593,7 @@ export const NoteCard = memo(function NoteCard({
                 {vineTitle}
               </p>
             )}
-            <VineMedia imeta={imeta} hashtags={hashtags} />
+            <VineMedia event={event} hashtags={hashtags} />
           </>
         ) : isPoll ? (
           <PollContent event={event} />
@@ -1484,16 +1480,23 @@ function VideoContent({ event }: { event: NostrEvent }) {
 
 /** Media content for kind 34236 vine events — rendered at full card width. */
 function VineMedia({
-  imeta,
+  event,
   hashtags,
 }: {
-  imeta?: { url?: string; thumbnail?: string };
+  event: NostrEvent;
   hashtags: string[];
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasFiredFirstPlayRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const { showHashtags } = useActionVisibility();
+  const recordWatch = useRecordWatch();
+  const author = useAuthor(event.pubkey);
+  const authorName = getDisplayName(author.data?.metadata, event.pubkey);
+
+  const imeta = useMemo(() => parseImeta(event.tags), [event.tags]);
+  const title = getTag(event.tags, "title") ?? "";
 
   // Pause video when scrolled out of view
   useEffect(() => {
@@ -1514,6 +1517,21 @@ function VineMedia({
     return () => observer.disconnect();
   }, []);
 
+  const handleFirstPlay = useCallback(() => {
+    if (event.kind !== 34236) return;
+    // Addressable event: store naddr1 so /parent/video/:id can resolve it.
+    const naddr = encodeEventId(event);
+    recordWatch({
+      eventId: event.id,
+      kind: 34236,
+      authorPubkey: event.pubkey,
+      authorName,
+      title,
+      thumbnailUrl: imeta.thumbnail,
+      naddr,
+    });
+  }, [recordWatch, event, authorName, title, imeta.thumbnail]);
+
   const handlePlayToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     const video = videoRef.current;
@@ -1529,7 +1547,7 @@ function VineMedia({
 
   return (
     <>
-      {imeta?.url && (
+      {imeta.url && (
         <div
           ref={containerRef}
           data-kubo-video
@@ -1544,7 +1562,13 @@ function VineMedia({
             loop
             playsInline
             preload="none"
-            onPlay={() => setIsPlaying(true)}
+            onPlay={() => {
+              setIsPlaying(true);
+              if (!hasFiredFirstPlayRef.current) {
+                hasFiredFirstPlayRef.current = true;
+                handleFirstPlay();
+              }
+            }}
             onPause={() => setIsPlaying(false)}
           />
           {!isPlaying && (
