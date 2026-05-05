@@ -7,9 +7,6 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-102: Wire trust assignments to actual feed routing** *(replaces the now-removed KUBO-013)*
   KUBO-100 introduced `relayTrustAssignments[kid][relayUrl]` and KUBO-097/098/100 cleaned up `trustAssignments[kid][pubkey]`, but both maps are visual-only — they don't yet influence which content the kid sees. Decide the routing model: should `extend` mean "merge this relay's contents into the kid's feed", `interact` allow replies/zaps, `view` gate appearance in the People tab? And do we mirror that to NIP-65 `r`-tags + a kid-scoped `kind:30078` for relays so the assignments survive cross-device login? Once the model is fixed, wire `useFeedSources` / `useKidFeedRelays` to read from these maps instead of the existing per-source toggles, and define what happens to a relay or pubkey that's enabled in a feed-source page but unassigned in trust (and vice versa).
 
-- **KUBO-087: Kid post detail — YouTube videos don't play inline**
-  On `/kid/post/:id`, `KidPostHero` renders kind 21/22 video posts with `<VideoPlayer>` only, which can't play YouTube URLs — the user sees a thumbnail with an inert play button. Feed already handles this via `NoteCard`'s `VideoContent` branch (`isYouTubeUrl` + `extractYouTubeEmbedInfo` → `<YouTubeEmbed>`). Fix: apply the same branch in `KidPostHero` so YouTube posts use `<YouTubeEmbed>` (with `aspect='short'` for kind 22) and non-YouTube URLs keep using `<VideoPlayer>`.
-
 - **KUBO-001: Upload flow — parent posts, signed by kid's key**
   Upload UX lives in the parent app, but the resulting event is signed with the kid's private key (the parent is acting on behalf of the kid, not posting from their own identity). Relevant to PR 4 (Upload). Figure out key-access model: does the parent hold the kid's nsec, unlock it per-upload, or sign via a delegation/NIP-46-style handoff?
 
@@ -18,9 +15,6 @@ Issue prefix: `KUBO-xxx`
 
 - **KUBO-016: Signer-swap render-loop crash on `/parent/kid/:id/feed-settings`**
   Pre-existing bug: after `setLogin(kidLoginId)` fires in `useEditAsKid`, the target page throws *Maximum update depth exceeded* in a Radix `<Switch>` (`setRef` inside an `Array.map` in `dist-D0IwgzoO.js`) and the ErrorBoundary takes over. `/settings/network` with the same `<RelayListManager />` + `<BlossomSettings />` under a stable login renders fine, so the trigger is the account-switch cascade, not those components. Likely culprit: one of the `updateConfig`-in-effect blocks in `NostrSync.tsx` (relayMetadata sync, Blossom sync, or encrypted-settings sync — all depend on `user?.pubkey` and call `updateConfig(...)` on every run) fires repeatedly when the kid's `kind:10002`/`30078` events haven't been seeded into the query cache yet, feeding back into itself via `config.*.updatedAt` deps. Repro: `python3 /tmp/kubo-trust-places-verify.py` against `npm run dev`. Fix direction: make the NostrSync effects idempotent against "event not yet fetched" state (skip `updateConfig` if the fetched event is older than `updatedAt`, or gate on `isFetched` rather than presence of data).
-
-- **KUBO-009: Handle returning-user-on-new-device case in onboarding**
-  After shortening the onboarding flow (Welcome → Create parent → Create kid), a returning Kubo user logging in on a fresh browser/device (no local settings, no remote settings discoverable within the 8s sync timeout) will have Kubo default `feedSettings` + `contentWarningPolicy: "blur"` silently written over whatever they had before. Low-risk while Kubo is new, but revisit when cross-device returning-user flow becomes a concern. Likely fix: detect "this user just came through `/onboard/create-parent`" vs. "this is an existing nsec login from elsewhere" and only apply silent defaults in the former case.
 
 - **KUBO-021: Videos tab — trust-scoped filtering**
   Follow-up to KUBO-020. `VideosTab` on `/parent/profile/:npub` currently shows every media event from the creator, unfiltered. Once KUBO-102 defines the trust → feed-routing mapping, filter `useProfileMedia` results by the current kid's trusted-authors set (or the kid's active trust level) so the grid matches what the kid is allowed to see. Probably a thin wrapper hook `useKidScopedProfileMedia(pubkey, kidId)` that post-filters the infinite query pages.
@@ -58,9 +52,11 @@ Issue prefix: `KUBO-xxx`
 - **KUBO-099: NIP-66 relay discovery + collapsible Browse-all + search hide flags**
 - **KUBO-100: Trust → Places trust-relay rows + Trust → People assignment-driven list**
 - **KUBO-101: Record kind-34236 vine plays into kid watch history (naddr-aware)**
+- **KUBO-087: Kid post detail — YouTube videos play inline** *(closed: already fixed in `6c1ee671` as part of KUBO-085/086; entry was stale paperwork)*
 - **KUBO-025: Wire Kids watch history + Kids activity placeholders to real data** *(KUBO-095 + KUBO-101)*
 - **KUBO-060: Kid view — Favorites add-to-favorites affordance** *(landed via FavoriteStarButton overlay; see KUBO-072 / KUBO-076)*
 - **KUBO-059: Parent feed profiles — expandable tiles + avatar nav** *(closed: deferred — equivalent UX now lives on Trust → People per KUBO-100)*
+- **KUBO-009: Handle returning-user-on-new-device case in onboarding** *(closed: cross-device returning-user flow is post-MVP; the silent default-write only happens during onboarding and the user is comfortable with that exposure for now)*
 
 ## Deferred to post-MVP
 
