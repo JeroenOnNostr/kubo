@@ -40,6 +40,7 @@ export function ProfilesSourcePage() {
   const handlePick = useCallback((profile: SearchProfile) => {
     if (!followedSet.has(profile.pubkey)) {
       follow(profile.pubkey);
+      queryClient.invalidateQueries({ queryKey: ['kid-feed'] });
       queryClient.invalidateQueries({ queryKey: ['feed', 'follows'] });
     }
   }, [followedSet, follow, queryClient]);
@@ -53,9 +54,11 @@ export function ProfilesSourcePage() {
     } else {
       await follow(pubkey);
     }
-    // M2: useFollowActions invalidates ['follow-list'] but the feed query
-    // key deliberately excludes the follow list, so without this the
-    // preview wouldn't reflect the new follow for ~60s.
+    // useFollowActions invalidates ['follow-list'], but useKidFeed and
+    // useFeed('follows') both deliberately exclude the follow list from
+    // their query keys, so without explicit invalidation the kid feed
+    // and the parent preview tile would serve stale pages for ~60s.
+    queryClient.invalidateQueries({ queryKey: ['kid-feed'] });
     queryClient.invalidateQueries({ queryKey: ['feed', 'follows'] });
   };
 
