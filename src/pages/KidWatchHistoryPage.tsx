@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { nip19 } from 'nostr-tools';
 
 import { Button } from '@/components/ui/button';
 import { NoKidSelected } from '@/components/NoKidSelected';
@@ -74,7 +73,7 @@ function Content({ kidPubkey, kidDisplayName }: { kidPubkey: string; kidDisplayN
 
 function WatchHistoryRow({ entry }: { entry: WatchEntry }) {
   const navigate = useNavigate();
-  const path = `/${nip19.neventEncode({ id: entry.eventId, author: entry.authorPubkey })}`;
+  const path = `/parent/video/${entry.eventId}`;
 
   return (
     <li>

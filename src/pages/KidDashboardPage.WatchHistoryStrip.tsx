@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { nip19 } from 'nostr-tools';
 
 import { useWatchHistory } from '@/hooks/useWatchHistory';
 import type { WatchEntry } from '@/lib/watchHistoryStore';
@@ -53,7 +52,7 @@ export function WatchHistoryStrip({ kidPubkey }: WatchHistoryStripProps) {
 
 function WatchHistoryCard({ entry }: { entry: WatchEntry }) {
   const navigate = useNavigate();
-  const path = `/${nip19.neventEncode({ id: entry.eventId, author: entry.authorPubkey })}`;
+  const path = `/parent/video/${entry.eventId}`;
 
   return (
     <button
