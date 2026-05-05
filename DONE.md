@@ -6,7 +6,7 @@ Completed work, most recent first.
 
 ## 2026-05-05
 
-- **chore: drop dead `[data-logo]` tint from preloader theme.js + add perf-review doc** — `<pending>`
+- **chore: drop dead `[data-logo]` tint from preloader theme.js + add perf-review doc** — `b9a94859`
   Two small loose ends. (1) [public/theme.js](public/theme.js) had a leftover step that re-tinted the preloader logo's background to `colors.primary` after KUBO-083 swapped the preloader from Ditto's single-square mark to the four-color Kubo SVG; the SVG no longer carries a `[data-logo]` element, so the lookup was a silent no-op every page load. Dropped the two-line block. (2) Committed [docs/perf-review-kid-feed-videos-2026-05-04.md](docs/perf-review-kid-feed-videos-2026-05-04.md) — research-only output of an independent perf review targeting kid views / feed / videos with a 10x improvement aim. Includes ownership map of Ditto-vs-Kubo files, current bundle/chunk sizes, and a soft-fork-friendly action list. No code changes from this doc itself; future perf work will reference it.
 
 - **KUBO-093: `/parent/keys` — show all family accounts (parent + every kid)** — `2da095d5`
