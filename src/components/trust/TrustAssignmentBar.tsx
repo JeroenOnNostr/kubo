@@ -74,14 +74,42 @@ export function TrustAssignmentBar({
   };
 
   return (
+    <TrustAssignmentBarVisual
+      currentLevel={current}
+      pending={pending}
+      onSetLevel={handleSet}
+      onClear={handleRemove}
+    />
+  );
+}
+
+/**
+ * Pure-visual variant of TrustAssignmentBar — same buttons, no persistence.
+ * Used by TrustPlacesPage where we render the trust-level UI but don't yet
+ * have a data model for "trusted relays" (TEPP, future feature).
+ */
+interface TrustAssignmentBarVisualProps {
+  currentLevel: KuboTrustLevel | undefined;
+  onSetLevel: (level: KuboTrustLevel) => void;
+  onClear: () => void;
+  pending?: boolean;
+}
+
+export function TrustAssignmentBarVisual({
+  currentLevel,
+  onSetLevel,
+  onClear,
+  pending = false,
+}: TrustAssignmentBarVisualProps) {
+  return (
     <div className="flex items-center gap-2 pt-1">
       {LEVELS.map((opt) => {
-        const active = current === opt.level;
+        const active = currentLevel === opt.level;
         return (
           <button
             key={opt.level}
             type="button"
-            onClick={() => handleSet(opt.level)}
+            onClick={() => onSetLevel(opt.level)}
             disabled={pending}
             aria-pressed={active}
             className={cn(
@@ -99,7 +127,7 @@ export function TrustAssignmentBar({
       })}
       <button
         type="button"
-        onClick={handleRemove}
+        onClick={onClear}
         disabled={pending}
         className={cn(
           'h-9 px-3 rounded-full text-[13px] font-semibold',

@@ -130,7 +130,7 @@ export function ProfileViewPage() {
       </div>
 
       {/* Actions */}
-      <div className="px-4 flex gap-2 mt-1">
+      <div className="px-4 flex flex-wrap gap-2 mt-1">
         <FollowButton pubkey={pubkey} size="default" className="flex-1 h-10" />
         <AssignTrustLevelButton pubkey={pubkey} size="default" className="flex-1 h-10" />
       </div>
