@@ -85,7 +85,12 @@ async function main() {
 
   const bgRgba = hexToRgba(BG_COLOR);
 
-  // ── Adaptive icon foreground PNGs (transparent bg, color logo at 55% safe zone) ──
+  // ── Adaptive icon foreground PNGs (transparent bg, color logo at 50% canvas) ──
+  // The adaptive-icon canvas is 108dp but only the inner 66dp circle is
+  // guaranteed visible. Pixel launchers further zoom adaptive icons during
+  // animations, so we keep the logo at 50% of the canvas (= 54dp) to stay
+  // well inside the safe zone in every launcher mask. Must match the vector
+  // in drawable-v24/ic_launcher_foreground.xml.
   console.log('Generating adaptive foreground PNGs...');
   const adaptiveTargets = [
     { size: 48,  dest: 'android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png' },
@@ -95,7 +100,7 @@ async function main() {
     { size: 192, dest: 'android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png' },
   ];
   for (const { size, dest } of adaptiveTargets) {
-    const content = Math.floor(size * 55 / 100);
+    const content = Math.floor(size * 50 / 100);
     await compose({ canvas: size, content, bg: null, dest: resolve(ROOT, dest) });
   }
 

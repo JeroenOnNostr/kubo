@@ -6,16 +6,18 @@
 
     <!--
       Kubo logo: 4 colored rounded squares from public/logo-color.svg.
-      Original viewBox is 70x70. Scaled to 72dp and centered in the
-      108dp adaptive-icon canvas so the logo sits inside the safe zone.
-      translate = (108 - 72) / 2 = 18 ; scale = 72 / 70 ≈ 1.0286
+      Original viewBox is 70x70. Scaled to 54dp and centered in the
+      108dp adaptive-icon canvas so the logo sits well inside the
+      inner 66dp safe circle (Pixel launchers zoom adaptive icons,
+      so the bounding box must be ~50% of the canvas to stay visible).
+      translate = (108 - 54) / 2 = 27 ; scale = 54 / 70 ≈ 0.77143
     -->
 
     <group
-        android:translateX="18"
-        android:translateY="18"
-        android:scaleX="1.02857"
-        android:scaleY="1.02857">
+        android:translateX="27"
+        android:translateY="27"
+        android:scaleX="0.77143"
+        android:scaleY="0.77143">
 
         <!-- Orange square — top-left -->
         <path
