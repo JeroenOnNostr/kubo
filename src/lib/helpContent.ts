@@ -386,3 +386,19 @@ export const TEAM_SOAPBOX_PACK = {
   pubkey: '932614571afcbad4d17a191ee281e39eebbb41b93fac8fd87829622aeb112f4d',
   identifier: 'k4p5w0n22suf',
 } as const;
+
+/**
+ * Default kid-friendly follow pack auto-enabled on every new kid (KUBO-064).
+ * Lets the parent's first walk through the tour land on a feed that already
+ * has content instead of an empty Follow packs list. Untoggling on the
+ * Follow packs page removes it like any other source.
+ */
+export const KUBO_DEFAULT_KID_PACK = {
+  kind: 39089,
+  pubkey: 'f07e0b1af066b4838386360a1a2cbb374429a9fbaab593027f3fcd3bd3b5c367',
+  identifier: 'YouTube child-friendly content follow list for Kubo test 1',
+} as const;
+
+/** atag form (`<kind>:<pubkey>:<d>`) used by KidFeedSources.packs entries. */
+export const KUBO_DEFAULT_KID_PACK_ATAG =
+  `${KUBO_DEFAULT_KID_PACK.kind}:${KUBO_DEFAULT_KID_PACK.pubkey}:${KUBO_DEFAULT_KID_PACK.identifier}`;

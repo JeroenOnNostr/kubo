@@ -6,7 +6,10 @@ Completed work, most recent first.
 
 ## 2026-05-05
 
-- **KUBO-092: First-run parent tour (kid-view-first, 5-step coachmark sequence)** — `<pending>`
+- **KUBO-064: Default kid-friendly Follow pack on every new kid** — `<pending>`
+  Newly-added kids now start with a curated YouTube child-friendly Follow pack pre-toggled, so the first-run tour (KUBO-092) lands on a feed that already has content instead of an empty Follow packs list. New constants `KUBO_DEFAULT_KID_PACK` + `KUBO_DEFAULT_KID_PACK_ATAG` in [src/lib/helpContent.ts](src/lib/helpContent.ts) (kind 39089, hardcoded pubkey + d-tag of the curated pack). [src/hooks/useKuboFamily.ts](src/hooks/useKuboFamily.ts)'s `addKid` seeds `feedSources[kid.pubkey]` with the pack on genuinely-new kids — only when the kid doesn't already have a `feedSources` entry, so an explicit untoggle on the Follow packs page is respected. [src/pages/AddKidPage.tsx](src/pages/AddKidPage.tsx)'s first-kid `createFamily` path also seeds the entry, mirroring `addKid`'s seeding for subsequently-added kids. Untoggling on `/parent/feed/follow-packs` removes the entry like any other source.
+
+- **KUBO-092: First-run parent tour (kid-view-first, 5-step coachmark sequence)** — `63739eca`
   A 5-step coachmark tour that fires once when a parent first lands on `/kid` after onboarding, gated by a new `coachmarksCompletedAt` field on the family record so it never re-fires after completion or skip. Steps:
   1. **Centered intro card** on `/kid` ("This is Mia's view"). No anchor — the copy is *about the whole screen*, so a centered floating card with no backdrop frames it as a system-wide statement instead of commentary on one widget.
   2. **Anchored to the parent-gate gear** in the kid top bar ("Tap the gear to switch to parent view"). Title states the action; body is *only* the passcode rationale (no duplicate "Tap this gear…" sentence). **No Next button** — the tour advances only when the parent physically taps the gear, which guarantees they remember where the way out is.

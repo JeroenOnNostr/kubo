@@ -18,6 +18,7 @@ import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { onboardIdentity, publishInitialEncryptedSettings } from '@/lib/kuboOnboarding';
 import { DEFAULT_KID_FEED_SETTINGS } from '@/lib/extraKinds';
+import { KUBO_DEFAULT_KID_PACK_ATAG } from '@/lib/helpContent';
 import { parseAuthorEvent } from '@/hooks/useAuthor';
 import { clearOnboardingParent, getOnboardingParent } from '@/lib/onboardingParent';
 
@@ -175,6 +176,16 @@ export function AddKidPage() {
               parentPubkey,
               parentDisplayName,
               kids: [{ pubkey: identity.pubkey, displayName: trimmed }],
+              // Seed the default kid-friendly Follow pack so the feed isn't
+              // empty during the first-run tour (KUBO-064). Mirrors the
+              // seeding that addKid() does for subsequently-added kids.
+              feedSources: {
+                [identity.pubkey]: {
+                  relays: [],
+                  communities: [],
+                  packs: [KUBO_DEFAULT_KID_PACK_ATAG],
+                },
+              },
             });
           } else {
             await addKid({ pubkey: identity.pubkey, displayName: trimmed });

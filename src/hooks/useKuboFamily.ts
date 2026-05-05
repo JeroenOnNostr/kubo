@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
+import { KUBO_DEFAULT_KID_PACK_ATAG } from '@/lib/helpContent';
 import { secureStorage } from '@/lib/secureStorage';
 
 /**
@@ -188,7 +189,17 @@ export async function addKid(kid: KuboKid): Promise<void> {
   const kids = existing
     ? current.kids.map((k) => (k.pubkey === kid.pubkey ? kid : k))
     : [...current.kids, kid];
-  await writeAndNotify({ ...current, kids });
+  // Seed the default kid-friendly Follow pack on genuinely new kids, so a
+  // fresh install opens with a non-empty feed (KUBO-064). Skip if the kid
+  // already has a feedSources entry — respects an explicit untoggle.
+  let feedSources = current.feedSources;
+  if (!existing && !feedSources?.[kid.pubkey]) {
+    feedSources = {
+      ...current.feedSources,
+      [kid.pubkey]: { relays: [], communities: [], packs: [KUBO_DEFAULT_KID_PACK_ATAG] },
+    };
+  }
+  await writeAndNotify({ ...current, kids, feedSources });
 }
 
 export async function removeKid(pubkey: string): Promise<void> {
