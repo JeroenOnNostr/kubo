@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1] - 2026-05-06
+
+### Added
+- **First release-signed public build of Kubo** — published to Zapstore with a permanent release keystore and Nostr identity. Existing debug-signed v0.1.x–v0.3.x APKs cannot upgrade in place (uninstall + reinstall once).
+- Full Kubo metadata in the Zapstore listing (icon, screenshots, family-focused description, supported NIPs).
+
+### Notes
+- Versions before 0.4.1 were sideload-only test builds signed with the shared Android debug key. From 0.4.1 onward, Kubo is signed with a dedicated release key controlled by the project.
+
 ## [2.10.2] - 2026-04-18
 
 ### Fixed

@@ -4,6 +4,11 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-05-06
+
+- **KUBO-107: First release-signed publish to Zapstore (v0.4.1)** — pending hash
+  Generated permanent Kubo Android signing keystore (PKCS12, RSA 4096, alias `kubo-release`, SHA-256 `3a997f99…7cc8`, valid 2026→2053; backup at `~/Documents/kubo-release.keystore.backup`; recovery card at `~/Desktop/KUBO-KEYSTORE-RECOVERY.md`). Built release-signed APK and verified via `apksigner verify` (cert hash matches keystore). Linked keystore certificate to bunker pubkey `73d69a0d…0071` via `zsp identity --link-key` (NIP-C1, valid 1y). Published kind 32267 / 30063 / 3063 events to `relay.zapstore.dev`; APK uploaded to `cdn.zapstore.dev`. Listing live at <https://zapstore.dev/apps/com.kubo.app>. Rewrote [zapstore.yaml](zapstore.yaml) from Ditto metadata to Kubo (description supplied by user: "YouTube Kids alternative built around trust, not algorithms"; links to kubo.watch + weboftrustfoundation.com). Added v0.4.1 [CHANGELOG.md](CHANGELOG.md) entry. Wrote [docs/zapstore-publish.md](docs/zapstore-publish.md) runbook so future per-release publishes are mechanical (bump version → build → apksigner verify → temp-inject release_source/version → `zsp publish` → revert YAML).
+
 ## 2026-05-05
 
 - **KUBO-106: Shrink adaptive launcher foreground 72dp→54dp for safe zone** — `128b0c46`
