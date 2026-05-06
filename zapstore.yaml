@@ -29,11 +29,12 @@ license: AGPL-3.0
 icon: ./public/logo.png
 
 images:
-  - ./screenshots/home.jpg
-  - ./screenshots/kid-feed.jpg
-  - ./screenshots/kid-settings.jpg
-  - ./screenshots/feed-settings.jpg
-  - ./screenshots/upload.jpg
+  - ./screenshots/store-1.png
+  - ./screenshots/store-2.png
+  - ./screenshots/store-3.png
+  - ./screenshots/store-4.png
+  - ./screenshots/store-5.png
+  - ./screenshots/store-6.png
 
 release_notes: ./CHANGELOG.md
 
