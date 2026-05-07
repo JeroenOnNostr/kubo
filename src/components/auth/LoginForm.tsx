@@ -72,19 +72,25 @@ export function LoginForm({ onLogin, autoTryCredential = false }: LoginFormProps
   const [nostrConnectParams, setNostrConnectParams] =
     useState<NostrConnectParams | null>(null);
   const [nostrConnectUri, setNostrConnectUri] = useState<string>('');
-  const [isWaitingForConnect, setIsWaitingForConnect] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Keep onLogin in a ref so the nostrconnect listener effect doesn't
-  // restart every render just because the caller passed a fresh closure.
+  // Keep onLogin and `login` in refs so the nostrconnect listener effect
+  // doesn't restart every parent render. `useLoginActions()` returns a fresh
+  // object each render, and parents typically pass an inline arrow for
+  // onLogin — both would otherwise re-trigger the effect, tear down the
+  // in-flight subscription, and silently drop the signer's reply.
   const onLoginRef = useRef(onLogin);
+  const loginRef = useRef(login);
   useEffect(() => {
     onLoginRef.current = onLogin;
   }, [onLogin]);
+  useEffect(() => {
+    loginRef.current = login;
+  }, [login]);
 
   const executeLogin = useCallback(
     (key: string) => {
@@ -139,28 +145,41 @@ export function LoginForm({ onLogin, autoTryCredential = false }: LoginFormProps
   }, [login, config.appName, shareOrigin]);
 
   // Listen for the signer to respond once params are generated.
+  //
+  // Deps are intentionally limited to `nostrConnectParams` so that parent
+  // re-renders (which produce fresh onLogin closures and a fresh `login`
+  // object from useLoginActions) do NOT tear down an in-flight subscription.
+  // Previously this effect re-ran on every render and the cleanup flipped a
+  // local `cancelled` flag to true, causing a successful nostrconnect
+  // response to be silently swallowed after Amber approved — exactly the
+  // bug fixed in LoginDialog by KUBO-110 / Ditto's 0d1fe7bb. Cancellation is
+  // handled explicitly by the unmount cleanup below and handleRetry().
   useEffect(() => {
-    if (!nostrConnectParams || isWaitingForConnect) return;
-    let cancelled = false;
+    if (!nostrConnectParams) return;
+
     const startListening = async () => {
-      setIsWaitingForConnect(true);
-      abortControllerRef.current = new AbortController();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
-        await login.nostrconnect(nostrConnectParams, abortControllerRef.current.signal);
-        if (!cancelled) onLoginRef.current();
+        await loginRef.current.nostrconnect(nostrConnectParams, controller.signal);
+        // If we explicitly aborted (unmount or retry), don't call onLogin —
+        // the user has navigated away or asked for a new session.
+        if (controller.signal.aborted) return;
+        onLoginRef.current();
       } catch (error) {
-        if (cancelled) return;
         if (error instanceof Error && error.name === 'AbortError') return;
+        if (controller.signal.aborted) return;
         console.error('Nostrconnect failed:', error);
         setConnectError(error instanceof Error ? error.message : String(error));
-        setIsWaitingForConnect(false);
       }
     };
+
     startListening();
-    return () => {
-      cancelled = true;
-    };
-  }, [nostrConnectParams, login, isWaitingForConnect]);
+
+    // No cleanup here: a re-render-triggered teardown would cancel the
+    // in-flight subscription and cause us to drop the signer's reply.
+  }, [nostrConnectParams]);
 
   // Abort any in-flight nostrconnect listener when the form unmounts.
   useEffect(() => {
@@ -170,9 +189,11 @@ export function LoginForm({ onLogin, autoTryCredential = false }: LoginFormProps
   }, []);
 
   const handleRetry = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     setNostrConnectParams(null);
     setNostrConnectUri('');
-    setIsWaitingForConnect(false);
     setConnectError(null);
     setTimeout(() => generateConnectSession(), 0);
   }, [generateConnectSession]);
