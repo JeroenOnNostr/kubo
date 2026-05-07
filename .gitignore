@@ -39,8 +39,10 @@ ditto.json
 
 # Android build outputs and sensitive files
 *.aab
+*.p12
 resources/
 android/app/my-upload-key.keystore
+android/app/kubo-release.p12
 android/key.properties
 android/local.properties
 android/build/
@@ -48,3 +50,6 @@ android/.gradle/
 android/*/build/
 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
 android/downloads/
+
+# Build artifacts (signed APKs etc.) — kept locally, never committed
+artifacts/
