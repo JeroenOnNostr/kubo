@@ -4,8 +4,21 @@ import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin } from '@nostrify/react/login';
 import type { NostrSigner } from '@nostrify/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY } from '@/lib/appRelays';
+import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY, NIP29_RELAYS } from '@/lib/appRelays';
 import { NostrBatcher } from '@/lib/NostrBatcher';
+
+/** NIP-29 kinds emitted by users (chat + join/leave). */
+const NIP29_USER_KINDS = new Set([9, 11, 9021, 9022]);
+/** NIP-29 kinds emitted by admins (moderation). */
+const NIP29_ADMIN_KINDS = new Set([9000, 9001, 9002, 9005, 9007]);
+/** NIP-29 kinds the relay generates (group state). */
+const NIP29_RELAY_KINDS = new Set([39000, 39001, 39002, 39003]);
+/** Union of all NIP-29 kinds — used for the reqRouter fallback. */
+const NIP29_KIND_SET = new Set<number>([
+  ...NIP29_USER_KINDS,
+  ...NIP29_ADMIN_KINDS,
+  ...NIP29_RELAY_KINDS,
+]);
 
 interface NostrProviderProps {
   children: React.ReactNode;
@@ -104,6 +117,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
           return new Map([...DITTO_RELAYS, DIVINE_RELAY].map(url => [url, filters]));
         }
 
+        // NIP-29 fallback: if every filter targets only NIP-29 kinds, fan out
+        // to the configured NIP-29 relays. Group-aware hooks should always
+        // route via `nostr.relay(url).query(...)` to the specific group's
+        // host instead of relying on this branch — it's defensive only.
+        if (filters.every((f) => f?.kinds?.length && f.kinds.every((k) => NIP29_KIND_SET.has(k)))) {
+          return new Map(NIP29_RELAYS.map(url => [url, filters]));
+        }
+
         // Route to all read relays
         const readRelays = effectiveRelays.current.relays
           .filter(r => r.read)
@@ -121,7 +142,19 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
         return routes;
       },
-      eventRouter(_event: NostrEvent) {
+      eventRouter(event: NostrEvent) {
+        // NIP-29 user/admin events with an `h` tag must reach exactly one
+        // relay (the group's host). Group-aware hooks handle that via
+        // `nostr.relay(url).event(...)`. Returning [] here prevents the
+        // pool from also fanning the event out to the user's default
+        // write relays.
+        if (
+          (NIP29_USER_KINDS.has(event.kind) || NIP29_ADMIN_KINDS.has(event.kind)) &&
+          event.tags.some(([t]) => t === 'h')
+        ) {
+          return [];
+        }
+
         // Get write relays from effective relays
         const writeRelays = effectiveRelays.current.relays
           .filter(r => r.write)

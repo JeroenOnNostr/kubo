@@ -339,7 +339,7 @@ export function AppRouter() {
             <Route path="/parent/trust"         element={<ParentTrustIndexPage />} />
             <Route path="/parent/trust/people"  element={<TrustPeoplePage     />} />
             <Route path="/parent/trust/places"  element={<TrustPlacesPage     />} />
-            <Route path="/parent/groups/:gid"   element={<GroupViewPage       />} />
+            <Route path="/parent/groups/:addr"  element={<GroupViewPage       />} />
             <Route path="/parent/alerts"        element={<ParentAlertsPage    />} />
             <Route path="/parent/kid-settings"  element={<EditKidSettingsPage />} />
             <Route path="/parent/feed-settings" element={<EditKidFeedSettingsPage />} />

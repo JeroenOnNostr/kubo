@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
 import { cn } from '@/lib/utils';
+import { GroupsSection } from '@/components/groups/GroupsSection';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { TrustFollowRow } from '@/components/trust/TrustFollowRow';
 import { TrustLegend } from '@/components/trust/TrustLegend';
-import { TrustRow, type TrustLevel } from '@/components/trust/TrustRow';
 import { TrustSection } from '@/components/trust/TrustSection';
 import { useAuthors } from '@/hooks/useAuthors';
 import { useKuboFamily, type KuboTrustLevel } from '@/hooks/useKuboFamily';
@@ -21,21 +21,8 @@ import { genUserName } from '@/lib/genUserName';
  * Lists the profiles that have a local trust level assigned for the active
  * kid (independent of the kid's kind-3 follow list): 'extend' → INNER CIRCLE,
  * 'interact' / 'view' → OTHER. Profiles with no assignment do not appear.
- * GROUPS remains hardcoded — replaced when group lists land.
+ * Groups are NIP-29 managed groups (parent-scoped), rendered by GroupsSection.
  */
-type Person = {
-  id: string;
-  name: string;
-  subtitle?: string;
-  level: TrustLevel;
-  avatar: React.ReactNode;
-  avatarBg?: string;
-};
-
-const GROUPS: Person[] = [
-  { id: 'g1', name: 'Soccer team B3',     subtitle: 'St. Pete Elementary Soccer club', level: 'interact', avatar: 'S', avatarBg: '#64748B' },
-  { id: 'g2', name: 'Elementary class 4B', subtitle: 'Kids in class 4B',                level: 'interact', avatar: 'C', avatarBg: '#64748B' },
-];
 
 export function TrustPeoplePage() {
   const nav = useNavigate();
@@ -149,14 +136,7 @@ export function TrustPeoplePage() {
         ))
       )}
 
-      <TrustSection title="Groups" />
-      {GROUPS.map((p) => (
-        <TrustRow
-          key={p.id}
-          {...p}
-          onClick={() => nav(`/parent/groups/${p.id}`)}
-        />
-      ))}
+      <GroupsSection />
 
       <TrustSection title="Other" />
       {other.length === 0 ? (
