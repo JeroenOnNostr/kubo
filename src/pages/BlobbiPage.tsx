@@ -145,6 +145,17 @@ export function BlobbiPage() {
 
   useLayoutOptions({ hasSubHeader: true, noOverscroll: true });
 
+  // Suppress WebView elastic overscroll bounce while this page is mounted —
+  // without this, dragging the (non-scrollable) page exposes the area above
+  // the sticky MobileTopBar, briefly tucking it behind the Android status bar.
+  useEffect(() => {
+    const prev = document.documentElement.style.overscrollBehaviorY;
+    document.documentElement.style.overscrollBehaviorY = 'contain';
+    return () => {
+      document.documentElement.style.overscrollBehaviorY = prev;
+    };
+  }, []);
+
   useSeoMeta({
     title: `Blobbi | ${config.appName}`,
     description: 'Care for your virtual pet companion on Nostr',
