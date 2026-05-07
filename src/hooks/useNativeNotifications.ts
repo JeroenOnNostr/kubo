@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { LocalNotifications } from '@capacitor/local-notifications';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useAppContext } from './useAppContext';
@@ -22,8 +21,8 @@ const DittoNotification = registerPlugin<DittoNotificationPlugin>('DittoNotifica
  * Passes user pubkey + relay URLs + enabled notification kinds + optional
  * authors filter to the DittoNotification plugin so it can poll for events
  * in the background. Respects the NIP-78 notificationsEnabled setting
- * (defaults to on), per-type notification preferences, and the "only from
- * people I follow" setting.
+ * (defaults to off — opt-in via Settings → Notifications), per-type
+ * notification preferences, and the "only from people I follow" setting.
  *
  * Web Push (nostr-push) is handled separately by usePushNotifications +
  * NotificationSettings — this hook is Capacitor-only.
@@ -35,7 +34,7 @@ export function useNativeNotifications(): void {
   const { data: followData } = useFollowList();
 
   const prefs = settings?.notificationPreferences;
-  const notificationsEnabled = settings?.notificationsEnabled ?? true;
+  const notificationsEnabled = settings?.notificationsEnabled ?? false;
   const notificationStyle = settings?.notificationStyle ?? 'push';
   const enabledKinds = useMemo(
     () => getEnabledNotificationKinds(prefs),
@@ -51,22 +50,6 @@ export function useNativeNotifications(): void {
   const authorsFilter = onlyFollowing && followedPubkeys.length > 0
     ? followedPubkeys
     : undefined;
-
-  // Request native notification permission on first mount.
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-
-    (async () => {
-      try {
-        const { display } = await LocalNotifications.checkPermissions();
-        if (display === 'prompt' || display === 'prompt-with-rationale') {
-          await LocalNotifications.requestPermissions();
-        }
-      } catch {
-        // Permission check failed — ignore
-      }
-    })();
-  }, []);
 
   // Configure / deconfigure the native polling service.
   useEffect(() => {

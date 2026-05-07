@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { useSeoMeta } from '@unhead/react';
 import { Bell, BellOff, AlertTriangle, Heart, Repeat2, Zap, AtSign, MessageSquare, Users, Award, Mail, Radio, MonitorSmartphone } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
@@ -160,7 +161,7 @@ export function NotificationSettings() {
     if (initializedRef.current || settings === null || settings === undefined) return;
     initializedRef.current = true;
     if (isNative) {
-      setNativePushEnabled(settings.notificationsEnabled ?? true);
+      setNativePushEnabled(settings.notificationsEnabled ?? false);
       setNotificationStyle(settings.notificationStyle ?? 'push');
     }
     setPrefs(settings.notificationPreferences ?? {});
@@ -208,10 +209,34 @@ export function NotificationSettings() {
       return;
     }
 
-    // Native path — toggle drives NIP-78 setting directly.
-    setNativePushEnabled(enabled);
-    updateSettings.mutateAsync({ notificationsEnabled: enabled }).catch(() => {
-      setNativePushEnabled(!enabled); // roll back on failure
+    // Native path — request OS permission on enable, then persist.
+    if (enabled) {
+      setNativePushEnabled(true);
+      try {
+        const { display } = await LocalNotifications.requestPermissions();
+        if (display !== 'granted') {
+          setNativePushEnabled(false);
+          toast({
+            title: 'Notifications blocked',
+            description: 'Enable them in system settings.',
+          });
+          return;
+        }
+      } catch (err) {
+        console.error('[notifications] Permission request failed:', err);
+        setNativePushEnabled(false);
+        toast({ title: 'Failed to enable notifications', description: 'Please try again.' });
+        return;
+      }
+      updateSettings.mutateAsync({ notificationsEnabled: true }).catch(() => {
+        setNativePushEnabled(false);
+      });
+      return;
+    }
+
+    setNativePushEnabled(false);
+    updateSettings.mutateAsync({ notificationsEnabled: false }).catch(() => {
+      setNativePushEnabled(true);
     });
   };
 
