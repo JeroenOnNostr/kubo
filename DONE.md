@@ -4,6 +4,11 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-05-07
+
+- **KUBO-108: Unify first-install feed-settings defaults — single source of truth**
+  Two places baked in first-install `feedSettings` defaults: `kubo.json` (merged onto `hardcodedConfig` in `src/App.tsx` to produce the runtime `AppConfig`) and `DEFAULT_KUBO_FEED_SETTINGS` in [src/components/InitialSyncGate.tsx](src/components/InitialSyncGate.tsx) — a hand-maintained snapshot used by `SilentSettingsBootstrap` and `SetupQuestionnaire.handleSaveAndContinue`, both of which called `updateConfig({ feedSettings: DEFAULT_KUBO_FEED_SETTINGS, ... })` and **fully replaced** the merged config, silently shadowing kubo.json on every fresh signup. Caught in dev when flipping photos/short-videos/divines/user-statuses to `false` in kubo.json had no effect on a brand-new nsec — the snapshot still won. Fix: both onboarding paths now read `config.feedSettings` (already kubo.json + hardcodedConfig merged via [AppProvider](src/components/AppProvider.tsx)) and persist that to NIP-44-encrypted kind-30078. Deleted the `DEFAULT_KUBO_FEED_SETTINGS` constant and its preceding comment block. kubo.json is now the single source of truth for first-install defaults.
+
 ## 2026-05-06
 
 - **KUBO-107: First release-signed publish to Zapstore (v0.4.1)** — pending hash
