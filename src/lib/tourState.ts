@@ -17,6 +17,7 @@ import { useSyncExternalStore } from 'react';
  *   3 = parent bottom nav (Home/Feed/Trust/Upload/Alerts overview)
  *   4 = parent Feed source-tiles area on /parent/feed (source-types primer)
  *   5 = kid selector pill (round-trip + add another kid)
+ *   6 = Groups section on /parent/trust/people (Kubo Testers nudge)
  *
  * pinFlowActive: true while ParentGateDialog is open. Used by step 2 to
  * unmount the gear popover when the dialog appears (otherwise the popover
@@ -24,7 +25,7 @@ import { useSyncExternalStore } from 'react';
  * KuboKidTopBar and the layout-level one in KuboKidLayout for the back-
  * gesture guard) both write to this flag — single source of truth.
  */
-export type TourStep = 0 | 1 | 2 | 3 | 4 | 5;
+export type TourStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 let currentStep: TourStep = 0;
 let pinFlowActive = false;

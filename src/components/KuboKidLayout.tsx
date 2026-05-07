@@ -50,6 +50,15 @@ export function KuboKidLayout() {
   const { isLocked, isOutsideWindow, settings } = useScreenTime();
   const [gateOpen, setGateOpen] = useState(false);
 
+  // KUBO-107: defer the time-window lockout while the first-run tour is still
+  // pending. Otherwise a parent who installs Kubo and creates their first kid
+  // outside the default allowed window lands straight on the lock screen and
+  // never sees the Coachmark tour — the onboarding is silently skipped. Once
+  // the tour completes (or is skipped) `coachmarksCompletedAt` is written, and
+  // the lockout enforces normally on every subsequent visit.
+  const tourPending = !!family && !family.coachmarksCompletedAt;
+  const showLock = isLocked && !tourPending;
+
   // First-run tour trigger (KUBO-092). Fires once when this layout mounts
   // with a family record that has at least one kid but no completion flag —
   // i.e. the parent has just finished AddKidPage and landed on /kid for the
@@ -124,7 +133,7 @@ export function KuboKidLayout() {
           if (!o) setPinFlowActive(false);
         }}
       />
-      {isLocked ? (
+      {showLock ? (
         <div className="min-h-dvh flex flex-col items-center justify-center gap-4 px-8 text-center">
           <div
             className="size-16 rounded-2xl flex items-center justify-center"
