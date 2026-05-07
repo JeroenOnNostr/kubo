@@ -50,93 +50,6 @@ import { getAvatarShape, isValidAvatarShape } from "@/lib/avatarShape";
 import { resolveTheme, resolveThemeConfig } from "@/themes";
 import { cn } from "@/lib/utils";
 
-// Default feed + content-warning settings applied to fresh Kubo accounts.
-// Referenced by both the silent bootstrap (for the parent/kid onboarding flow)
-// and the legacy SetupQuestionnaire's handleSaveAndContinue.
-const DEFAULT_KUBO_FEED_SETTINGS = {
-  showArticles: false,
-  showEvents: true,
-  feedIncludeEvents: true,
-  showVines: true,
-  showPolls: false,
-  showTreasures: true,
-  showTreasureGeocaches: true,
-  showTreasureFoundLogs: true,
-  showColors: true,
-  showPacks: false,
-  showDecks: true,
-  showWebxdc: true,
-  showProfileThemes: false,
-  showThemeDefinitions: true,
-  showProfileThemeUpdates: true,
-  showCustomProfileThemes: true,
-  feedIncludePosts: true,
-  feedIncludeComments: true,
-  feedIncludeReposts: true,
-  feedIncludeGenericReposts: true,
-  feedIncludeArticles: false,
-  feedIncludeVines: true,
-  feedIncludePolls: false,
-  feedIncludeColors: true,
-  feedIncludeDecks: true,
-  feedIncludePacks: false,
-  feedIncludeTreasureGeocaches: true,
-  feedIncludeTreasureFoundLogs: true,
-  feedIncludeWebxdc: true,
-  feedIncludeVoiceMessages: false,
-  showEmojiPacks: true,
-  feedIncludeEmojiPacks: true,
-  showCustomEmojis: true,
-  showUserStatuses: true,
-  feedIncludeProfileThemes: true,
-  feedIncludeThemeDefinitions: true,
-  feedIncludeProfileThemeUpdates: true,
-  showPhotos: true,
-  feedIncludePhotos: true,
-  showVideos: true,
-  feedIncludeNormalVideos: true,
-  feedIncludeShortVideos: true,
-  showMusic: false,
-  feedIncludeMusicTracks: false,
-  feedIncludeMusicPlaylists: false,
-  showPodcasts: false,
-  feedIncludePodcastEpisodes: false,
-  feedIncludePodcastTrailers: false,
-  showDevelopment: false,
-  feedIncludeDevelopment: false,
-  showBadges: false,
-  showBadgeDefinitions: true,
-  showProfileBadges: true,
-  showBadgeAwards: true,
-  feedIncludeBadgeDefinitions: false,
-  feedIncludeProfileBadges: false,
-  feedIncludeBadgeAwards: false,
-  feedIncludeVanish: true,
-  feedIncludeBlobbi: true,
-  followsFeedShowReplies: true,
-  // Kubo: visibility toggles for items without a native upstream show* key.
-  // The build-time kubo.json overrides flip these to false; this onboarding
-  // path is only reached when no kubo.json override exists for the user yet.
-  showZaps: true,
-  showReplyAction: true,
-  showRepostAction: true,
-  showReactionAction: true,
-  showFavoriteAction: true,
-  showShareAction: true,
-  showMoreAction: true,
-  showNip05: false,
-  showPostTimestamp: false,
-  showHashtags: true,
-  showBlobbi: true,
-  showLetters: true,
-  showAIChat: true,
-  showWorld: true,
-  showBooks: true,
-  showArchive: true,
-  showWikipedia: true,
-  showBluesky: true,
-};
-
 // ---------------------------------------------------------------------------
 // InitialSyncGate
 // ---------------------------------------------------------------------------
@@ -313,7 +226,7 @@ function SyncScreen({ phase }: { phase: SyncPhase }) {
  * underlying route (e.g. `/onboard/add-kid`) can render.
  */
 function SilentSettingsBootstrap({ onComplete }: { onComplete: () => void }) {
-  const { updateConfig } = useAppContext();
+  const { config, updateConfig } = useAppContext();
   const { user } = useCurrentUser();
   const { updateSettings } = useEncryptedSettings();
   const hasRun = useRef(false);
@@ -322,18 +235,19 @@ function SilentSettingsBootstrap({ onComplete }: { onComplete: () => void }) {
     if (hasRun.current) return;
     hasRun.current = true;
 
+    // kubo.json + hardcodedConfig defaults are already merged into
+    // config.feedSettings by AppProvider — don't overwrite them.
     updateConfig((current) => ({
       ...current,
-      feedSettings: DEFAULT_KUBO_FEED_SETTINGS,
-      contentWarningPolicy: "blur",
+      contentWarningPolicy: current.contentWarningPolicy ?? "blur",
     }));
 
     const run = async () => {
       if (user?.signer.nip44) {
         try {
           await updateSettings.mutateAsync({
-            feedSettings: DEFAULT_KUBO_FEED_SETTINGS,
-            contentWarningPolicy: "blur",
+            feedSettings: config.feedSettings,
+            contentWarningPolicy: config.contentWarningPolicy ?? "blur",
           });
         } catch (error) {
           console.warn("Failed to save initial settings to Nostr:", error);
@@ -343,7 +257,7 @@ function SilentSettingsBootstrap({ onComplete }: { onComplete: () => void }) {
     };
 
     run();
-  }, [updateConfig, updateSettings, user, onComplete]);
+  }, [config.feedSettings, config.contentWarningPolicy, updateConfig, updateSettings, user, onComplete]);
 
   return <SyncScreen phase="syncing" />;
 }
@@ -481,15 +395,14 @@ function SetupQuestionnaire({
 
     updateConfig((current) => ({
       ...current,
-      feedSettings: DEFAULT_KUBO_FEED_SETTINGS,
-      contentWarningPolicy: "blur",
+      contentWarningPolicy: current.contentWarningPolicy ?? "blur",
     }));
 
     if (user?.signer.nip44) {
       try {
         await updateSettings.mutateAsync({
-          feedSettings: DEFAULT_KUBO_FEED_SETTINGS,
-          contentWarningPolicy: "blur",
+          feedSettings: config.feedSettings,
+          contentWarningPolicy: config.contentWarningPolicy ?? "blur",
         });
       } catch (error) {
         console.warn("Failed to save initial settings to Nostr:", error);
@@ -521,7 +434,7 @@ function SetupQuestionnaire({
     } else {
       goTo("follows");
     }
-  }, [updateConfig, updateSettings, user, nostr, goTo]);
+  }, [config.feedSettings, config.contentWarningPolicy, updateConfig, updateSettings, user, nostr, goTo]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
