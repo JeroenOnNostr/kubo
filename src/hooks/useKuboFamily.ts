@@ -155,7 +155,15 @@ function migrateLegacy(legacy: LegacyKuboFamily): KuboFamily {
 // useSyncExternalStore pattern as src/blobbi/actions/lib/item-cooldown.ts.
 
 let family: KuboFamily | null = null;
+// Guards re-execution of bootstrap(). Set to true at the top of the function
+// before the first await, so concurrent subscribers don't all kick off their
+// own KeyStore reads.
 let hasBootstrapped = false;
+// Flips to true only after bootstrap() resolves. KuboBootGate reads this to
+// avoid mistaking a still-loading family for a missing family — without it
+// a cold-start race redirects to /onboard/add-kid before secureStorage has
+// returned, trapping users with completed onboarding (KUBO-XXX).
+let bootstrapCompleted = false;
 const subscribers = new Set<() => void>();
 
 function notify(): void {
@@ -182,6 +190,7 @@ async function bootstrap(): Promise<void> {
       }
     }
   } finally {
+    bootstrapCompleted = true;
     notify();
   }
 }
@@ -541,6 +550,10 @@ function getSnapshot(): KuboFamily | null {
   return family;
 }
 
+function getBootstrappedSnapshot(): boolean {
+  return bootstrapCompleted;
+}
+
 // Exported bindings so per-slice hooks (e.g. useKidFeedSources) can subscribe
 // to the same underlying store without duplicating its module-level state.
 export const subscribeFamily = subscribe;
@@ -548,6 +561,11 @@ export const getFamilySnapshot = getSnapshot;
 
 export function useKuboFamily() {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const isBootstrapped = useSyncExternalStore(
+    subscribe,
+    getBootstrappedSnapshot,
+    getBootstrappedSnapshot,
+  );
 
   // Stable async wrappers — identity doesn't change between renders, so
   // consumers that use these as useEffect dependencies don't thrash.
@@ -567,6 +585,7 @@ export function useKuboFamily() {
 
   return {
     family: current,
+    isBootstrapped,
     setFamily: setFamilyCb,
     addKid: addKidCb,
     removeKid: removeKidCb,

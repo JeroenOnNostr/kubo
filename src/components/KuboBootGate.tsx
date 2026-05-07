@@ -12,14 +12,18 @@ import { useKuboFamily } from '@/hooks/useKuboFamily';
  *                                     reopens land back on the kid step)
  * - Logged in with at least one kid → /kid (kid app)
  *
- * While auth is resolving we render nothing to avoid a flash of the welcome
- * screen followed by an immediate redirect into the kid app.
+ * While auth or the family record are still resolving we render nothing.
+ * Family bootstrap is async (Android KeyStore on native, localStorage on web),
+ * so reading `family` synchronously on the first render returns `null` even
+ * for users with a fully-populated record. Waiting on `isBootstrapped`
+ * prevents the cold-start redirect-to-add-kid trap that otherwise forces
+ * existing parents to re-add a kid on every reopen.
  */
 export function KuboBootGate() {
   const { user, isLoading } = useCurrentUser();
-  const { family } = useKuboFamily();
+  const { family, isBootstrapped } = useKuboFamily();
 
-  if (isLoading) return null;
+  if (isLoading || !isBootstrapped) return null;
 
   if (!user) return <Navigate to="/onboard/welcome" replace />;
 
