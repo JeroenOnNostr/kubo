@@ -18,6 +18,8 @@
     "feedIncludeVines": false,
     "showPhotos": false,
     "feedIncludePhotos": false,
+    "showVideos": true,
+    "feedIncludeNormalVideos": true,
     "feedIncludeShortVideos": false,
     "showUserStatuses": false,
     "showPolls": false,
