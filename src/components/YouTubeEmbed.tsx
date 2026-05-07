@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
+
+// Tracks the currently-active YouTubeEmbed across the app so that starting a
+// new one preempts the previous (only one YouTube video plays at a time).
+let activeDeactivate: (() => void) | null = null;
 
 interface YouTubeEmbedProps {
   videoId: string;
@@ -82,6 +86,7 @@ function findThumbnail(videoId: string): Promise<string | null> {
 export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEmbedProps) {
   const [activated, setActivated] = useState(false);
   const [resolvedThumb, setResolvedThumb] = useState<string | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,8 +99,38 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
     return () => { cancelled = true; };
   }, [videoId]);
 
+  // While activated: preempt any other playing YouTube embed, and pause this
+  // one (by tearing the iframe back down to the thumbnail facade) when it
+  // scrolls out of view. Threshold matches usePlayerControls for native videos.
+  useEffect(() => {
+    if (!activated) return;
+
+    const deactivate = () => setActivated(false);
+
+    if (activeDeactivate && activeDeactivate !== deactivate) {
+      activeDeactivate();
+    }
+    activeDeactivate = deactivate;
+
+    const wrapper = wrapperRef.current;
+    let observer: IntersectionObserver | undefined;
+    if (wrapper) {
+      observer = new IntersectionObserver(
+        ([entry]) => { if (!entry.isIntersecting) deactivate(); },
+        { threshold: 0.25 },
+      );
+      observer.observe(wrapper);
+    }
+
+    return () => {
+      observer?.disconnect();
+      if (activeDeactivate === deactivate) activeDeactivate = null;
+    };
+  }, [activated]);
+
   return (
     <div
+      ref={wrapperRef}
       className={cn('rounded-xl overflow-hidden', className)}
       onClick={(e) => e.stopPropagation()}
     >
