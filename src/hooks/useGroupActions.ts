@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { NUser } from '@nostrify/react/login';
 
-import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { useParentSigner } from './useParentSigner';
 import { fetchGroupListEvent, nextGroupListTags, type JoinedGroup } from './useGroups';
@@ -34,7 +33,11 @@ export interface EditMetadataInput {
  * All NIP-29 mutations except chat send (which lives in
  * {@link useGroupMessages} so it can update its cache directly).
  *
- * Each mutation signs the event with the current user's signer, then
+ * Every mutation signs with the **parent identity** via
+ * {@link useParentSigner}. NIP-29 group membership and moderation are
+ * parent-level concerns in Kubo — a kid being silently treated as an
+ * admin (or kicked from a group) just because they're the active
+ * account in the switcher would be a privacy/safety bug. The hook
  * publishes to a SINGLE relay — the host of the group's address — via
  * `nostr.relay(url).event(...)`. The default eventRouter in
  * NostrProvider explicitly skips NIP-29 events with an `h` tag, so
@@ -42,27 +45,20 @@ export interface EditMetadataInput {
  */
 export function useGroupActions() {
   const { nostr } = useNostr();
-  const { user } = useCurrentUser();
   const { user: parentUser, reason: parentReason } = useParentSigner();
   const { mutateAsync: publishToWriteRelays } = useNostrPublish();
   const qc = useQueryClient();
 
-  const requireUser = (): NUser => {
-    if (!user) throw new Error('Not logged in');
-    return user;
-  };
-
   /**
-   * For group join/create: must always sign with the parent identity, even
-   * when a kid is the active account in the kid switcher. Throws an
-   * explicit error if the parent is logged out — never silently falls back
-   * to the kid (that is exactly the bug this guard exists to prevent).
+   * Returns the parent identity for signing. Throws explicitly if the
+   * parent is logged out — never silently falls back to the active kid,
+   * because that is exactly the regression this guard exists to prevent.
    */
   const requireParent = (): NUser => {
     if (parentUser) return parentUser;
     throw new Error(
       parentReason === 'parent-logged-out'
-        ? 'Parent must be logged in to join or create a group on this device.'
+        ? 'Parent must be logged in to manage this group on this device.'
         : 'Not logged in',
     );
   };
@@ -219,7 +215,7 @@ export function useGroupActions() {
       const ev = await sendToGroupRelay(
         { kind: NIP29_KINDS.EDIT, content: '', tags },
         relay,
-        requireUser(),
+        requireParent(),
       );
       qc.invalidateQueries({ queryKey: ['nip29-group', addr] });
       qc.invalidateQueries({ queryKey: ['nip29-groups'] });
@@ -227,13 +223,16 @@ export function useGroupActions() {
     },
   });
 
-  const putUser = useMutation<NostrEvent, Error, { addr: string; pubkey: string; role: string }>({
+  const putUser = useMutation<NostrEvent, Error, { addr: string; pubkey: string; role?: string }>({
     mutationFn: async ({ addr, pubkey, role }) => {
       const { gid, relay } = parseGroupAddr(addr);
+      // NIP-29: a `p` tag with no role means "member". Pass an explicit
+      // role like 'admin' to promote.
+      const pTag = role ? ['p', pubkey, role] : ['p', pubkey];
       const ev = await sendToGroupRelay(
-        { kind: NIP29_KINDS.PUT, content: '', tags: [['h', gid], ['p', pubkey, role]] },
+        { kind: NIP29_KINDS.PUT, content: '', tags: [['h', gid], pTag] },
         relay,
-        requireUser(),
+        requireParent(),
       );
       qc.invalidateQueries({ queryKey: ['nip29-group', addr] });
       return ev;
@@ -246,7 +245,7 @@ export function useGroupActions() {
       const ev = await sendToGroupRelay(
         { kind: NIP29_KINDS.REMOVE, content: '', tags: [['h', gid], ['p', pubkey]] },
         relay,
-        requireUser(),
+        requireParent(),
       );
       qc.invalidateQueries({ queryKey: ['nip29-group', addr] });
       return ev;
@@ -259,7 +258,7 @@ export function useGroupActions() {
       const ev = await sendToGroupRelay(
         { kind: NIP29_KINDS.DELETE, content: '', tags: [['h', gid], ['e', eventId]] },
         relay,
-        requireUser(),
+        requireParent(),
       );
       // Remove the message from the local cache so the bubble disappears
       // immediately (in addition to whatever the live subscription does).
@@ -270,18 +269,36 @@ export function useGroupActions() {
     },
   });
 
+  const deleteGroup = useMutation<NostrEvent, Error, { addr: string }>({
+    mutationFn: async ({ addr }) => {
+      const parent = requireParent();
+      const { gid, relay } = parseGroupAddr(addr);
+      const ev = await sendToGroupRelay(
+        { kind: NIP29_KINDS.DELETE_GROUP, content: '', tags: [['h', gid]] },
+        relay,
+        parent,
+      );
+      // Locally drop the group from the joined-groups list so the UI
+      // doesn't keep showing it after the relay tombstones the group.
+      await updateGroupList({ kind: 'leave', addr }, parent);
+      qc.invalidateQueries({ queryKey: ['nip29-group', addr] });
+      return ev;
+    },
+  });
+
   return {
     join: (addr: string, code?: string) => join.mutateAsync({ addr, code }),
     leave: (addr: string) => leave.mutateAsync({ addr }),
     create: (input: CreateGroupInput) => create.mutateAsync(input),
     editMetadata: (addr: string, patch: EditMetadataInput) =>
       editMetadata.mutateAsync({ addr, patch }),
-    putUser: (addr: string, pubkey: string, role: string) =>
+    putUser: (addr: string, pubkey: string, role?: string) =>
       putUser.mutateAsync({ addr, pubkey, role }),
     removeUser: (addr: string, pubkey: string) =>
       removeUser.mutateAsync({ addr, pubkey }),
     deleteMessage: (addr: string, eventId: string) =>
       deleteMessage.mutateAsync({ addr, eventId }),
+    deleteGroup: (addr: string) => deleteGroup.mutateAsync({ addr }),
     /** Per-mutation pending flags for UI affordances. */
     pending: {
       join: join.isPending,
@@ -291,6 +308,7 @@ export function useGroupActions() {
       putUser: putUser.isPending,
       removeUser: removeUser.isPending,
       deleteMessage: deleteMessage.isPending,
+      deleteGroup: deleteGroup.isPending,
     },
   };
 }

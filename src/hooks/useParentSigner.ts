@@ -7,8 +7,18 @@ import { useKuboFamily } from './useKuboFamily';
 /**
  * Returns the NUser whose pubkey matches `family.parentPubkey`, regardless of
  * which login is active in the kid switcher. Use this for any operation that
- * must be attributed to the parent identity — currently NIP-29 group join,
- * create, the kind-10009 group list, and group chat sends.
+ * must be attributed to the parent identity. In Kubo, group membership and
+ * moderation are parent-level concerns, so the full set of group operations
+ * pinned to the parent is:
+ *   - chat: kind 9 / 11 sends
+ *   - membership: kind 9021 join, 9022 leave, 10009 group-list
+ *   - lifecycle: kind 9007 create-group, 9008 delete-group
+ *   - moderation: kind 9000 put-user, 9001 remove-user, 9002 edit-metadata,
+ *     9005 delete-event, 9009 create-invite (and kind-5 deletions of any of
+ *     the above)
+ * `useGroup`/`useGroupMessages` likewise evaluate `isAdmin` and `isMember`
+ * against the parent pubkey, so admin UI flips on parent identity, not on
+ * whichever kid is selected in the switcher.
  *
  * Fallback semantics:
  *  - No parental setup (`family` null): returns the active user. Drop-in for

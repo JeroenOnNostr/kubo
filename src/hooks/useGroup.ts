@@ -2,7 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { useCurrentUser } from './useCurrentUser';
+import { useParentSigner } from './useParentSigner';
 import { NIP29_KINDS, parseGroupAddr } from '@/lib/nip29';
 
 export interface GroupRole {
@@ -24,11 +24,11 @@ export interface GroupSnapshot {
   picture?: string;
   isPrivate: boolean;
   isClosed: boolean;
-  /** True iff the current user is in the kind-39002 members list. */
+  /** True iff the parent identity is in the kind-39002 members list. */
   isMember: boolean;
-  /** True iff the current user appears in kind-39001. */
+  /** True iff the parent identity appears in kind-39001. */
   isAdmin: boolean;
-  /** Current user's first role from kind-39001, if any. */
+  /** Parent identity's first role from kind-39001, if any. */
   role?: string;
 }
 
@@ -49,10 +49,10 @@ const empty: GroupSnapshot = {
  */
 export function useGroup(addr: string | undefined) {
   const { nostr } = useNostr();
-  const { user } = useCurrentUser();
+  const { user: parentUser } = useParentSigner();
 
   return useQuery({
-    queryKey: ['nip29-group', addr ?? ''],
+    queryKey: ['nip29-group', addr ?? '', parentUser?.pubkey ?? ''],
     enabled: !!addr,
     staleTime: 15_000,
     queryFn: async ({ signal }): Promise<GroupSnapshot> => {
@@ -103,8 +103,8 @@ export function useGroup(addr: string | undefined) {
       const tagVal = (n: string) => metadata?.tags.find(([t]) => t === n)?.[1];
       const hasFlag = (n: string) => !!metadata?.tags.find(([t]) => t === n);
 
-      const adminEntry = user ? admins.find(a => a.pubkey === user.pubkey) : undefined;
-      const isMember = !!user && members.includes(user.pubkey);
+      const adminEntry = parentUser ? admins.find(a => a.pubkey === parentUser.pubkey) : undefined;
+      const isMember = !!parentUser && members.includes(parentUser.pubkey);
       const isAdmin = !!adminEntry;
 
       return {

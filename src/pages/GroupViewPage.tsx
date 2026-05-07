@@ -4,10 +4,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AddMemberDialog } from '@/components/groups/AddMemberDialog';
+import { EditGroupDialog } from '@/components/groups/EditGroupDialog';
 import { GroupAboutTab } from '@/components/groups/GroupAboutTab';
 import { GroupChatTab } from '@/components/groups/GroupChatTab';
+import { GroupHeaderMenu } from '@/components/groups/GroupHeaderMenu';
 import { GroupMembersTab } from '@/components/groups/GroupMembersTab';
+import { InviteCodesDialog } from '@/components/groups/InviteCodesDialog';
+import { JoinRequestsDialog } from '@/components/groups/JoinRequestsDialog';
+import { ManageMembersDialog } from '@/components/groups/ManageMembersDialog';
 import { useGroup } from '@/hooks/useGroup';
+import { useGroupActions } from '@/hooks/useGroupActions';
+import { useGroupJoinRequests } from '@/hooks/useGroupJoinRequests';
+import { buildInviteUrl, parseGroupAddr } from '@/lib/nip29';
 import { cn } from '@/lib/utils';
 
 /**
@@ -28,6 +37,41 @@ export function GroupViewPage() {
   const { data: group, isLoading } = useGroup(addr);
   const [tab, setTab] = useState<Tab>('chat');
   const qc = useQueryClient();
+  const { leave } = useGroupActions();
+  const { requests: joinRequests } = useGroupJoinRequests(
+    group?.isAdmin && group?.isClosed ? addr : undefined,
+  );
+
+  // Header-menu dialogs: a single discriminated state so two of them
+  // can't be open at once and the menu's onSelect is straightforward.
+  const [openDialog, setOpenDialog] = useState<
+    null | 'edit' | 'manage' | 'add' | 'invites' | 'requests'
+  >(null);
+
+  const onShare = async () => {
+    if (!addr) return;
+    try {
+      const { host, gid } = parseGroupAddr(addr);
+      // Bare invite URL with no code — works for open groups; for closed
+      // groups the recipient will need to either request to join or be
+      // sent a coded URL via the Invite codes dialog.
+      const url = buildInviteUrl(host, gid, '');
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // ignore
+    }
+  };
+
+  const onLeaveFromMenu = async () => {
+    if (!addr) return;
+    try {
+      await leave(addr);
+      nav('/parent/trust/people');
+    } catch {
+      // The About tab also exposes Leave with its own error UI; menu
+      // failure is silent here.
+    }
+  };
 
   // Re-fetch the relay-side group state shortly after entering, then
   // periodically. Joining via kind 9021 only flips us into the members
@@ -117,6 +161,19 @@ export function GroupViewPage() {
             {group?.isClosed && ' · invite-only'}
           </div>
         </div>
+        {group && (
+          <GroupHeaderMenu
+            group={group}
+            joinRequestCount={joinRequests.length}
+            onEditGroup={() => setOpenDialog('edit')}
+            onManageMembers={() => setOpenDialog('manage')}
+            onAddMember={() => setOpenDialog('add')}
+            onInviteCodes={() => setOpenDialog('invites')}
+            onJoinRequests={() => setOpenDialog('requests')}
+            onShare={onShare}
+            onLeave={onLeaveFromMenu}
+          />
+        )}
       </div>
 
       {/* Tabs */}
@@ -155,6 +212,43 @@ export function GroupViewPage() {
         <div className="px-4 pt-6 text-[12px] text-muted-foreground">
           Loading…
         </div>
+      )}
+
+      {group && (
+        <>
+          <EditGroupDialog
+            open={openDialog === 'edit'}
+            onOpenChange={(o) => setOpenDialog(o ? 'edit' : null)}
+            addr={addr}
+            group={group}
+          />
+          <ManageMembersDialog
+            open={openDialog === 'manage'}
+            onOpenChange={(o) => setOpenDialog(o ? 'manage' : null)}
+            addr={addr}
+            group={group}
+            onAddMember={() => setOpenDialog('add')}
+          />
+          <AddMemberDialog
+            open={openDialog === 'add'}
+            onOpenChange={(o) => setOpenDialog(o ? 'add' : null)}
+            addr={addr}
+            existing={new Set([
+              ...group.admins.map((a) => a.pubkey),
+              ...group.members,
+            ])}
+          />
+          <InviteCodesDialog
+            open={openDialog === 'invites'}
+            onOpenChange={(o) => setOpenDialog(o ? 'invites' : null)}
+            addr={addr}
+          />
+          <JoinRequestsDialog
+            open={openDialog === 'requests'}
+            onOpenChange={(o) => setOpenDialog(o ? 'requests' : null)}
+            addr={addr}
+          />
+        </>
       )}
     </div>
   );

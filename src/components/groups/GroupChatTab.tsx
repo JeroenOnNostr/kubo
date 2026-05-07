@@ -12,7 +12,9 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEvent } from '@/hooks/useEvent';
 import { useGroupMessages, type GroupMessage } from '@/hooks/useGroupMessages';
+import { useGroupSystemEvents, type GroupSystemEvent } from '@/hooks/useGroupSystemEvents';
 import { useParentSigner } from '@/hooks/useParentSigner';
+import { SystemRow } from '@/components/groups/SystemRow';
 import { formatConversationTime } from '@/lib/dmUtils';
 import { genUserName } from '@/lib/genUserName';
 import { getReplyTarget, parseGroupAddr } from '@/lib/nip29';
@@ -67,6 +69,7 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
   const { user: parentUser } = useParentSigner();
   const ownPubkey = parentUser?.pubkey ?? user?.pubkey;
   const { messages, sendMessage, isSending, isLoading } = useGroupMessages(addr);
+  const { events: systemEvents } = useGroupSystemEvents(addr);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
@@ -118,7 +121,9 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
 
   // Pre-compute groupings: consecutive messages from the same author within
   // the same calendar day collapse into a single visual cluster (single
-  // author label + smaller gap), matching most messaging apps.
+  // author label + smaller gap), matching most messaging apps. Membership
+  // changes (joined/left/added/removed) are interleaved chronologically as
+  // muted "system rows" and break the cluster of any chat run they fall in.
   const grouped = useMemo(() => {
     type Item =
       | { kind: 'separator'; key: string; label: string }
@@ -128,37 +133,66 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
           showAuthor: boolean;
           showTimestamp: boolean;
           isClusterStart: boolean;
-        };
-    const out: Item[] = [];
-    for (let i = 0; i < messages.length; i++) {
-      const m = messages[i];
-      const prev = messages[i - 1];
-      const next = messages[i + 1];
+        }
+      | { kind: 'system'; sys: GroupSystemEvent };
 
-      if (!prev || !sameDay(prev.created_at, m.created_at)) {
-        out.push({ kind: 'separator', key: `sep-${m.id}`, label: formatDaySeparator(m.created_at) });
+    // Merge messages + system events chronologically by created_at. Stable
+    // tie-break on message ids so the same event always sorts the same way.
+    type Stream =
+      | { tag: 'msg'; m: GroupMessage }
+      | { tag: 'sys'; s: GroupSystemEvent };
+    const stream: Stream[] = [
+      ...messages.map((m): Stream => ({ tag: 'msg', m })),
+      ...systemEvents.map((s): Stream => ({ tag: 'sys', s })),
+    ].sort((a, b) => {
+      const ta = a.tag === 'msg' ? a.m.created_at : a.s.created_at;
+      const tb = b.tag === 'msg' ? b.m.created_at : b.s.created_at;
+      if (ta !== tb) return ta - tb;
+      const ka = a.tag === 'msg' ? a.m.id : a.s.eventId;
+      const kb = b.tag === 'msg' ? b.m.id : b.s.eventId;
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+
+    const out: Item[] = [];
+    for (let i = 0; i < stream.length; i++) {
+      const cur = stream[i];
+      const prev = stream[i - 1];
+      const next = stream[i + 1];
+      const curTs = cur.tag === 'msg' ? cur.m.created_at : cur.s.created_at;
+      const prevTs = prev ? (prev.tag === 'msg' ? prev.m.created_at : prev.s.created_at) : undefined;
+
+      if (prevTs === undefined || !sameDay(prevTs, curTs)) {
+        const key = cur.tag === 'msg' ? `sep-${cur.m.id}` : `sep-${cur.s.eventId}`;
+        out.push({ kind: 'separator', key, label: formatDaySeparator(curTs) });
       }
 
-      // New cluster when author changes or there's a >5-min gap.
-      const isClusterStart =
-        !prev ||
-        prev.pubkey !== m.pubkey ||
-        m.created_at - prev.created_at > 5 * 60 ||
-        !sameDay(prev.created_at, m.created_at);
-      // End of cluster when author changes, gap >5min, or it's the last message.
-      const isClusterEnd =
-        !next ||
-        next.pubkey !== m.pubkey ||
-        next.created_at - m.created_at > 5 * 60 ||
-        !sameDay(next.created_at, m.created_at);
+      if (cur.tag === 'sys') {
+        out.push({ kind: 'system', sys: cur.s });
+        continue;
+      }
 
-      // For own messages, suppress the repeated author label across any
-      // same-author run on the same day — even with long gaps — because
-      // there's no ambiguity about who sent it. Incoming messages keep
-      // the time-gap rule so the label re-appears after a long pause.
+      // For chat-message clustering, look only at adjacent CHAT messages —
+      // a system row between two messages from the same author should still
+      // start a new cluster after the system row, since the author label
+      // would otherwise feel disconnected from the messages.
+      const prevMsg = prev?.tag === 'msg' ? prev.m : undefined;
+      const nextMsg = next?.tag === 'msg' ? next.m : undefined;
+      const m = cur.m;
+
+      const isClusterStart =
+        !prevMsg ||
+        prevMsg.pubkey !== m.pubkey ||
+        m.created_at - prevMsg.created_at > 5 * 60 ||
+        !sameDay(prevMsg.created_at, m.created_at);
+      const isClusterEnd =
+        !nextMsg ||
+        nextMsg.pubkey !== m.pubkey ||
+        nextMsg.created_at - m.created_at > 5 * 60 ||
+        !sameDay(nextMsg.created_at, m.created_at);
+
       const isOwn = !!ownPubkey && m.pubkey === ownPubkey;
       const showAuthor = isOwn
-        ? !prev || prev.pubkey !== m.pubkey || !sameDay(prev.created_at, m.created_at)
+        ? !prevMsg || prevMsg.pubkey !== m.pubkey || !sameDay(prevMsg.created_at, m.created_at)
         : isClusterStart;
 
       out.push({
@@ -170,7 +204,7 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
       });
     }
     return out;
-  }, [messages, ownPubkey]);
+  }, [messages, systemEvents, ownPubkey]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,15 +237,25 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
             Loading messages…
           </div>
         )}
-        {!isLoading && messages.length === 0 && (
+        {!isLoading && messages.length === 0 && systemEvents.length === 0 && (
           <div className="text-[12px] text-muted-foreground text-center py-8">
             No messages yet. Say hi 👋
           </div>
         )}
-        {grouped.map((item) =>
-          item.kind === 'separator' ? (
-            <DaySeparator key={item.key} label={item.label} />
-          ) : (
+        {grouped.map((item) => {
+          if (item.kind === 'separator') {
+            return <DaySeparator key={item.key} label={item.label} />;
+          }
+          if (item.kind === 'system') {
+            return (
+              <SystemRow
+                key={item.sys.eventId}
+                {...item.sys}
+                selfPubkey={ownPubkey}
+              />
+            );
+          }
+          return (
             <ChatRow
               key={item.message.id}
               message={item.message}
@@ -224,8 +268,8 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
               onScrollToMessage={scrollToMessage}
               onRequestReply={handleRequestReply}
             />
-          ),
-        )}
+          );
+        })}
       </div>
 
       {error && (

@@ -63,6 +63,7 @@ import { VideoViewPage } from "@/pages/VideoViewPage";
 import { ProfileViewPage } from "@/pages/ProfileViewPage";
 import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
 import { GroupViewPage } from "@/pages/GroupViewPage";
+import { GroupInviteLandingPage } from "@/pages/GroupInviteLandingPage";
 import { WoTScorePage } from "@/pages/WoTScorePage";
 import { KuboKidLayout } from "@/components/KuboKidLayout";
 import { renderKuboKidRoutes } from "@/kuboKidRoutes";
@@ -339,6 +340,7 @@ export function AppRouter() {
             <Route path="/parent/trust"         element={<ParentTrustIndexPage />} />
             <Route path="/parent/trust/people"  element={<TrustPeoplePage     />} />
             <Route path="/parent/trust/places"  element={<TrustPlacesPage     />} />
+            <Route path="/parent/groups/invite/:host/:gid/:code" element={<GroupInviteLandingPage />} />
             <Route path="/parent/groups/:addr"  element={<GroupViewPage       />} />
             <Route path="/parent/alerts"        element={<ParentAlertsPage    />} />
             <Route path="/parent/kid-settings"  element={<EditKidSettingsPage />} />

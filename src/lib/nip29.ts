@@ -16,6 +16,8 @@ export const NIP29_KINDS = {
   EDIT: 9002,
   DELETE: 9005,
   CREATE: 9007,
+  DELETE_GROUP: 9008,
+  INVITE: 9009,
   JOIN: 9021,
   LEAVE: 9022,
   META: 39000,
@@ -52,6 +54,30 @@ export function parseGroupAddr(addr: string): ParsedGroupAddr {
 
 export function formatGroupAddr(host: string, gid: string): string {
   return `${host}'${gid}`;
+}
+
+/**
+ * Build an absolute Kubo invite URL that the landing page route knows
+ * how to decode. Each component is URL-encoded so a host with a port
+ * (e.g. `relay.example.com:8443`) or a code with `/` survives the
+ * round-trip.
+ */
+export function buildInviteUrl(host: string, gid: string, code: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origin}/parent/groups/invite/${encodeURIComponent(host)}/${encodeURIComponent(gid)}/${encodeURIComponent(code)}`;
+}
+
+/**
+ * Generate a random base62 code suitable for a NIP-29 kind-9009 invite
+ * (`code` tag). Uses crypto.getRandomValues for entropy.
+ */
+export function randomInviteCode(length: number = 12): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
 }
 
 /**
