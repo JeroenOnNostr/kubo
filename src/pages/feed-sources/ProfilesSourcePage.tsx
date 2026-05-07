@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { Search, UserRound } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
+import { UserRound } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { NoKidSelected } from '@/components/NoKidSelected';
+import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useFollowActions, useFollowList } from '@/hooks/useFollowActions';
-import { useSearchProfiles, type SearchProfile } from '@/hooks/useSearchProfiles';
+import type { SearchProfile } from '@/hooks/useSearchProfiles';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { genUserName } from '@/lib/genUserName';
 
@@ -19,21 +21,29 @@ import { FeedSourceHeader } from './_FeedSourceHeader';
  * active kid. Writes directly to the kid's kind-3 follow list (the kid is
  * the active signer on this screen).
  *
- * No separate storage — enabled = "in the kid's kind 3". Toggling here
- * affects the kid feed immediately (M2: we invalidate ['feed', 'follows']
- * after each mutation so the preview reflects the change without waiting
- * for the 60s stale timer).
+ * Search uses Ditto's shared ProfileSearchDropdown so npub/nprofile/hex/nip05
+ * inputs resolve to the exact profile via Ditto's detectIdentifier + useAuthor
+ * pipeline. Picking any result — text-search or identifier — follows the
+ * pubkey in place (additive). Unfollows happen via the Switch on each
+ * Following row below.
  */
 export function ProfilesSourcePage() {
+  const nav = useNavigate();
   const kid = useSelectedKid();
-  const [query, setQuery] = useState('');
-  const { data: searchResults = [], isFetching } = useSearchProfiles(query);
   const { data: followData } = useFollowList();
   const { follow, unfollow, isPending } = useFollowActions();
   const queryClient = useQueryClient();
 
-  const followedPubkeys = followData?.pubkeys ?? [];
-  const followedSet = new Set(followedPubkeys);
+  const followedPubkeys = useMemo(() => followData?.pubkeys ?? [], [followData?.pubkeys]);
+  const followedSet = useMemo(() => new Set(followedPubkeys), [followedPubkeys]);
+
+  const handlePick = useCallback((profile: SearchProfile) => {
+    if (!followedSet.has(profile.pubkey)) {
+      follow(profile.pubkey);
+      queryClient.invalidateQueries({ queryKey: ['kid-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['feed', 'follows'] });
+    }
+  }, [followedSet, follow, queryClient]);
 
   if (!kid) return <NoKidSelected title="Profiles" />;
 
@@ -44,14 +54,13 @@ export function ProfilesSourcePage() {
     } else {
       await follow(pubkey);
     }
-    // M2: useFollowActions invalidates ['follow-list'] but the feed query
-    // key deliberately excludes the follow list, so without this the
-    // preview wouldn't reflect the new follow for ~60s.
+    // useFollowActions invalidates ['follow-list'], but useKidFeed and
+    // useFeed('follows') both deliberately exclude the follow list from
+    // their query keys, so without explicit invalidation the kid feed
+    // and the parent preview tile would serve stale pages for ~60s.
+    queryClient.invalidateQueries({ queryKey: ['kid-feed'] });
     queryClient.invalidateQueries({ queryKey: ['feed', 'follows'] });
   };
-
-  const trimmedQuery = query.trim();
-  const showSearch = trimmedQuery.length > 0;
 
   return (
     <main className="flex flex-col">
@@ -61,115 +70,38 @@ export function ProfilesSourcePage() {
           Added profiles appear in {kid.displayName}'s feed right away.
         </p>
 
-        <div className="flex items-center gap-2 h-11 px-4 rounded-full bg-card">
-          <Search className="size-4 text-muted-foreground" aria-hidden />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search people…"
-            className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground"
-            aria-label="Search people"
-          />
-        </div>
+        <ProfileSearchDropdown
+          placeholder="Search by name or npub…"
+          onSelect={handlePick}
+          onSelectIdentifier={handlePick}
+          hideCountry
+          hideWikipedia
+          hideArchive
+          hideNavItems
+          inputClassName="rounded-full bg-card h-11 text-[13px]"
+          className="w-full"
+        />
 
-        {showSearch ? (
-          <SearchResults
-            results={searchResults}
-            isFetching={isFetching}
-            followedSet={followedSet}
-            onToggle={handleToggle}
-            disabled={isPending}
-          />
-        ) : (
-          <FollowedList
-            pubkeys={followedPubkeys}
-            onToggle={handleToggle}
-            disabled={isPending}
-          />
-        )}
+        <FollowedList
+          pubkeys={followedPubkeys}
+          onToggle={handleToggle}
+          onProfileClick={(pubkey) => nav(`/parent/profile/${nip19.npubEncode(pubkey)}`)}
+          disabled={isPending}
+        />
       </div>
     </main>
-  );
-}
-
-function SearchResults({
-  results,
-  isFetching,
-  followedSet,
-  onToggle,
-  disabled,
-}: {
-  results: SearchProfile[];
-  isFetching: boolean;
-  followedSet: Set<string>;
-  onToggle: (pubkey: string) => void;
-  disabled: boolean;
-}) {
-  if (isFetching && results.length === 0) {
-    return (
-      <div className="rounded-2xl bg-card p-6 text-center text-sm text-muted-foreground">
-        Searching…
-      </div>
-    );
-  }
-  if (results.length === 0) {
-    return (
-      <div className="rounded-2xl bg-card p-6 text-center text-sm text-muted-foreground">
-        No people found.
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {results.map((profile) => (
-        <SearchResultRow
-          key={profile.pubkey}
-          profile={profile}
-          enabled={followedSet.has(profile.pubkey)}
-          onToggle={() => onToggle(profile.pubkey)}
-          disabled={disabled}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SearchResultRow({
-  profile,
-  enabled,
-  onToggle,
-  disabled,
-}: {
-  profile: SearchProfile;
-  enabled: boolean;
-  onToggle: () => void;
-  disabled: boolean;
-}) {
-  const { metadata, pubkey } = profile;
-  const name = metadata.display_name || metadata.name || genUserName(pubkey);
-  const npub = nip19.npubEncode(pubkey);
-  const subtitle = metadata.nip05
-    ? (metadata.nip05.startsWith('_@') ? metadata.nip05.slice(2) : metadata.nip05)
-    : `${npub.slice(0, 12)}…${npub.slice(-4)}`;
-  return (
-    <ProfileRow
-      picture={metadata.picture}
-      name={name}
-      subtitle={subtitle}
-      enabled={enabled}
-      onToggle={onToggle}
-      disabled={disabled}
-    />
   );
 }
 
 function FollowedList({
   pubkeys,
   onToggle,
+  onProfileClick,
   disabled,
 }: {
   pubkeys: string[];
   onToggle: (pubkey: string) => void;
+  onProfileClick: (pubkey: string) => void;
   disabled: boolean;
 }) {
   if (pubkeys.length === 0) {
@@ -189,6 +121,7 @@ function FollowedList({
           key={pubkey}
           pubkey={pubkey}
           onToggle={() => onToggle(pubkey)}
+          onProfileClick={() => onProfileClick(pubkey)}
           disabled={disabled}
         />
       ))}
@@ -199,10 +132,12 @@ function FollowedList({
 function FollowedRow({
   pubkey,
   onToggle,
+  onProfileClick,
   disabled,
 }: {
   pubkey: string;
   onToggle: () => void;
+  onProfileClick: () => void;
   disabled: boolean;
 }) {
   const { data: author } = useAuthor(pubkey);
@@ -219,6 +154,7 @@ function FollowedRow({
       subtitle={subtitle}
       enabled={true}
       onToggle={onToggle}
+      onProfileClick={onProfileClick}
       disabled={disabled}
     />
   );
@@ -230,6 +166,7 @@ function ProfileRow({
   subtitle,
   enabled,
   onToggle,
+  onProfileClick,
   disabled,
 }: {
   picture?: string;
@@ -237,30 +174,38 @@ function ProfileRow({
   subtitle: string;
   enabled: boolean;
   onToggle: () => void;
+  onProfileClick: () => void;
   disabled: boolean;
 }) {
   return (
-    <label className="flex items-center gap-3 p-3 rounded-xl bg-card hover:bg-card/80 transition-colors cursor-pointer">
-      <Avatar className="size-9 shrink-0 border border-border/70">
-        <AvatarImage src={picture} alt="" />
-        <AvatarFallback>
-          <UserRound className="size-4 text-muted-foreground" />
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium leading-tight" title={name}>
-          {name}
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-card hover:bg-card/80 transition-colors">
+      <button
+        type="button"
+        onClick={onProfileClick}
+        className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg"
+        aria-label={`Open ${name}'s profile`}
+      >
+        <Avatar className="size-9 shrink-0 border border-border/70">
+          <AvatarImage src={picture} alt="" />
+          <AvatarFallback>
+            <UserRound className="size-4 text-muted-foreground" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium leading-tight" title={name}>
+            {name}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground" title={subtitle}>
+            {subtitle}
+          </div>
         </div>
-        <div className="truncate text-[11px] text-muted-foreground" title={subtitle}>
-          {subtitle}
-        </div>
-      </div>
+      </button>
       <Switch
         checked={enabled}
         onCheckedChange={onToggle}
         disabled={disabled}
         aria-label={`Toggle ${name}`}
       />
-    </label>
+    </div>
   );
 }

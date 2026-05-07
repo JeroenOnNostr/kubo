@@ -13,7 +13,7 @@ import { TweetEmbed } from '@/components/TweetEmbed';
 import { YouTubeEmbed } from '@/components/YouTubeEmbed';
 import { useLinkPreview } from '@/hooks/useLinkPreview';
 import {
-  extractYouTubeId,
+  extractYouTubeEmbedInfo,
   extractTweetId,
   extractBlueskyPost,
   extractMastodonPost,
@@ -47,7 +47,7 @@ interface LinkEmbedProps {
  * - Everything else → `LinkPreview` (OEmbed link preview card)
  */
 export function LinkEmbed({ url, className, navigateToComments, showActions = true, hideImage }: LinkEmbedProps) {
-  const youtubeId = useMemo(() => extractYouTubeId(url), [url]);
+  const youtubeInfo = useMemo(() => extractYouTubeEmbedInfo(url), [url]);
   const tweetId = useMemo(() => extractTweetId(url), [url]);
   const blueskyPost = useMemo(() => extractBlueskyPost(url), [url]);
   const mastodonUrl = useMemo(() => extractMastodonPost(url), [url]);
@@ -57,8 +57,13 @@ export function LinkEmbed({ url, className, navigateToComments, showActions = tr
 
   let embed: React.ReactNode;
 
-  if (youtubeId) {
-    embed = <YouTubeEmbed videoId={youtubeId} />;
+  if (youtubeInfo) {
+    embed = (
+      <YouTubeEmbed
+        videoId={youtubeInfo.id}
+        aspect={youtubeInfo.isShort ? 'short' : 'video'}
+      />
+    );
   } else if (tweetId) {
     embed = <TweetEmbed tweetId={tweetId} />;
   } else if (blueskyPost) {

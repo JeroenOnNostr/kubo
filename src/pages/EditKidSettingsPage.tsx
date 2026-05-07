@@ -19,7 +19,7 @@ import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
 import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
-import type { KidSettings, KuboModeration } from '@/hooks/useKuboFamily';
+import type { KidSettings } from '@/hooks/useKuboFamily';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -28,8 +28,7 @@ import { useDebounce } from '@/hooks/useDebounce';
  *
  * Fields are persisted to the family record via setKidSettings().
  * Layout matches screen 04 in the contact sheet
- * (kid header, daily-limit slider, allowed-window inputs,
- * moderation radio).
+ * (kid header, daily-limit slider, allowed-window inputs).
  */
 export function EditKidSettingsPage() {
   const nav = useNavigate();
@@ -40,8 +39,9 @@ export function EditKidSettingsPage() {
   const [dailyLimit, setDaily]    = useState(45); // minutes
   const [windowStart, setWStart]  = useState('16:00');
   const [windowEnd, setWEnd]      = useState('19:00');
-  const [moderation, setMod]      = useState<KuboModeration>('mid');
   const [viewOnly, setViewOnly]   = useState(false);
+  const [showBlobbiTab, setShowBlobbiTab] = useState(false);
+  const [nextPostButton, setNextPostButton] = useState(false);
 
   // Post-action button visibility, per-kid. Initialized from each kid's
   // override if present, otherwise from the global FeedSettings toggle
@@ -49,9 +49,13 @@ export function EditKidSettingsPage() {
   const [showReply,    setShowReply]    = useState(true);
   const [showRepost,   setShowRepost]   = useState(true);
   const [showReaction, setShowReaction] = useState(true);
+  const [showFavorite, setShowFavorite] = useState(true);
   const [showZap,      setShowZap]      = useState(true);
   const [showShare,    setShowShare]    = useState(true);
   const [showMore,     setShowMore]     = useState(true);
+  const [showNip05,         setShowNip05]         = useState(false);
+  const [showPostTimestamp, setShowPostTimestamp] = useState(false);
+  const [showHashtags,      setShowHashtags]      = useState(false);
 
   // Gate auto-save until after the mount-load effect has hydrated state,
   // so the load itself doesn't trigger a redundant write.
@@ -66,35 +70,46 @@ export function EditKidSettingsPage() {
     setDaily(s.dailyLimitMin);
     setWStart(s.windowStart);
     setWEnd(s.windowEnd);
-    setMod(s.moderation);
     setViewOnly(s.viewOnly ?? false);
+    setShowBlobbiTab(s.showBlobbiTab ?? false);
+    setNextPostButton(s.nextPostButton ?? false);
     const globalOn = (v: boolean) => v !== false;
     setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
     setShowRepost(  s.showRepostAction   ?? globalOn(feedSettings.showRepostAction));
     setShowReaction(s.showReactionAction ?? globalOn(feedSettings.showReactionAction));
+    setShowFavorite(s.showFavoriteAction ?? globalOn(feedSettings.showFavoriteAction));
     setShowZap(     s.showZapAction      ?? globalOn(feedSettings.showZaps));
     setShowShare(   s.showShareAction    ?? globalOn(feedSettings.showShareAction));
     setShowMore(    s.showMoreAction     ?? globalOn(feedSettings.showMoreAction));
+    setShowNip05(        s.showNip05         ?? globalOn(feedSettings.showNip05));
+    setShowPostTimestamp(s.showPostTimestamp ?? globalOn(feedSettings.showPostTimestamp));
+    setShowHashtags(     s.showHashtags      ?? globalOn(feedSettings.showHashtags));
     hasLoadedRef.current = true;
   }, [kid?.pubkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Assembled snapshot of all 12 fields, used when building the patch to persist.
+  // Assembled snapshot of all fields, used when building the patch to persist.
   const currentSettings = useMemo<KidSettings>(() => ({
     age,
     dailyLimitMin: dailyLimit,
     windowStart,
     windowEnd,
-    moderation,
     viewOnly,
+    showBlobbiTab,
+    nextPostButton,
     showReplyAction:    showReply,
     showRepostAction:   showRepost,
     showReactionAction: showReaction,
+    showFavoriteAction: showFavorite,
     showZapAction:      showZap,
     showShareAction:    showShare,
     showMoreAction:     showMore,
+    showNip05,
+    showPostTimestamp,
+    showHashtags,
   }), [
-    age, dailyLimit, windowStart, windowEnd, moderation, viewOnly,
-    showReply, showRepost, showReaction, showZap, showShare, showMore,
+    age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab, nextPostButton,
+    showReply, showRepost, showReaction, showFavorite, showZap, showShare, showMore,
+    showNip05, showPostTimestamp, showHashtags,
   ]);
 
   // Per-field immediate persist (Ditto's settings-page convention).
@@ -283,43 +298,6 @@ export function EditKidSettingsPage() {
         </div>
       </div>
 
-      {/* Moderation */}
-      <div className="flex flex-col gap-2">
-        <Label>Moderation level</Label>
-        <div
-          className="grid grid-cols-3 gap-2"
-          role="radiogroup"
-          aria-label="Moderation level"
-        >
-          {(['low', 'mid', 'high'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="radio"
-              aria-checked={moderation === m}
-              onClick={() => {
-                setMod(m);
-                saveField({ moderation: m });
-              }}
-              className={cn(
-                'h-11 rounded-xl text-sm font-medium capitalize transition-colors',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                moderation === m
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-card text-foreground hover:bg-card/80',
-              )}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          {moderation === 'low'  && 'Only content flagged as unsafe is hidden.'}
-          {moderation === 'mid'  && 'Balanced — blocks unsafe and borderline content.'}
-          {moderation === 'high' && 'Strict — only content from the inner-circle graph.'}
-        </p>
-      </div>
-
       {/* View-only mode */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
@@ -335,6 +313,43 @@ export function EditKidSettingsPage() {
             saveField({ viewOnly: v });
           }}
           aria-label="View-only mode"
+        />
+      </div>
+
+      {/* Blobbi tab */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>Show Blobbi tab</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Adds a virtual-pet tab to this kid's nav bar.
+          </p>
+        </div>
+        <Switch
+          checked={showBlobbiTab}
+          onCheckedChange={(v) => {
+            setShowBlobbiTab(v);
+            saveField({ showBlobbiTab: v });
+          }}
+          aria-label="Show Blobbi tab"
+        />
+      </div>
+
+      {/* Next-post button (scroll-cap) */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>"Next post" button</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Replaces infinite scroll with a tap-to-advance button. The kid
+            sees one post at a time; each tap unlocks the next.
+          </p>
+        </div>
+        <Switch
+          checked={nextPostButton}
+          onCheckedChange={(v) => {
+            setNextPostButton(v);
+            saveField({ nextPostButton: v });
+          }}
+          aria-label={`"Next post" button`}
         />
       </div>
 
@@ -361,6 +376,11 @@ export function EditKidSettingsPage() {
             onChange={(v) => { setShowReaction(v); saveField({ showReactionAction: v }); }}
           />
           <ActionToggleRow
+            label="Favorite (star)"
+            checked={showFavorite}
+            onChange={(v) => { setShowFavorite(v); saveField({ showFavoriteAction: v }); }}
+          />
+          <ActionToggleRow
             label="Zaps"
             checked={showZap}
             onChange={(v) => { setShowZap(v);      saveField({ showZapAction:      v }); }}
@@ -374,6 +394,31 @@ export function EditKidSettingsPage() {
             label="More"
             checked={showMore}
             onChange={(v) => { setShowMore(v);     saveField({ showMoreAction:     v }); }}
+          />
+        </div>
+      </div>
+
+      {/* Note display — per-kid byline metadata visibility */}
+      <div className="flex flex-col gap-2">
+        <Label>Note display</Label>
+        <p className="text-[11px] text-muted-foreground">
+          Show or hide metadata in the byline of each note tile.
+        </p>
+        <div className="flex flex-col rounded-xl bg-card divide-y divide-border/40 overflow-hidden">
+          <ActionToggleRow
+            label="NIP-05"
+            checked={showNip05}
+            onChange={(v) => { setShowNip05(v);         saveField({ showNip05:         v }); }}
+          />
+          <ActionToggleRow
+            label="Timestamp"
+            checked={showPostTimestamp}
+            onChange={(v) => { setShowPostTimestamp(v); saveField({ showPostTimestamp: v }); }}
+          />
+          <ActionToggleRow
+            label="Hashtags"
+            checked={showHashtags}
+            onChange={(v) => { setShowHashtags(v);      saveField({ showHashtags:      v }); }}
           />
         </div>
       </div>

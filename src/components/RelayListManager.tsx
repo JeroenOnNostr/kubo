@@ -14,10 +14,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { useToast } from '@/hooks/useToast';
-import { APP_RELAYS } from '@/lib/appRelays';
-import { cn } from '@/lib/utils';
 
 interface Relay {
   url: string;
@@ -110,7 +107,6 @@ export function RelayListManager() {
   const { config, updateConfig } = useAppContext();
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
-  const { updateSettings } = useEncryptedSettings();
   const { toast } = useToast();
 
   const [relays, setRelays] = useState<Relay[]>(config.relayMetadata.relays);
@@ -145,26 +141,6 @@ export function RelayListManager() {
     } catch {
       return false;
     }
-  };
-
-  const handleToggleAppRelays = async (enabled: boolean) => {
-    // Update local settings immediately
-    updateConfig((current) => ({
-      ...current,
-      useAppRelays: enabled,
-    }));
-    
-    // Sync to encrypted storage if logged in (non-blocking)
-    if (user) {
-      updateSettings.mutate({ useAppRelays: enabled });
-    }
-    
-    toast({
-      title: enabled ? 'App relays enabled' : 'App relays disabled',
-      description: enabled
-        ? 'App relays will be used alongside your personal relays.'
-        : 'Only your personal relays will be used.',
-    });
   };
 
   const handleAddRelay = () => {
@@ -275,53 +251,6 @@ export function RelayListManager() {
 
   return (
     <div>
-      {/* App Relays Section */}
-      <div className="pt-4 pb-4">
-        <div className="px-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">App Relays</h3>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="use-app-relays" className="text-xs text-muted-foreground cursor-pointer">
-                {config.useAppRelays ? 'Enabled' : 'Disabled'}
-              </Label>
-              <Switch
-                id="use-app-relays"
-                checked={config.useAppRelays}
-                onCheckedChange={handleToggleAppRelays}
-                className="scale-90"
-              />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Default relays for reliable connectivity. Used alongside your personal relays when enabled.
-          </p>
-        </div>
-        
-        <div className={cn(
-          "mt-3 space-y-1 transition-opacity",
-          !config.useAppRelays && "opacity-40"
-        )}>
-          {APP_RELAYS.relays.map((relay) => (
-            <div
-              key={relay.url}
-              className="flex items-center gap-3 py-2.5 px-3 hover:bg-muted/20 transition-colors"
-            >
-              <Link to={`/r/${encodeURIComponent(relay.url)}`} className="min-w-0 flex-1">
-                <RelayIdentity url={relay.url} />
-              </Link>
-              <div className="flex items-center gap-1 text-[10px]">
-                {relay.read && (
-                  <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 font-medium">Read</span>
-                )}
-                {relay.write && (
-                  <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium">Write</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* User Relays Section */}
       <div className="pb-4 pt-4">
         <div className="px-3 space-y-3">
@@ -335,7 +264,7 @@ export function RelayListManager() {
         <div className="mt-3">
           {relays.length === 0 ? (
             <div className="text-xs text-muted-foreground py-8 text-center">
-              No personal relays configured. Add relays below or enable App Relays above.
+              No personal relays configured. Add relays below.
             </div>
           ) : (
             <div className="space-y-1">

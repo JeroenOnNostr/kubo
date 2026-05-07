@@ -25,6 +25,7 @@ import {
   useState,
 } from "react";
 import { DittoLogo } from "@/components/DittoLogo";
+import { KuboMark } from "@/components/KuboMark";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { IntroImage } from "@/components/IntroImage";
 import { ProfileCard } from "@/components/ProfileCard";
@@ -120,8 +121,12 @@ const DEFAULT_KUBO_FEED_SETTINGS = {
   showReplyAction: true,
   showRepostAction: true,
   showReactionAction: true,
+  showFavoriteAction: true,
   showShareAction: true,
   showMoreAction: true,
+  showNip05: false,
+  showPostTimestamp: false,
+  showHashtags: true,
   showBlobbi: true,
   showLetters: true,
   showAIChat: true,
@@ -249,7 +254,7 @@ function SyncScreen({ phase }: { phase: SyncPhase }) {
         {/* Logo with gentle pulse */}
         <div className="relative">
           <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping opacity-30" />
-          <DittoLogo size={72} className="relative" />
+          <KuboMark size={72} className="relative" />
         </div>
 
         {/* Spinner */}

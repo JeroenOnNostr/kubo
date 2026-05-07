@@ -85,6 +85,9 @@ import { getAvatarShape } from "@/lib/avatarShape";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VideoPlayer } from "@/components/VideoPlayer";
+import { YouTubeEmbed } from "@/components/YouTubeEmbed";
+import { extractYouTubeEmbedInfo } from "@/lib/linkEmbed";
+import { isYouTubeUrl } from "@/lib/videoEvent";
 import { VoiceMessagePlayer } from "@/components/VoiceMessagePlayer";
 import { ZapDialog } from "@/components/ZapDialog";
 import { useAppContext } from "@/hooks/useAppContext";
@@ -92,11 +95,13 @@ import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNip05Verify } from "@/hooks/useNip05Verify";
 import { useOpenPost } from "@/hooks/useOpenPost";
+import { useRecordWatch } from "@/hooks/useRecordWatch";
 import { useProfileUrl } from "@/hooks/useProfileUrl";
 import { useShareOrigin } from "@/hooks/useShareOrigin";
 import { toast } from "@/hooks/useToast";
 import { useEventStats } from "@/hooks/useTrending";
 import { useActionVisibility } from "@/hooks/useActionVisibility";
+import { FavoriteStarButton } from "@/components/FavoriteStarButton";
 import { canZap } from "@/lib/canZap";
 import { extractZapAmount, extractZapSender, extractZapMessage } from "@/hooks/useEventInteractions";
 import { getContentWarning } from "@/lib/contentWarning";
@@ -374,7 +379,8 @@ export const NoteCard = memo(function NoteCard({
       target.closest("[data-vaul-drawer-overlay]") ||
       target.closest('[data-testid="zap-modal"]') ||
       target.closest("button") ||
-      target.closest("a")
+      target.closest("a") ||
+      target.closest("[data-kubo-video]")
     ) {
       return;
     }
@@ -392,7 +398,8 @@ export const NoteCard = memo(function NoteCard({
       target.closest("[data-vaul-drawer-overlay]") ||
       target.closest('[data-testid="zap-modal"]') ||
       target.closest("button") ||
-      target.closest("a")
+      target.closest("a") ||
+      target.closest("[data-kubo-video]")
     ) {
       return;
     }
@@ -529,11 +536,7 @@ export const NoteCard = memo(function NoteCard({
   }, [event, isReply]);
   const parentEventId = parentHints?.id;
 
-  // Kind 34236 specific
-  const imeta = useMemo(
-    () => (isVine ? parseImeta(event.tags) : undefined),
-    [event.tags, isVine],
-  );
+  // Kind 34236 specific (VineMedia parses its own imeta from event.tags)
   const vineTitle = isVine ? getTag(event.tags, "title") : undefined;
   const hashtags = isVine
     ? event.tags.filter(([n]) => n === "t").map(([, v]) => v)
@@ -590,7 +593,7 @@ export const NoteCard = memo(function NoteCard({
                 {vineTitle}
               </p>
             )}
-            <VineMedia imeta={imeta} hashtags={hashtags} />
+            <VineMedia event={event} hashtags={hashtags} />
           </>
         ) : isPoll ? (
           <PollContent event={event} />
@@ -718,17 +721,22 @@ export const NoteCard = memo(function NoteCard({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 pr-2">
-        {nip05 && nip05Pending && <Skeleton className="h-3 w-24" />}
-        {nip05 && nip05Pending && <span className="shrink-0">·</span>}
-        {nip05 && nip05Verified && (
-          <Nip05Badge nip05={nip05} pubkey={event.pubkey} />
-        )}
-        {nip05 && nip05Verified && <span className="shrink-0">·</span>}
-        <span className="shrink-0 hover:underline whitespace-nowrap">
-          {timeAgo(event.created_at)}
-        </span>
-      </div>
+      {(av.showNip05 || av.showPostTimestamp) && (
+        <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 pr-2">
+          {av.showNip05 && nip05 && nip05Pending && <Skeleton className="h-3 w-24" />}
+          {av.showNip05 && nip05 && nip05Verified && (
+            <Nip05Badge nip05={nip05} pubkey={event.pubkey} />
+          )}
+          {av.showNip05 && av.showPostTimestamp && nip05 && (nip05Pending || nip05Verified) && (
+            <span className="shrink-0">·</span>
+          )}
+          {av.showPostTimestamp && (
+            <span className="shrink-0 hover:underline whitespace-nowrap">
+              {timeAgo(event.created_at)}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -851,6 +859,10 @@ export const NoteCard = memo(function NoteCard({
     </div>
   ) : null;
 
+  const favoriteOverlay = av.showFavorite && !compact ? (
+    <FavoriteStarButton eventId={event.id} overlay />
+  ) : null;
+
   // ── Vanish layout (kind 62) — dramatic card, no author row ──
   if (isVanish) {
     // Threaded vanish (ancestor in a reply thread — needs connector line + avatar column)
@@ -858,7 +870,7 @@ export const NoteCard = memo(function NoteCard({
       return (
         <article
           className={cn(
-            "px-4 pt-3 transition-colors overflow-hidden",
+            "relative px-4 pt-3 transition-colors overflow-hidden",
             !viewOnly && "hover:bg-secondary/30 cursor-pointer",
             threaded ? "pb-0" : "pb-3 border-b border-border",
             className,
@@ -866,6 +878,7 @@ export const NoteCard = memo(function NoteCard({
           onClick={handleCardClick}
           onAuxClick={handleAuxClick}
         >
+          {favoriteOverlay}
           <div className="flex gap-3">
             <div className="flex flex-col items-center">
               {avatarElement}
@@ -891,13 +904,14 @@ export const NoteCard = memo(function NoteCard({
     return (
       <article
         className={cn(
-          "px-4 py-3 border-b border-border transition-colors overflow-hidden",
+          "relative px-4 py-3 border-b border-border transition-colors overflow-hidden",
           !viewOnly && "hover:bg-secondary/30 cursor-pointer",
           className,
         )}
         onClick={handleCardClick}
         onAuxClick={handleAuxClick}
       >
+        {favoriteOverlay}
         <VanishCardCompact event={event} />
         {!compact && (
           <>
@@ -1049,7 +1063,7 @@ export const NoteCard = memo(function NoteCard({
     return (
       <article
         className={cn(
-          "px-4 pt-3 transition-colors overflow-hidden",
+          "relative px-4 pt-3 transition-colors overflow-hidden",
           !viewOnly && "hover:bg-secondary/30 cursor-pointer",
           threaded ? "pb-0" : "pb-3 border-b border-border",
           className,
@@ -1057,6 +1071,7 @@ export const NoteCard = memo(function NoteCard({
         onClick={handleCardClick}
         onAuxClick={handleAuxClick}
       >
+        {favoriteOverlay}
         {threadedKindHeader}
         <div className="flex gap-3">
           <div className="flex flex-col items-center">
@@ -1089,7 +1104,7 @@ export const NoteCard = memo(function NoteCard({
   return (
     <article
       className={cn(
-        "px-4 py-3 border-b border-border transition-colors overflow-hidden",
+        "relative px-4 py-3 border-b border-border transition-colors overflow-hidden",
         !viewOnly && "hover:bg-secondary/30 cursor-pointer",
         highlight && "animate-highlight-fade",
         className,
@@ -1097,6 +1112,7 @@ export const NoteCard = memo(function NoteCard({
       onClick={handleCardClick}
       onAuxClick={handleAuxClick}
     >
+      {favoriteOverlay}
       {/* Action header — repost takes priority, otherwise derived from event kind */}
       {repostedBy ? (
         <EventActionHeader
@@ -1264,6 +1280,7 @@ function PhotoContent({ event }: { event: NostrEvent }) {
   const title = getTag(event.tags, "title");
   const description = event.content;
   const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
+  const { showHashtags } = useActionVisibility();
 
   // Build imetaMap with dim + blurhash so ImageGallery can show blurhash placeholders
   const imetaMap = useMemo(() => {
@@ -1290,7 +1307,7 @@ function PhotoContent({ event }: { event: NostrEvent }) {
           {description}
         </p>
       )}
-      {hashtags.length > 0 && (
+      {showHashtags && hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {hashtags.slice(0, 5).map((tag) => (
             <Link
@@ -1311,10 +1328,12 @@ function PhotoContent({ event }: { event: NostrEvent }) {
 // ── NIP-71 Video content (kinds 21 & 22) ──────────────────────────────────────
 
 /** Parse the primary video url and thumbnail from NIP-71 imeta tags. */
-function parseVideoImeta(tags: string[][]): {
+export function parseVideoImeta(tags: string[][]): {
   url?: string;
   thumbnail?: string;
   duration?: string;
+  blurhash?: string;
+  dim?: string;
 } {
   for (const tag of tags) {
     if (tag[0] !== "imeta") continue;
@@ -1329,6 +1348,8 @@ function parseVideoImeta(tags: string[][]): {
         url: parts.url,
         thumbnail: parts.image,
         duration: parts.duration,
+        blurhash: parts.blurhash,
+        dim: parts.dim,
       };
   }
   // Fallback to plain url/thumb tags
@@ -1354,7 +1375,7 @@ function fmtDuration(seconds: string | undefined): string | undefined {
 
 /** Inline video player for NIP-71 kind 21/22 events. */
 function VideoContent({ event }: { event: NostrEvent }) {
-  const { url, thumbnail, duration } = useMemo(
+  const { url, thumbnail, duration, dim, blurhash } = useMemo(
     () => parseVideoImeta(event.tags),
     [event.tags],
   );
@@ -1363,20 +1384,65 @@ function VideoContent({ event }: { event: NostrEvent }) {
   const isShort = event.kind === 22;
   const formattedDuration = fmtDuration(duration);
   const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
+  const { showHashtags } = useActionVisibility();
+  const recordWatch = useRecordWatch();
+  // Resolve author name lazily for the watch-history snapshot. The cache is
+  // shared with NoteCard's own header lookup, so this is effectively free.
+  const author = useAuthor(event.pubkey);
+  const authorName = getDisplayName(author.data?.metadata, event.pubkey);
+
+  const handleFirstPlay = useCallback(() => {
+    if (event.kind !== 21 && event.kind !== 22) return;
+    const durationSec = duration ? parseFloat(duration) : undefined;
+    recordWatch({
+      eventId: event.id,
+      kind: event.kind,
+      authorPubkey: event.pubkey,
+      authorName,
+      title: title ?? "",
+      thumbnailUrl: thumbnail,
+      durationSec:
+        durationSec && !Number.isNaN(durationSec) ? durationSec : undefined,
+    });
+  }, [
+    recordWatch,
+    event.id,
+    event.kind,
+    event.pubkey,
+    authorName,
+    title,
+    thumbnail,
+    duration,
+  ]);
 
   if (!url) return null;
+
+  const youtubeInfo = isYouTubeUrl(url) ? extractYouTubeEmbedInfo(url) : null;
+  const youtubeId = youtubeInfo?.id ?? null;
+  const youtubeAspect = isShort || youtubeInfo?.isShort ? "short" : "video";
 
   return (
     <div className="mt-2 space-y-2">
       {title && <p className="font-semibold text-[15px]">{title}</p>}
       <div
-        className={cn(
-          "relative rounded-xl overflow-hidden bg-muted",
-          isShort ? "max-w-[280px]" : "",
-        )}
+        data-kubo-video
+        className="relative rounded-xl overflow-hidden bg-black"
+        onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
-        <VideoPlayer src={url} poster={thumbnail} title={title ?? undefined} />
-        {formattedDuration && (
+        {youtubeId ? (
+          <YouTubeEmbed videoId={youtubeId} aspect={youtubeAspect} />
+        ) : (
+          <VideoPlayer
+            src={url}
+            poster={thumbnail}
+            dim={dim}
+            blurhash={blurhash}
+            title={title ?? undefined}
+            onFirstPlay={handleFirstPlay}
+            className="mt-0 rounded-xl border-0"
+          />
+        )}
+        {formattedDuration && !youtubeId && (
           <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded font-medium pointer-events-none">
             {formattedDuration}
           </div>
@@ -1394,7 +1460,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
           {description}
         </p>
       )}
-      {hashtags.length > 0 && (
+      {showHashtags && hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {hashtags.slice(0, 5).map((tag) => (
             <Link
@@ -1414,15 +1480,23 @@ function VideoContent({ event }: { event: NostrEvent }) {
 
 /** Media content for kind 34236 vine events — rendered at full card width. */
 function VineMedia({
-  imeta,
+  event,
   hashtags,
 }: {
-  imeta?: { url?: string; thumbnail?: string };
+  event: NostrEvent;
   hashtags: string[];
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasFiredFirstPlayRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const { showHashtags } = useActionVisibility();
+  const recordWatch = useRecordWatch();
+  const author = useAuthor(event.pubkey);
+  const authorName = getDisplayName(author.data?.metadata, event.pubkey);
+
+  const imeta = useMemo(() => parseImeta(event.tags), [event.tags]);
+  const title = getTag(event.tags, "title") ?? "";
 
   // Pause video when scrolled out of view
   useEffect(() => {
@@ -1443,6 +1517,21 @@ function VineMedia({
     return () => observer.disconnect();
   }, []);
 
+  const handleFirstPlay = useCallback(() => {
+    if (event.kind !== 34236) return;
+    // Addressable event: store naddr1 so /parent/video/:id can resolve it.
+    const naddr = encodeEventId(event);
+    recordWatch({
+      eventId: event.id,
+      kind: 34236,
+      authorPubkey: event.pubkey,
+      authorName,
+      title,
+      thumbnailUrl: imeta.thumbnail,
+      naddr,
+    });
+  }, [recordWatch, event, authorName, title, imeta.thumbnail]);
+
   const handlePlayToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     const video = videoRef.current;
@@ -1458,9 +1547,10 @@ function VineMedia({
 
   return (
     <>
-      {imeta?.url && (
+      {imeta.url && (
         <div
           ref={containerRef}
+          data-kubo-video
           className="relative mt-3 rounded-2xl overflow-hidden cursor-pointer"
           onClick={handlePlayToggle}
         >
@@ -1472,7 +1562,13 @@ function VineMedia({
             loop
             playsInline
             preload="none"
-            onPlay={() => setIsPlaying(true)}
+            onPlay={() => {
+              setIsPlaying(true);
+              if (!hasFiredFirstPlayRef.current) {
+                hasFiredFirstPlayRef.current = true;
+                handleFirstPlay();
+              }
+            }}
             onPause={() => setIsPlaying(false)}
           />
           {!isPlaying && (
@@ -1485,7 +1581,7 @@ function VineMedia({
         </div>
       )}
 
-      {hashtags.length > 0 && (
+      {showHashtags && hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">
           {hashtags.slice(0, 5).map((tag) => (
             <Link

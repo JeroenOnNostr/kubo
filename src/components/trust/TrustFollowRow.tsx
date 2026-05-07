@@ -1,9 +1,9 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
 import { TrustAssignmentBar } from '@/components/trust/TrustAssignmentBar';
-import { TrustRow, type TrustLevel } from '@/components/trust/TrustRow';
+import { TrustRow } from '@/components/trust/TrustRow';
 import { useAuthor } from '@/hooks/useAuthor';
 import { type KuboTrustLevel } from '@/hooks/useKuboFamily';
 import { genUserName } from '@/lib/genUserName';
@@ -36,11 +36,21 @@ export const TrustFollowRow = memo(function TrustFollowRow({
   const nav = useNavigate();
   const { data: author } = useAuthor(pubkey);
   const [expanded, setExpanded] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // When the row expands inside a scrollable parent (e.g. the search
+  // dropdown's max-h list), the assignment bar can render below the visible
+  // viewport. Scroll it into view so all three trust-level buttons are
+  // reachable without manual scrolling.
+  useEffect(() => {
+    if (expanded) {
+      barRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [expanded]);
 
   const metadata = author?.metadata;
   const displayName =
     metadata?.display_name || metadata?.name || genUserName(pubkey);
-  const displayLevel: TrustLevel = assigned ?? 'view';
 
   const avatar = metadata?.picture ? (
     <img
@@ -58,13 +68,13 @@ export const TrustFollowRow = memo(function TrustFollowRow({
         avatar={avatar}
         avatarBg={metadata?.picture ? undefined : '#64748B'}
         name={displayName}
-        level={displayLevel}
+        level={assigned}
         expanded={expanded}
         onClick={() => setExpanded((e) => !e)}
         onProfileClick={() => nav(`/parent/profile/${nip19.npubEncode(pubkey)}`)}
       />
       {expanded && (
-        <div className="px-2.5 pb-2.5 rounded-b-xl bg-card/60">
+        <div ref={barRef} className="px-2.5 pb-2.5 rounded-b-xl bg-card/60">
           <TrustAssignmentBar
             kidPubkey={kidPubkey}
             pubkey={pubkey}

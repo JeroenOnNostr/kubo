@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, UserRound } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
@@ -12,6 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { KidAvatar } from '@/components/KidAvatar';
+import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { toast } from '@/hooks/useToast';
@@ -28,6 +31,10 @@ export function KuboKidSelector() {
   const { family } = useKuboFamily();
   const { logins, setLogin } = useNostrLogin();
   const selectedKid = useSelectedKid();
+
+  // KUBO-092 tour step 5 anchor — the pill in the parent header.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  useRegisterTourAnchor('kidSelectorPill', triggerRef);
 
   const kids = family?.kids ?? [];
   const label = selectedKid?.displayName ?? 'Select kid';
@@ -51,15 +58,24 @@ export function KuboKidSelector() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="ghost"
           className="h-10 rounded-full gap-2 pl-1 pr-3"
           aria-label={selectedKid ? `Selected kid: ${label}` : 'Select a kid'}
         >
-          <Avatar className="size-8">
-            <AvatarFallback className="bg-muted text-[13px] font-medium text-foreground">
-              {initial || <UserRound className="size-4 text-muted-foreground" />}
-            </AvatarFallback>
-          </Avatar>
+          {selectedKid ? (
+            <KidAvatar
+              pubkey={selectedKid.pubkey}
+              className="size-8"
+              fallbackInitial={initial}
+            />
+          ) : (
+            <Avatar className="size-8">
+              <AvatarFallback className="bg-muted text-[13px] font-medium text-foreground">
+                <UserRound className="size-4 text-muted-foreground" />
+              </AvatarFallback>
+            </Avatar>
+          )}
           <span className={cn('text-sm', !selectedKid && 'text-muted-foreground')}>
             {label}
           </span>
@@ -74,12 +90,11 @@ export function KuboKidSelector() {
             onClick={() => pickKid(k.pubkey, '/kid')}
             className="gap-2.5"
           >
-            <span
-              className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-muted"
-              aria-hidden
-            >
-              <UserRound className="size-3.5 text-white" />
-            </span>
+            <KidAvatar
+              pubkey={k.pubkey}
+              className="size-6"
+              fallbackInitial={k.displayName.charAt(0).toUpperCase()}
+            />
             <span className="flex-1">{k.displayName}</span>
           </DropdownMenuItem>
         ))}
@@ -92,12 +107,11 @@ export function KuboKidSelector() {
             onClick={() => pickKid(k.pubkey, '/parent/home')}
             className="gap-2.5"
           >
-            <span
-              className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-muted"
-              aria-hidden
-            >
-              <UserRound className="size-3.5 text-white" />
-            </span>
+            <KidAvatar
+              pubkey={k.pubkey}
+              className="size-6"
+              fallbackInitial={k.displayName.charAt(0).toUpperCase()}
+            />
             <span className="flex-1">{k.displayName}</span>
           </DropdownMenuItem>
         ))}

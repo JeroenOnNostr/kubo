@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Loader2, Upload, X } from 'lucide-react';
-import { NLogin, NUser, useNostrLogin } from '@nostrify/react/login';
+import { ChevronDown, ChevronUp, Loader2, Upload } from 'lucide-react';
+import { NUser, useNostrLogin } from '@nostrify/react/login';
 import { useNostr } from '@nostrify/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -125,17 +125,28 @@ export function ContentUploaderPage() {
   }
 
   function getSignerForPubkey(pubkey: string): NostrSigner {
-    // If it's the active user (parent), use their signer directly —
-    // this handles bunker/extension logins, not just nsec.
+    // Active user fast path — reuses the existing signer (including a live
+    // bunker NConnectSigner) instead of rebuilding it.
     if (user && pubkey === user.pubkey) {
       return user.signer;
     }
-    // Otherwise resolve the kid's nsec from the login store.
-    const login = logins.find((l) => l.pubkey === pubkey && l.type === 'nsec');
-    if (!login || login.type !== 'nsec') {
+    // Rebuild a signer from any stored login record for this pubkey —
+    // covers parent-as-extension/bunker while a kid is the active login,
+    // and parent-as-nsec or kid-as-nsec from any active session.
+    const login = logins.find((l) => l.pubkey === pubkey);
+    if (!login) {
       throw new Error("That account's key isn't loaded on this device.");
     }
-    return NUser.fromNsecLogin(NLogin.fromNsec(login.data.nsec)).signer;
+    switch (login.type) {
+      case 'nsec':
+        return NUser.fromNsecLogin(login).signer;
+      case 'extension':
+        return NUser.fromExtensionLogin(login).signer;
+      case 'bunker':
+        return NUser.fromBunkerLogin(login, nostr).signer;
+      default:
+        throw new Error("That account's key isn't loaded on this device.");
+    }
   }
 
   const publishMutation = useMutation({
@@ -223,20 +234,6 @@ export function ContentUploaderPage() {
 
   return (
     <div className="flex flex-col gap-4 pt-2 pb-6 min-h-dvh">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-full"
-          onClick={() => nav(-1)}
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </Button>
-        <h1 className="text-lg font-semibold flex-1">Upload content</h1>
-      </div>
-
       {/* Drop zone / preview */}
       {previewUrl && selectedFile ? (
         <div className="mx-4 relative aspect-video rounded-2xl overflow-hidden bg-black">

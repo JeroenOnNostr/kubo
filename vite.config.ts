@@ -132,6 +132,9 @@ export default defineConfig(({ mode }) => {
     host: "::",
     port: 8080,
     allowedHosts: env.ALLOWED_HOSTS === "*" ? true : undefined,
+    watch: {
+      ignored: ['**/android/**', '**/ios/**', '**/dist/**'],
+    },
   },
   plugins: [
     react(),

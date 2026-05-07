@@ -1,25 +1,42 @@
 import { MASTODON_SERVERS } from '@/lib/mastodonServers';
 
-/** Extract a YouTube video ID from a URL, or null if not a YouTube link. */
-export function extractYouTubeId(url: string): string | null {
+/** YouTube embed info extracted from a YouTube URL. */
+export interface YouTubeEmbedInfo {
+  /** The YouTube video ID. */
+  id: string;
+  /** True if the URL was a `/shorts/` URL (portrait video). */
+  isShort: boolean;
+}
+
+/** Extract a YouTube video ID and whether it's a Short, or null if not a YouTube link. */
+export function extractYouTubeEmbedInfo(url: string): YouTubeEmbedInfo | null {
   try {
     const u = new URL(url);
     if ((u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com' || u.hostname === 'm.youtube.com') && u.pathname === '/watch') {
-      return u.searchParams.get('v');
+      const id = u.searchParams.get('v');
+      return id ? { id, isShort: false } : null;
     }
     if ((u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com') && u.pathname.startsWith('/embed/')) {
-      return u.pathname.split('/')[2] || null;
+      const id = u.pathname.split('/')[2];
+      return id ? { id, isShort: false } : null;
     }
     if ((u.hostname === 'www.youtube.com' || u.hostname === 'youtube.com') && u.pathname.startsWith('/shorts/')) {
-      return u.pathname.split('/')[2] || null;
+      const id = u.pathname.split('/')[2];
+      return id ? { id, isShort: true } : null;
     }
     if (u.hostname === 'youtu.be') {
-      return u.pathname.slice(1) || null;
+      const id = u.pathname.slice(1);
+      return id ? { id, isShort: false } : null;
     }
   } catch {
     // not a valid URL
   }
   return null;
+}
+
+/** Extract a YouTube video ID from a URL, or null if not a YouTube link. */
+export function extractYouTubeId(url: string): string | null {
+  return extractYouTubeEmbedInfo(url)?.id ?? null;
 }
 
 /** Extract a tweet/post ID from a Twitter or X URL, or null if not a tweet link. */

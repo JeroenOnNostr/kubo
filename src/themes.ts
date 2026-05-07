@@ -110,7 +110,7 @@ export const builtinThemes: Record<'light' | 'dark', CoreThemeColors> = {
   },
 
   dark: {
-    background: '228 20% 10%',
+    background: '222 47% 11%', // Kubo CVI parents background (#0F172A)
     text: '210 40% 98%',
     primary: '24 95% 53%',   // Kubo orange (#F97316)
   },

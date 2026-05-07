@@ -3,7 +3,8 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { getKidSettings, useKuboFamily } from '@/hooks/useKuboFamily';
 
 /**
- * Kubo-only hook: returns per-button visibility flags for the post action bar.
+ * Kubo-only hook: returns per-button visibility flags for the post action bar
+ * and per-tile byline flags (NIP-05 identifier + relative timestamp).
  *
  * Resolution order per flag:
  *   1. If the active signer (logins[0]) is a Kubo kid AND that kid has an
@@ -27,11 +28,17 @@ export function useActionVisibility() {
     override !== undefined ? override : global !== false;
 
   return {
-    showReply:    pick(kid?.showReplyAction,    feedSettings.showReplyAction),
-    showRepost:   pick(kid?.showRepostAction,   feedSettings.showRepostAction),
-    showReaction: pick(kid?.showReactionAction, feedSettings.showReactionAction),
-    showZap:      pick(kid?.showZapAction,      feedSettings.showZaps),
-    showShare:    pick(kid?.showShareAction,    feedSettings.showShareAction),
-    showMore:     pick(kid?.showMoreAction,     feedSettings.showMoreAction),
+    showReply:         pick(kid?.showReplyAction,    feedSettings.showReplyAction),
+    showRepost:        pick(kid?.showRepostAction,   feedSettings.showRepostAction),
+    showReaction:      pick(kid?.showReactionAction, feedSettings.showReactionAction),
+    // Favorite (star) is kid-only — gate hard on isKid so the button never
+    // appears for parent / non-Kubo accounts even if the global toggle is on.
+    showFavorite:      isKid && pick(kid?.showFavoriteAction, feedSettings.showFavoriteAction),
+    showZap:           pick(kid?.showZapAction,      feedSettings.showZaps),
+    showShare:         pick(kid?.showShareAction,    feedSettings.showShareAction),
+    showMore:          pick(kid?.showMoreAction,     feedSettings.showMoreAction),
+    showNip05:         pick(kid?.showNip05,          feedSettings.showNip05),
+    showPostTimestamp: pick(kid?.showPostTimestamp,  feedSettings.showPostTimestamp),
+    showHashtags:      pick(kid?.showHashtags,       feedSettings.showHashtags),
   };
 }

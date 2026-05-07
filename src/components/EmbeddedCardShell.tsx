@@ -9,6 +9,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { timeAgo } from '@/lib/timeAgo';
+import { useActionVisibility } from '@/hooks/useActionVisibility';
 import { cn } from '@/lib/utils';
 
 interface EmbeddedCardShellProps {
@@ -46,6 +47,7 @@ export function EmbeddedCardShell({
   const avatarShape = getAvatarShape(metadata);
   const displayName = metadata?.name || genUserName(pubkey);
   const profileUrl = useProfileUrl(pubkey, metadata);
+  const { showPostTimestamp } = useActionVisibility();
 
   return (
     <div
@@ -107,9 +109,11 @@ export function EmbeddedCardShell({
             </>
           )}
 
-          <span className="text-xs text-muted-foreground shrink-0">
-            · {timeAgo(createdAt)}
-          </span>
+          {showPostTimestamp && (
+            <span className="text-xs text-muted-foreground shrink-0">
+              · {timeAgo(createdAt)}
+            </span>
+          )}
         </div>
 
         {children}

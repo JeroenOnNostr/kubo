@@ -57,9 +57,19 @@ const CATEGORIES: ToggleCategory[] = [
       { key: 'showReplyAction', label: 'Reply', description: 'Reply / comment button' },
       { key: 'showRepostAction', label: 'Repost', description: 'Repost and quote button' },
       { key: 'showReactionAction', label: 'Reactions', description: 'Like and emoji reaction button' },
+      { key: 'showFavoriteAction', label: 'Favorite (kid)', description: 'Star button on kid feed posts; favorited items appear on /kid/favorites' },
       { key: 'showZaps', label: 'Zaps', description: 'Lightning zap button' },
       { key: 'showShareAction', label: 'Share', description: 'Copy link / share button' },
       { key: 'showMoreAction', label: 'More', description: 'More menu (report, mute, pin)' },
+    ],
+  },
+  {
+    title: 'Note display',
+    description: 'Control which metadata appears in the byline of each note tile.',
+    toggles: [
+      { key: 'showNip05', label: 'NIP-05 identifier', description: 'Verified handle like @name@domain on note tiles' },
+      { key: 'showPostTimestamp', label: 'Post timestamp', description: 'Relative time (e.g. "2h") on note tiles' },
+      { key: 'showHashtags', label: 'Hashtags', description: 'Hashtag chip row on photo, video, and Divine tiles. Inline #… inside text posts is unaffected.' },
     ],
   },
   {

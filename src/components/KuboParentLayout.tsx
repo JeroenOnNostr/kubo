@@ -9,7 +9,10 @@ import { KuboWordmark } from '@/components/KuboWordmark';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { KuboParentErrorFallback } from '@/components/KuboErrorFallbacks';
 import { ScopedTheme } from '@/components/ScopedTheme';
+import { ParentTour } from '@/components/tour/ParentTour';
+import { TourAnchorProvider } from '@/components/tour/TourAnchorProvider';
 import { EMPTY_FEED_SOURCES, useKuboFamily } from '@/hooks/useKuboFamily';
+import { useRelayDiscovery } from '@/hooks/useRelayDiscovery';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { primeFeedSourcesCache } from '@/lib/primeFeedSourcesCache';
 import { builtinThemes } from '@/themes';
@@ -26,25 +29,31 @@ import { builtinThemes } from '@/themes';
  */
 export function KuboParentLayout() {
   useFeedSourcesPrime();
+  // Warm the NIP-66 relay catalogue while the user browses other parent
+  // pages, so Trust→Places and Feed→Relays open with results already loaded.
+  useRelayDiscovery();
 
   return (
     <ScopedTheme colors={builtinThemes.dark} className="min-h-dvh bg-background text-foreground">
-      <header className="sticky top-0 z-20 bg-background safe-area-top flex items-center justify-between px-4 pt-2 pb-1">
-        <KuboWordmark className="h-6 text-foreground" />
-        <KuboKidSelector />
-      </header>
-      <main className="pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px))]">
-        {/*
-          Kubo-themed fallback. Wraps the route outlet only — header + nav
-          stay alive on crash so the user can navigate away. Shared
-          ErrorBoundary is Ditto-owned; we pass a fallback rather than
-          editing it (forward-compat with upstream merges).
-        */}
-        <ErrorBoundary fallback={<KuboParentErrorFallback />}>
-          <Outlet />
-        </ErrorBoundary>
-      </main>
-      <KuboBottomNav />
+      <TourAnchorProvider>
+        <header className="sticky top-0 z-20 bg-background safe-area-top flex items-center justify-between px-4 pt-2 pb-1">
+          <KuboWordmark className="h-6 text-foreground" />
+          <KuboKidSelector />
+        </header>
+        <main className="pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px))]">
+          {/*
+            Kubo-themed fallback. Wraps the route outlet only — header + nav
+            stay alive on crash so the user can navigate away. Shared
+            ErrorBoundary is Ditto-owned; we pass a fallback rather than
+            editing it (forward-compat with upstream merges).
+          */}
+          <ErrorBoundary fallback={<KuboParentErrorFallback />}>
+            <Outlet />
+          </ErrorBoundary>
+        </main>
+        <KuboBottomNav />
+        <ParentTour />
+      </TourAnchorProvider>
     </ScopedTheme>
   );
 }

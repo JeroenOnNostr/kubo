@@ -46,14 +46,17 @@ import { KuboPlaceholderPage } from "@/components/KuboPlaceholderPage";
 import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
+import { ParentLoginPage } from "@/pages/ParentLoginPage";
 import { AddKidPage } from "@/pages/AddKidPage";
 import { KidDashboardPage } from "@/pages/KidDashboardPage";
+import { KidWatchHistoryPage } from "@/pages/KidWatchHistoryPage";
 import { KidKeysPage } from "@/pages/KidKeysPage";
 import { EditKidSettingsPage } from "@/pages/EditKidSettingsPage";
 import { EditKidFeedSettingsPage } from "@/pages/EditKidFeedSettingsPage";
 import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
 import { ParentTrustIndexPage } from "@/pages/ParentTrustIndexPage";
+import { ParentAlertsPage } from "@/pages/ParentAlertsPage";
 import { ParentFeedPage } from "@/pages/ParentFeedPage";
 import { renderKuboFeedSourcesRoutes } from "@/kuboFeedSourcesRoutes";
 import { VideoViewPage } from "@/pages/VideoViewPage";
@@ -62,7 +65,7 @@ import { ContentUploaderPage } from "@/pages/ContentUploaderPage";
 import { GroupViewPage } from "@/pages/GroupViewPage";
 import { WoTScorePage } from "@/pages/WoTScorePage";
 import { KuboKidLayout } from "@/components/KuboKidLayout";
-import { KidHomePage } from "@/pages/KidHomePage";
+import { renderKuboKidRoutes } from "@/kuboKidRoutes";
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
@@ -327,6 +330,7 @@ export function AppRouter() {
           <Route element={<KuboParentLayout />}>
             <Route path="/parent"               element={<Navigate to="/parent/home" replace />} />
             <Route path="/parent/home"          element={<KidDashboardPage    />} />
+            <Route path="/parent/watch-history" element={<KidWatchHistoryPage />} />
             <Route path="/parent/feed"          element={<ParentFeedPage      />} />
             {renderKuboFeedSourcesRoutes()}
             <Route path="/parent/upload"        element={<ContentUploaderPage />} />
@@ -336,7 +340,7 @@ export function AppRouter() {
             <Route path="/parent/trust/people"  element={<TrustPeoplePage     />} />
             <Route path="/parent/trust/places"  element={<TrustPlacesPage     />} />
             <Route path="/parent/groups/:gid"   element={<GroupViewPage       />} />
-            <Route path="/parent/alerts"        element={<KuboPlaceholderPage title="Alerts"        pr={6} description="Requests from your kid and safety notifications." />} />
+            <Route path="/parent/alerts"        element={<ParentAlertsPage    />} />
             <Route path="/parent/kid-settings"  element={<EditKidSettingsPage />} />
             <Route path="/parent/feed-settings" element={<EditKidFeedSettingsPage />} />
             <Route path="/parent/keys"          element={<KidKeysPage         />} />
@@ -347,13 +351,13 @@ export function AppRouter() {
           <Route element={<KuboOnboardLayout />}>
             <Route path="/onboard/welcome"       element={<WelcomePage />} />
             <Route path="/onboard/create-parent" element={<CreateParentAccountPage />} />
+            <Route path="/onboard/login"         element={<ParentLoginPage />} />
             <Route path="/onboard/add-kid"       element={<AddKidPage />} />
           </Route>
 
           {/* ─── Kid app ──────────────────────────────────────────────────── */}
           <Route element={<KuboKidLayout />}>
-            <Route path="/kid"           element={<KidHomePage />} />
-            <Route path="/kid/favorites" element={<KidHomePage />} />
+            {renderKuboKidRoutes()}
           </Route>
         </Routes>
       </BrowserRouter>

@@ -18,7 +18,9 @@ import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { onboardIdentity, publishInitialEncryptedSettings } from '@/lib/kuboOnboarding';
 import { DEFAULT_KID_FEED_SETTINGS } from '@/lib/extraKinds';
+import { KUBO_DEFAULT_KID_PACK_ATAG } from '@/lib/helpContent';
 import { parseAuthorEvent } from '@/hooks/useAuthor';
+import { clearOnboardingParent, getOnboardingParent } from '@/lib/onboardingParent';
 
 interface ParentHandoffState {
   parentPubkey?: string;
@@ -49,8 +51,14 @@ export function AddKidPage() {
   const { mutateAsync: publishKidProfile } = usePublishKidProfile();
 
   const handoff = (location.state ?? {}) as ParentHandoffState;
-  const parentPubkey = handoff.parentPubkey ?? family?.parentPubkey;
-  const parentDisplayName = handoff.parentDisplayName ?? family?.parentDisplayName;
+  // Fallback chain: explicit router state (fresh nav) → committed family
+  // record (returning parent with kids) → transient onboarding-parent key
+  // (logged-in parent who reloaded mid-flow before any kid was written).
+  const stashed = !handoff.parentPubkey && !family ? getOnboardingParent() : null;
+  const parentPubkey =
+    handoff.parentPubkey ?? family?.parentPubkey ?? stashed?.parentPubkey;
+  const parentDisplayName =
+    handoff.parentDisplayName ?? family?.parentDisplayName ?? stashed?.parentDisplayName;
 
   const isFirstKid = (family?.kids.length ?? 0) === 0;
 
@@ -168,18 +176,36 @@ export function AddKidPage() {
               parentPubkey,
               parentDisplayName,
               kids: [{ pubkey: identity.pubkey, displayName: trimmed }],
+              // Seed the default kid-friendly Follow pack so the feed isn't
+              // empty during the first-run tour (KUBO-064). Mirrors the
+              // seeding that addKid() does for subsequently-added kids.
+              feedSources: {
+                [identity.pubkey]: {
+                  relays: [],
+                  communities: [],
+                  packs: [KUBO_DEFAULT_KID_PACK_ATAG],
+                },
+              },
             });
           } else {
             await addKid({ pubkey: identity.pubkey, displayName: trimmed });
           }
 
-          // Make the freshly-created kid the active signer so the parent
-          // lands on /parent/home already scoped to them. Nostrify's login
-          // id for an nsec login is deterministic (`nsec:<pubkey>`), so we
-          // can reconstruct it without reading `logins` (which would be
-          // stale in this same handler).
+          // Family record is now committed — clear the transient handoff
+          // key. From here on, family?.parentPubkey is the source of truth
+          // for "who is the parent on this device."
+          clearOnboardingParent();
+
+          // Make the freshly-created kid the active signer and drop the
+          // parent straight into the kid app, so onboarding ends on a
+          // visible feed rather than the parent dashboard. From here a
+          // later session will overlay tooltips that walk the parent into
+          // configuring the feed. Nostrify's login id for an nsec login is
+          // deterministic (`nsec:<pubkey>`), so we can reconstruct it
+          // without reading `logins` (which would be stale in this same
+          // handler).
           setLogin(`nsec:${identity.pubkey}`);
-          nav('/parent/home', { replace: true });
+          nav('/kid', { replace: true });
         })();
       };
 
@@ -262,13 +288,19 @@ export function AddKidPage() {
   const title = isFirstKid ? 'Add your first kid' : 'Add a kid';
 
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full pt-4 pb-2">
+    <form
+      className="flex-1 flex flex-col max-w-sm mx-auto w-full pt-4 pb-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleAdd();
+      }}
+    >
       <div className="flex-1 flex flex-col gap-6">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="text-sm text-muted-foreground">
-            We'll set up a Kubo identity for them. You'll manage who they
-            follow and who can reach them from your parent dashboard.
+            Just a display name — you can change it anytime. It will be
+            publicly visible.
           </p>
         </div>
 
@@ -355,6 +387,7 @@ export function AddKidPage() {
           <Input
             id="kid-name"
             autoFocus
+            enterKeyHint="go"
             placeholder="Mia"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -362,9 +395,6 @@ export function AddKidPage() {
             className="h-12 rounded-xl text-base"
             disabled={submitting}
           />
-          <p className="text-xs text-muted-foreground">
-            Just a display name — you can change it anytime.
-          </p>
         </div>
       </div>
 
@@ -387,16 +417,16 @@ export function AddKidPage() {
       */}
       {!pendingAvatar && (
         <Button
+          type="submit"
           size="lg"
           className="w-full h-12 rounded-full"
           disabled={!canSubmit}
-          onClick={handleAdd}
         >
           {submitting
             ? <><Loader2 className="size-4 mr-2 animate-spin" /> Adding…</>
             : 'Add kid'}
         </Button>
       )}
-    </div>
+    </form>
   );
 }

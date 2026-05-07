@@ -20,6 +20,7 @@ public class MainActivity extends BridgeActivity {
         // Register native plugins before super.onCreate.
         registerPlugin(DittoNotificationPlugin.class);
         registerPlugin(SandboxPlugin.class);
+        registerPlugin(YouTubeNavGuardPlugin.class);
 
         super.onCreate(savedInstanceState);
 

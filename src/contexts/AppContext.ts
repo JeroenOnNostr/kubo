@@ -164,10 +164,18 @@ export interface FeedSettings {
   showRepostAction: boolean;
   /** Show the Reaction (like/emoji) button on posts. */
   showReactionAction: boolean;
+  /** Show the Favorite (star) button on posts. Kid-mode only — writes a NIP-51 kind-30003 list under d='favorites'. */
+  showFavoriteAction: boolean;
   /** Show the Share button on posts. */
   showShareAction: boolean;
   /** Show the More menu button on posts. */
   showMoreAction: boolean;
+  /** Show the NIP-05 verified identifier on note tiles. */
+  showNip05: boolean;
+  /** Show the relative timestamp on note tiles. */
+  showPostTimestamp: boolean;
+  /** Show the hashtag chip row on media tiles (NIP-68 photo, NIP-71 video, Divine). Inline #… inside kind-1 text content is unaffected. */
+  showHashtags: boolean;
   /** Show the Blobbi virtual pet companion + sidebar entry. */
   showBlobbi: boolean;
   /** Show the Letters (encrypted personal letters, kind 8211) sidebar entry. */

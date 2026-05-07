@@ -11,6 +11,7 @@ import {
 import { NavTile } from '@/components/NavTile';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { KidAvatar } from '@/components/KidAvatar';
+import { WatchHistoryStrip } from '@/pages/KidDashboardPage.WatchHistoryStrip';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
@@ -63,7 +64,6 @@ function totalSeconds(log: ScreenTimeEntry[]): number {
  * time data from the family record.
  */
 export function KidDashboardPage() {
-  const nav = useNavigate();
   const kid = useSelectedKid();
 
   if (!kid) {
@@ -83,11 +83,6 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
-      {/* Title */}
-      <div className="flex items-center gap-2">
-        <h1 className="text-base font-semibold flex-1">Home</h1>
-      </div>
-
       {/* Kid summary */}
       <div className="flex items-center gap-3 px-1">
         <KidAvatar
@@ -104,51 +99,11 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
       <NavTile
         icon={<Settings className="size-5" />}
         title="Edit kid settings"
-        subtitle="Age, time limits, moderation"
+        subtitle="Age, time limits, post actions"
         onClick={() => nav('/parent/kid-settings')}
       />
 
-      {/* Today's usage */}
-      <div className="rounded-2xl bg-card p-4 flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs uppercase tracking-[0.08em] text-muted-foreground font-semibold">
-            Today
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {usedMinutes} / {dailyLimitMin} min
-          </span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full"
-            style={{ width: `${percentUsed}%` }}
-            aria-label={`${percentUsed}% of daily limit used`}
-          />
-        </div>
-        <div className="text-[11px] text-muted-foreground">
-          {remainingMinutes} min remaining · window closes {settings.windowEnd}
-        </div>
-      </div>
-
-      {/* Kids watch history — placeholder */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Kids watch history</h2>
-          <span className="text-[12px] text-muted-foreground">Watch full history</span>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col gap-2 shrink-0 w-40">
-              <div className="aspect-video w-full rounded-xl bg-muted" aria-hidden />
-              <div className="text-[12px] font-medium leading-tight">Lorem ipsum dolor sit amet</div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="size-3 rounded-full bg-muted-foreground/30" aria-hidden />
-                tanel
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <WatchHistoryStrip kidPubkey={kidPubkey} />
 
       {/* Kids activity */}
       <section className="flex flex-col gap-3">
@@ -166,9 +121,23 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
             />
           </TabsContent>
           <TabsContent value="day" className="mt-0">
-            <Card className="p-4 flex flex-col items-center gap-2">
-              <div className="text-3xl font-bold">{formatMinutes(usedSeconds)}</div>
-              <div className="text-[12px] text-muted-foreground">today</div>
+            <Card className="p-4 flex flex-col items-center gap-3">
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="text-3xl font-bold">{formatMinutes(usedSeconds)}</div>
+                <div className="text-[12px] text-muted-foreground">
+                  {usedMinutes} / {dailyLimitMin} min today
+                </div>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full"
+                  style={{ width: `${percentUsed}%` }}
+                  aria-label={`${percentUsed}% of daily limit used`}
+                />
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {remainingMinutes} min remaining · window closes {settings.windowEnd}
+              </div>
             </Card>
           </TabsContent>
         </Tabs>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Search, UsersRound } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { BrowseSectionShell } from '@/components/feed/BrowseSectionShell';
 import { ExpandableSourceRow } from '@/components/feed/ExpandableSourceRow';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import {
@@ -126,10 +127,7 @@ function BrowseSection({
   onToggle: (atag: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Browse all
-      </div>
+    <BrowseSectionShell count={results.length} forceOpen={query.length > 0}>
       {isFetching && results.length === 0 ? (
         <EmptyState>Searching…</EmptyState>
       ) : results.length === 0 ? (
@@ -149,7 +147,7 @@ function BrowseSection({
           ))}
         </div>
       )}
-    </div>
+    </BrowseSectionShell>
   );
 }
 

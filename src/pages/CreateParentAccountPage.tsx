@@ -10,6 +10,7 @@ import { toast } from '@/hooks/useToast';
 import { useLoginActions } from '@/hooks/useLoginActions';
 import { useAppContext } from '@/hooks/useAppContext';
 import { onboardIdentity } from '@/lib/kuboOnboarding';
+import { setOnboardingParent } from '@/lib/onboardingParent';
 
 /**
  * /onboard/create-parent — one-screen signup (no scary "save your 24 words").
@@ -27,12 +28,17 @@ export function CreateParentAccountPage() {
 
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showMinHint, setShowMinHint] = useState(false);
 
   const NAME_MAX = 50;
   const trimmedLength = name.trim().length;
   const canSubmit = trimmedLength >= 2 && trimmedLength <= NAME_MAX && !submitting;
 
   const handleCreate = async () => {
+    if (trimmedLength < 2) {
+      setShowMinHint(true);
+      return;
+    }
     if (!canSubmit) return;
     setSubmitting(true);
     try {
@@ -44,6 +50,10 @@ export function CreateParentAccountPage() {
         clientNaddr: config.client,
       });
       login.nsec(identity.nsec);
+      setOnboardingParent({
+        parentPubkey: identity.pubkey,
+        parentDisplayName: trimmed,
+      });
       nav('/onboard/add-kid', {
         state: {
           parentPubkey: identity.pubkey,
@@ -62,14 +72,15 @@ export function CreateParentAccountPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full pt-4 pb-2">
+    <form
+      className="flex-1 flex flex-col max-w-sm mx-auto w-full pt-4 pb-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleCreate();
+      }}
+    >
       <div className="flex-1 flex flex-col gap-6">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
-          <p className="text-sm text-muted-foreground">
-            Just your name for now. You can add a photo and more from the profile screen later.
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
 
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
@@ -84,32 +95,36 @@ export function CreateParentAccountPage() {
             id="parent-name"
             autoFocus
             autoComplete="name"
+            enterKeyHint="go"
             placeholder="Sam Rivera"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (e.target.value.trim().length >= 2) setShowMinHint(false);
+            }}
             maxLength={NAME_MAX}
             className="h-12 rounded-xl text-base"
             disabled={submitting}
-            aria-describedby="parent-name-hint"
+            aria-describedby={showMinHint ? 'parent-name-hint' : undefined}
           />
-          <p id="parent-name-hint" className="text-[11px] text-muted-foreground">
-            {trimmedLength < 2
-              ? 'At least 2 characters'
-              : 'Looks good — tap Continue.'}
-          </p>
+          {showMinHint && trimmedLength < 2 && (
+            <p id="parent-name-hint" className="text-[11px] text-muted-foreground">
+              At least 2 characters
+            </p>
+          )}
         </div>
       </div>
 
       <Button
+        type="submit"
         size="lg"
         className="w-full h-12 rounded-full"
         disabled={!canSubmit}
-        onClick={handleCreate}
       >
         {submitting
           ? <><Loader2 className="size-4 mr-2 animate-spin" /> Creating…</>
           : 'Continue'}
       </Button>
-    </div>
+    </form>
   );
 }

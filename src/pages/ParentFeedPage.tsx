@@ -1,8 +1,8 @@
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Eye,
   Radio,
-  Search,
   SlidersHorizontal,
   Users,
   UsersRound,
@@ -20,6 +20,7 @@ import { useKidFeedSourcesSelector } from '@/hooks/useKidFeedSources';
 import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { genUserName } from '@/lib/genUserName';
+import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 
 /**
  * /parent/feed — source-picker screen. Renders two top tiles (edit feed
@@ -35,42 +36,34 @@ export function ParentFeedPage() {
   const nav = useNavigate();
   const kid = useSelectedKid();
 
+  // KUBO-092 first-run tour anchor — step 4 attaches to the source-tile
+  // container so the parent reads the source-types primer while looking at
+  // the actual tiles. No-op outside the parent layout's TourAnchorProvider.
+  const sourceTilesRef = useRef<HTMLDivElement | null>(null);
+  useRegisterTourAnchor('feedSourceTiles', sourceTilesRef);
+
   if (!kid) {
     return <NoKidSelected title="Feed" />;
   }
 
   return (
     <div className="flex flex-col gap-4 pt-2 pb-6">
-      <div className="px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Feed · {kid.displayName}
-      </div>
-
       {/* Top row: edit settings + preview */}
       <div className="px-4 grid grid-cols-2 gap-3">
         <NavTile
           icon={<SlidersHorizontal className="size-5" />}
           title="Edit feed settings"
-          subtitle="Kinds & visibility"
           onClick={() => nav('/parent/feed-settings')}
         />
         <NavTile
           icon={<Eye className="size-5" />}
           title="Feed preview"
-          subtitle="See what your kid sees"
           onClick={() => nav('/parent/feed/preview')}
         />
       </div>
 
-      {/* Search pill — placeholder, wired in a later pass */}
-      <div className="mx-4 flex items-center gap-2 h-11 px-4 rounded-full bg-card">
-        <Search className="size-4 text-muted-foreground" aria-hidden />
-        <span className="text-[13px] text-muted-foreground">
-          Search sources…
-        </span>
-      </div>
-
       {/* Source tiles */}
-      <div className="px-4 flex flex-col gap-3">
+      <div ref={sourceTilesRef} className="px-4 flex flex-col gap-3">
         <RelaysTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/relays')} />
         <CommunitiesTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/communities')} />
         <PacksTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/packs')} />

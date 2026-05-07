@@ -11,7 +11,8 @@ interface TrustRowProps {
   name: string;
   /** Optional subtitle ("via Soccer team B3", "18 members"…). */
   subtitle?: string;
-  level: TrustLevel;
+  /** Trust level — when undefined, no dot is shown (unassigned). */
+  level?: TrustLevel;
   onClick?: () => void;
   /**
    * When provided, the row splits into two click zones: left (avatar + name)
@@ -65,12 +66,12 @@ export function TrustRow({
     </div>
   );
 
-  const dotEl = (
+  const dotEl = level ? (
     <span
       className={cn('size-2.5 rounded-full flex-shrink-0', LEVEL_DOT[level])}
       aria-label={`Trust level: ${level}`}
     />
-  );
+  ) : null;
 
   const chevronEl = (
     <ChevronRight
@@ -96,7 +97,7 @@ export function TrustRow({
           type="button"
           onClick={onProfileClick}
           className={cn(
-            'flex items-center gap-3 flex-1 min-w-0 text-left',
+            'flex items-center gap-3 min-w-0 text-left',
             'hover:opacity-80 transition-opacity',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg',
           )}
@@ -109,7 +110,7 @@ export function TrustRow({
           onClick={onClick}
           aria-expanded={expanded}
           className={cn(
-            'flex items-center gap-1.5 flex-shrink-0 px-2 -mr-2',
+            'flex items-center gap-1.5 flex-1 justify-end pl-2 pr-1',
             'hover:opacity-80 transition-opacity',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg',
           )}

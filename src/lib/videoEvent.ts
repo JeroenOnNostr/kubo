@@ -16,6 +16,7 @@ export function parseVideoImeta(tags: string[][]): {
   thumbnail?: string;
   duration?: string;
   blurhash?: string;
+  dim?: string;
 } {
   const standaloneThumb = getTag(tags, 'thumb') ?? getTag(tags, 'image');
 
@@ -33,6 +34,7 @@ export function parseVideoImeta(tags: string[][]): {
         thumbnail: parts.image ?? parts.thumb ?? standaloneThumb,
         duration: parts.duration,
         blurhash: parts.blurhash,
+        dim: parts.dim,
       };
     }
   }
@@ -55,4 +57,22 @@ export function fmtDuration(s: string | undefined): string | undefined {
 export function isPlayableVideoEvent(event: NostrEvent): boolean {
   if (event.kind !== 21 && event.kind !== 22) return false;
   return !!parseVideoImeta(event.tags).url;
+}
+
+/** True when the URL points at YouTube's watch / embed / shorts / youtu.be / nocookie domains. */
+export function isYouTubeUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === 'youtube.com' ||
+      host === 'www.youtube.com' ||
+      host === 'm.youtube.com' ||
+      host === 'youtu.be' ||
+      host === 'youtube-nocookie.com' ||
+      host === 'www.youtube-nocookie.com'
+    );
+  } catch {
+    return false;
+  }
 }
