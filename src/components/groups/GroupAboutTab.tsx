@@ -55,7 +55,7 @@ export function GroupAboutTab({ addr, group }: GroupAboutTabProps) {
       {/* Identity strip */}
       <div className="flex items-center gap-3 px-4">
         <div
-          className="size-12 rounded-full overflow-hidden flex-shrink-0 bg-primary flex items-center justify-center text-primary-foreground text-[16px] font-semibold"
+          className="size-12 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-primary-foreground text-[16px] font-semibold"
           aria-hidden
         >
           {group.picture ? (
