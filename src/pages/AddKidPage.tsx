@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, Loader2, Upload, X } from 'lucide-react';
 import { useNostr } from '@nostrify/react';
 import { useNostrLogin } from '@nostrify/react/login';
 import { useQueryClient } from '@tanstack/react-query';
@@ -126,6 +126,10 @@ export function AddKidPage() {
     trimmedNameLength >= 1 &&
     trimmedNameLength <= KID_NAME_MAX &&
     !submitting;
+
+  const handleCancel = () => {
+    nav('/parent/home');
+  };
 
   const handleAdd = async () => {
     if (!canSubmit) return;
@@ -295,6 +299,22 @@ export function AddKidPage() {
         handleAdd();
       }}
     >
+      {!isFirstKid && (
+        <div className="flex justify-start -mt-2 mb-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground gap-1.5 h-8 px-2 -ml-2"
+            onClick={handleCancel}
+            disabled={submitting || retrying || !!pendingAvatar}
+          >
+            <X className="size-4" />
+            Cancel
+          </Button>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col gap-6">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

@@ -1,53 +1,121 @@
 # Publishing Kubo to Zapstore
 
-Authoritative runbook for shipping a new release-signed Kubo APK to Zapstore. **A future Claude Code session should be able to follow this end-to-end with just user taps on NostraSigner.**
+Authoritative runbook for the Kubo Zapstore listing at https://zapstore.dev/apps/com.kubo.app. Two flows:
+
+- **[Metadata-only update](#metadata-only-update)** — change description, screenshots, summary, or tags. **No rebuild. No version bump.** ~30 seconds + one nsec.app tap. Use this 90% of the time.
+- **[Full release (new APK)](#full-release-new-apk)** — ship a new app version. Bumps version, rebuilds, re-publishes.
 
 > Recovery card on the user's Desktop: `~/Desktop/KUBO-KEYSTORE-RECOVERY.md`.
 > If the keystore or `.env.zapstore` is missing, read that first.
 
-## Prerequisites (verify each time)
+## Always-true context
 
-Run from the Kubo repo root: `~/VScode workspace for building nostr apps/kubo`.
+- **Listing:** https://zapstore.dev/apps/com.kubo.app · pubkey hex `73d69a0d...0071`
+- **Keystore SHA-256 (must match every published APK):** `3a997f99...7cc8`
+- **Tools (already installed):** `~/.local/bin/zsp` (v0.4.10), `~/.local/bin/nak` (v0.19.8)
+- **`com.kubo.app` is whitelisted on relay.zapstore.dev** — no first-publish hurdle on republish.
+- **Bunker pairing is persisted** at `~/.config/zsp/bunker-keys/73d69a0d...0071.key` — no re-auth needed unless that file is deleted.
+- **Run from `kubo/` repo root.** Branch must be `brand/main`.
 
+Every publish loads secrets from `.env.zapstore`:
 ```bash
-# Java + keytool (via SDKMAN — keytool is NOT on default PATH)
-source ~/.sdkman/bin/sdkman-init.sh
-
-# Android SDK
-export ANDROID_SDK_ROOT="$HOME/Android/Sdk" ANDROID_HOME="$HOME/Android/Sdk"
-
-# zsp CLI (Zapstore publisher) — install once at ~/.local/bin/zsp
-which zsp || (
-  curl -fsSL -o /tmp/zsp \
-    "https://github.com/zapstore/zsp/releases/download/v0.4.10/zsp-0.4.10-linux-amd64" \
-  && chmod +x /tmp/zsp && mv /tmp/zsp ~/.local/bin/zsp
-)
-
-# Required files (all gitignored; if missing, see KUBO-KEYSTORE-RECOVERY.md)
-ls android/app/kubo-release.keystore  # release signing key
-ls android/key.properties             # Gradle reads passwords from here
-ls .env.zapstore                      # SIGN_WITH (bunker), RELAY_URLS, BLOSSOM_URL
-
-# Branch must be brand/main (Kubo trunk)
-git branch --show-current  # → brand/main
+set -a && source .env.zapstore && set +a
 ```
 
-If any prerequisite is missing, restore it before continuing — do **not** "just regenerate" the keystore (it would change Kubo's permanent Android identity).
+## Metadata-only update
 
-## Per-release steps
+Use this when the user wants to change the listing's description / screenshots / summary / tags / icon — anything *except* shipping a new APK. We re-publish the existing v0.4.x events with `--overwrite-release` so the kind 32267 / 30063 / 3063 events are replaced with new content but point at the same APK.
 
-### 1. Bump version
+```bash
+cd "/home/jeroen/VScode workspace for building nostr apps/kubo"
+
+# 1. Edit zapstore.yaml — description, summary, tags, images, etc.
+#    For images: add files to screenshots/store-N.png so paths in zapstore.yaml resolve.
+
+# 2. Temp-inject release_source + version (zsp reads APK path from yaml, not flags).
+#    Use the latest already-published version — we are NOT bumping.
+sed -i "2i version: 0.4.1" zapstore.yaml
+sed -i "2i release_source: ./artifacts/kubo-v0.4.1.apk" zapstore.yaml
+
+# 3. Publish (works fine via Claude's Bash tool — `-q` suppresses TTY prompts).
+set -a && source .env.zapstore && set +a
+zsp publish -q --skip-preview --overwrite-release zapstore.yaml
+
+# 4. Revert the temp-injection so trunk's zapstore.yaml stays generic.
+git checkout zapstore.yaml
+```
+
+Output of step 3 will look broken even on success: `--quiet` mutes success lines and only prints relay failures (e.g. damus.io rate-limit). **Don't trust the output — verify directly:**
+
+```bash
+nak req -k 32267 -a 73d69a0ddab8b12c996cc1e385be6773ada99ea75f1b3998dc41b75949ec0071 \
+  wss://relay.zapstore.dev | python3 -c "
+import sys, json
+e = json.loads(sys.stdin.read())
+print('CREATED_AT:', e['created_at'])
+print('SUMMARY:', next((t[1] for t in e['tags'] if t[0]=='summary'), '?'))
+imgs = [t[1] for t in e['tags'] if t[0]=='image']
+print('IMAGES:', len(imgs))
+for i, u in enumerate(imgs, 1): print(f'  {i}. {u}')
+print()
+print(e['content'])
+"
+```
+
+A fresh `created_at` (within the last few minutes) confirms the new event landed. Compare the printed description / image count against what was edited.
+
+**The user must tap Approve in nsec.app** when zsp triggers the bunker. If the prompt doesn't fire within ~10s, the bunker URL or relays may be stale — see [Failures](#failures-and-fixes).
+
+After verification: commit only the changed metadata + image files (leave the user's other in-progress edits alone):
+
+```bash
+git add zapstore.yaml screenshots/store-*.png  # adjust to whatever changed
+git commit -m "KUBO-XXX: <one-line summary>
+
+<longer description, e.g. new event hashes from cdn.zapstore.dev>
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+git push origin brand/main
+```
+
+Refresh https://zapstore.dev/apps/com.kubo.app — the indexer picks up the new event within minutes.
+
+## Full release (new APK)
+
+### Prerequisites (verify each time)
+
+```bash
+source ~/.sdkman/bin/sdkman-init.sh                             # Java/keytool/apksigner
+export ANDROID_SDK_ROOT="$HOME/Android/Sdk" ANDROID_HOME="$HOME/Android/Sdk"
+
+ls android/app/kubo-release.keystore android/key.properties .env.zapstore  # all gitignored
+git branch --show-current                                        # → brand/main
+
+# Reinstall zsp / nak only if missing (see KUBO-KEYSTORE-RECOVERY.md if .env.zapstore is gone)
+which zsp || curl -fsSL -o ~/.local/bin/zsp \
+  "https://github.com/zapstore/zsp/releases/download/v0.4.10/zsp-0.4.10-linux-amd64" \
+  && chmod +x ~/.local/bin/zsp
+which nak || curl -fsSL -o ~/.local/bin/nak \
+  "https://github.com/fiatjaf/nak/releases/download/v0.19.8/nak-v0.19.8-linux-amd64" \
+  && chmod +x ~/.local/bin/nak
+```
+
+If any prerequisite is missing, restore it before continuing — do **not** regenerate the keystore (it would change Kubo's permanent Android identity).
+
+### Per-release steps
+
+#### 1. Bump version
 
 Edit `android/app/build.gradle`:
 
 - `versionCode` — increment by 1 (Android-side monotonic int).
 - `versionName "X.Y.Z"` — semver. Tag prefix is `kubo-v`, so `versionName "0.4.2"` → tag `kubo-v0.4.2`.
 
-### 2. Add a CHANGELOG entry
+#### 2. Add a CHANGELOG entry
 
 Add `## [X.Y.Z] - YYYY-MM-DD` at the top of `CHANGELOG.md` (above the previous entry). Zapstore extracts this for the release-notes blob; keep it user-facing, not commit-message-style. The `release_notes: ./CHANGELOG.md` line in `zapstore.yaml` points the publisher at this file.
 
-### 3. Build the release APK
+#### 3. Build the release APK
 
 ```bash
 source ~/.sdkman/bin/sdkman-init.sh
@@ -66,7 +134,7 @@ cp android/app/build/outputs/apk/release/app-release.apk artifacts/kubo-v<X.Y.Z>
 
 Substitute `<X.Y.Z>`. Build takes ~45s on a warm cache (~3 min cold).
 
-### 4. **Verify the APK is signed with our release key (NOT the debug key)**
+#### 4. **Verify the APK is signed with our release key (NOT the debug key)**
 
 ```bash
 source ~/.sdkman/bin/sdkman-init.sh  # apksigner needs java on PATH
@@ -83,7 +151,7 @@ Signer #1 certificate SHA-256 digest: 3a997f999dd6d347a9ece39f8dbeaf7446e88c9636
 
 If the SHA-256 does **not** match `3a997f99...7cc8`, **stop**. Either Gradle silently fell back to the debug key (means `key.properties` isn't being read) or someone replaced the keystore. Do not publish.
 
-### 5. Dry-run zsp config check
+#### 5. Dry-run zsp config check
 
 ```bash
 set -a && source .env.zapstore && set +a
@@ -92,47 +160,31 @@ zsp publish --check zapstore.yaml
 
 `--check` exits 0 + prints `{"package_id":"com.kubo.app"}` on success. It validates that `zapstore.yaml` parses, the GitHub repo is reachable, and the latest release fetches a usable APK. Fix any issues before going live.
 
-### 6. (First publish only) Link the keystore certificate to the Nostr identity
+#### 6. (First publish only — already done for Kubo, skip)
 
-This is a **one-time** NIP-C1 proof binding the APK signing certificate to the bunker pubkey. Once published, future releases skip this step (zsp will detect the existing link).
+The NIP-C1 identity proof binding the APK signing cert (`3a997f99...7cc8`) to the bunker pubkey (`73d69a0d...0071`) was published 2026-05-06 with 1y validity. zsp checks this automatically on every `zsp publish`. **Skip this step until 2027-05-06 or until the keystore is rotated.**
 
-```bash
-set -a && source .env.zapstore && set +a
-KEYSTORE_PASSWORD="$(grep ^storePassword= android/key.properties | cut -d= -f2-)" \
-  zsp identity --link-key android/app/kubo-release.keystore
-```
+If renewing: `KEYSTORE_PASSWORD="$(grep ^storePassword= android/key.properties | cut -d= -f2-)" zsp identity --link-key android/app/kubo-release.p12` (note `.p12` symlink — see [Failures](#failures-and-fixes)).
 
-NostraSigner will pop a sign request — tap **Approve**.
+#### 7. Publish
 
-To check whether the link already exists: `zsp identity --verify android/app/kubo-release.keystore`.
-
-### 7. Publish
-
-`zsp publish` reads the APK path and version from inside `zapstore.yaml`, not from CLI flags. We inject those two lines temporarily, publish, then revert — so trunk's `zapstore.yaml` stays generic.
+`zsp publish` reads APK path and version from `zapstore.yaml`, not from CLI flags. Temp-inject, publish, revert.
 
 ```bash
 set -a && source .env.zapstore && set +a
-
-# Temp-inject release_source + version (matches the old GitLab CI sed pattern)
 sed -i "2i version: <X.Y.Z>" zapstore.yaml
 sed -i "2i release_source: ./artifacts/kubo-v<X.Y.Z>.apk" zapstore.yaml
 
-# Publish — zsp publish has no -y flag; --quiet auto-confirms but mutes output, so prefer interactive
-zsp publish --skip-preview zapstore.yaml
+zsp publish -q --skip-preview zapstore.yaml
 
-# Revert the injection
 git checkout zapstore.yaml
 ```
 
-The publish command has interactive prompts (Ready-to-Publish confirmation) that need a real TTY, so run from your terminal, not via Claude Code's `Bash` tool. When the bunker prompt appears in nsec.app, tap **Approve**. After the first successful publish, the bunker client key is persisted at `~/.config/zsp/bunker-keys/<pubkey>.key` and future publishes won't re-prompt for pairing.
+`-q` (auto-confirm + mute prompts) works fine via Claude's Bash tool. **Don't trust the output** — `-q` mutes success lines and only echoes relay failures (damus.io rate-limit is normal). Verify directly via the [verify-via-nak](#metadata-only-update) snippet — it should show the new version + a fresh `created_at`.
 
-If `zsp` says "release already published" without doing anything, add `--overwrite-release` to force a re-publish. (Useful if the events were broadcast but you noticed a metadata mistake.)
+User taps **Approve** in nsec.app when the bunker prompt fires (one tap covers all three events on a successful pairing).
 
-NostraSigner pops several sign requests in succession (one per Nostr event: kind 32267 app metadata + kind 30063 release + kind 3063 file metadata). Tap **Approve** for each. After the first successful publish, `zsp` persists the bunker client key at `~/.config/zsp/bunker-keys/<pubkey>.key` so future runs reuse the pairing.
-
-On success, zsp prints the published event IDs and the listing URL (typically `https://zapstore.dev/app/com.kubo.app`).
-
-### 8. GitHub release (mirror the APK so non-Zapstore users can sideload)
+#### 8. GitHub release (mirror the APK so non-Zapstore users can sideload)
 
 ```bash
 git add zapstore.yaml CHANGELOG.md android/app/build.gradle  # whatever changed
@@ -151,18 +203,18 @@ gh release create kubo-v<X.Y.Z> \
 
 (Replace `<X.Y.Z>` everywhere. The `awk` extracts that version's CHANGELOG section as the release notes.)
 
-### 9. Post-release bookkeeping
+#### 9. Post-release bookkeeping
 
 - Move the related `KUBO-XXX` items from `TODO.md` to `DONE.md` with the commit hash.
 - Smoke-test on a real Android device: install via Zapstore, launch, verify the kid feed loads. (Existing devices with debug-signed v0.1.x–v0.3.x APKs must uninstall first — signature mismatch is expected.)
 - Update memory `kubo-zapstore-publish.md` if anything in the procedure changed.
 
-## Common failures + fixes
+## Failures and fixes
 
 - **`apksigner verify` shows `CN=Android Debug, O=Android, C=US`** — Gradle didn't read `key.properties`. Confirm the file exists and isn't empty, and that `storeFile=kubo-release.keystore` (relative to `android/app/`).
 - **`zsp identity --link-key` says "Java KeyStore (JKS) format is not supported"** — zsp infers format from extension. Our keystore is real PKCS12 but ends in `.keystore`. There's a symlink `android/app/kubo-release.p12 → kubo-release.keystore`; pass the `.p12` path to `--link-key`. If the symlink is gone: `ln -sf kubo-release.keystore android/app/kubo-release.p12` from inside the kubo dir.
 - **`zsp identity --link-key` errors "Unknown client"** — the `bunker://...&secret=...` was already consumed (nsec.app secrets are single-use for pairing). Generate a fresh bunker URL in nsec.app's "Connected apps" panel, replace `SIGN_WITH` in `.env.zapstore`, delete `~/.config/zsp/bunker-keys/<pubkey>.key`, retry.
-- **`zsp publish` errors "could not open a new TTY"** — running it via a non-interactive shell (e.g. Claude Code's Bash tool). Run from a real terminal so it can show the Ready-to-Publish prompt. `--quiet` doesn't help here either — it skips prompts but still expects stdout to be a TTY for spinners.
+- **`zsp publish` errors "could not open a new TTY"** — happens when running without `-q` from a non-interactive shell (Claude's Bash tool). The fix is `-q --skip-preview`; quiet mode bypasses both the Ready-to-Publish confirmation *and* the browser-preview prompt. Don't drop `-q` thinking it'll show progress — the success lines stay muted, but the publish still works; verify via `nak req` instead.
 - **`zsp publish` hangs at "waiting for signer"** — the bunker prompt didn't reach nsec.app. Check the tab is open and connected; check that the relays in the bunker URL include at least `wss://relay.nsec.app`.
 - **`zsp` errors "developer not whitelisted"** — first-publish hurdle. Zapstore's relay needs to fetch `zapstore.yaml` from the repo and confirm the pubkey matches. Either commit `zapstore.yaml` to `brand/main` and push first, or contact Zapstore admins to whitelist the npub. (Once whitelisted, future publishes are automatic.) **For Kubo this is already done** — the npub `npub1w0tf5rw6hzcjextvc83ct0n8wwk6n848tudnnxxugxm4jj0vqpcs6t3snn` is whitelisted as of the v0.4.1 publish.
 - **`zsp publish` says "release already published" and exits silently** — Zapstore's relay deduplicates by `(package_id, version)`. Either bump the version, or pass `--overwrite-release` to force a re-publish of the same version (useful for fixing metadata mistakes without bumping).

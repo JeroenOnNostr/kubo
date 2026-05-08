@@ -1,6 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { nip19 } from "nostr-tools";
+import type { NUser } from "@nostrify/react/login";
 
 import { useAppContext } from "./useAppContext";
 import { useCurrentUser } from "./useCurrentUser";
@@ -17,6 +18,12 @@ export type EventTemplate = Omit<NostrEvent, 'id' | 'pubkey' | 'sig'> & {
    * equal to `created_at` so the two always match on first publish.
    */
   prev?: NostrEvent;
+  /**
+   * Optional explicit signer to use instead of the active `useCurrentUser()` user.
+   * Used by group operations that must be attributed to the parent identity even
+   * when a kid is the active account in the kid switcher (see `useParentSigner`).
+   */
+  signer?: NUser;
 };
 
 /** Returns true if the kind falls in a replaceable or addressable range. */
@@ -62,9 +69,13 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
 
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
-      if (user) {
-        // Extract `prev` before building the event — it's not part of the Nostr event schema.
-        const { prev, ...template } = t;
+      // Use the explicit signer when provided; otherwise fall back to the
+      // active user from useCurrentUser. This lets group-context callers
+      // pin publishes to the parent identity (see useParentSigner).
+      const effectiveUser = t.signer ?? user;
+      if (effectiveUser) {
+        // Extract `prev` and `signer` before building the event — neither is part of the Nostr event schema.
+        const { prev, signer: _signer, ...template } = t;
         const tags = [...(template.tags ?? [])];
 
         // Add the NIP-89 client tag if it doesn't exist
@@ -89,16 +100,16 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
           }
         }
 
-        const event = await user.signer.signEvent({
+        const event = await effectiveUser.signer.signEvent({
           kind: template.kind,
           content: template.content ?? "",
           tags,
           created_at,
         });
 
-        if (event.pubkey !== user.pubkey) {
+        if (event.pubkey !== effectiveUser.pubkey) {
           throw new Error(
-            "Signed event pubkey does not match the currently selected account. Please check your signer configuration.",
+            "Signed event pubkey does not match the expected account. Please check your signer configuration.",
           );
         }
 

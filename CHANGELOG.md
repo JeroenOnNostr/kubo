@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.5] - 2026-05-07
+
+### Added
+- **Group chat support** — parents can now create and join NIP-29 managed groups, including private groups, directly from Kubo.
+
+### Fixed
+- **Amber bunker sign-in** now completes reliably; the listener no longer drops successful logins on re-render and the same fix applies to onboarding.
+
+### Changed
+- **Default video feed improved** — normal videos are on by default for new installs so the feed feels alive out of the box.
+- **Short-form videos disabled by default** — the addictive short-video reel is off until a parent opts in.
+
 ## [0.4.1] - 2026-05-06
 
 ### Added

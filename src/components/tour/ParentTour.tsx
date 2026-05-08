@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import {
@@ -28,6 +28,7 @@ export function ParentTour() {
   const pinFlowActive = usePinFlowActive();
   const { family, markCoachmarksComplete } = useKuboFamily();
   const { pathname } = useLocation();
+  const nav = useNavigate();
 
   // Step 2 → 3: when ParentGateDialog routes from /kid to /parent/home, the
   // route change is our cue that PIN setup succeeded. Clear the pin-flow
@@ -65,7 +66,7 @@ export function ParentTour() {
     void markCoachmarksComplete();
   };
 
-  const advance = (next: 1 | 2 | 3 | 4 | 5) => () => setTourStep(next);
+  const advance = (next: 1 | 2 | 3 | 4 | 5 | 6) => () => setTourStep(next);
 
   const finish = () => {
     setTourStep(0);
@@ -127,7 +128,7 @@ export function ParentTour() {
               <p>Two tabs do the real work:</p>
               <ul className="space-y-1">
                 <li><strong>Feed</strong> — what shows up in {kidName}'s feed (you pick the sources)</li>
-                <li><strong>Trust</strong> — what {kidName} can do <em>with</em> what's in the feed: follow a creator further, watch-only vs. interact</li>
+                <li><strong>Trust</strong> — who and where {kidName} can see and reply to beyond their follow list</li>
               </ul>
               <p className="text-slate-500">Tap <strong>Feed</strong> to keep going.</p>
             </div>
@@ -185,11 +186,48 @@ export function ParentTour() {
           anchorName="kidSelectorPill"
           title="Switch between parent and kid view"
           body={`Tap up here to switch back to ${kidName}'s view, or to add another kid later.`}
-          nextLabel="Done"
-          onNext={finish}
+          nextLabel="Next"
+          onNext={() => {
+            setTourStep(6);
+            // Take the parent to the Trust > People page so the Groups
+            // section is on screen for the final coachmark. Without this
+            // the step-6 popover never finds its anchor.
+            nav('/parent/trust/people');
+          }}
           onSkip={skip}
           side="bottom"
           align="end"
+        />
+      );
+    }
+    if (step === 6) {
+      // Wait until the parent is actually on the people page — useNavigate
+      // is async relative to the render. Without this gate, the popover
+      // tries to anchor to `groupsSection` while the page is still
+      // unmounted from the previous route, which fails silently.
+      if (pathname !== '/parent/trust/people') return null;
+      return (
+        <Coachmark
+          anchorName="groupsSection"
+          title="Chat with the Kubo team"
+          body={
+            <div className="flex flex-col gap-2">
+              <p>
+                Groups let you coordinate with other parents, teachers, or
+                anyone you want to share with privately.
+              </p>
+              <p>
+                We've left a <strong>Kubo Testers</strong> tile here — tap
+                it any time to chat with us and other early testers.
+              </p>
+            </div>
+          }
+          nextLabel="Done"
+          onNext={finish}
+          onSkip={skip}
+          side="top"
+          align="center"
+          className="w-80"
         />
       );
     }

@@ -4,8 +4,22 @@ import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin } from '@nostrify/react/login';
 import type { NostrSigner } from '@nostrify/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY } from '@/lib/appRelays';
+import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY, NIP29_RELAYS } from '@/lib/appRelays';
 import { NostrBatcher } from '@/lib/NostrBatcher';
+
+/** NIP-29 kinds emitted by users (chat + join/leave). */
+const NIP29_USER_KINDS = new Set([9, 11, 9021, 9022]);
+/** NIP-29 kinds emitted by admins (moderation). */
+const NIP29_ADMIN_KINDS = new Set([9000, 9001, 9002, 9005, 9007]);
+/** NIP-29 kinds the relay generates (group state). */
+const NIP29_RELAY_KINDS = new Set([39000, 39001, 39002, 39003]);
+/** Union of all NIP-29 kinds — used for the reqRouter fallback. */
+const NIP29_KIND_SET = new Set<number>([
+  ...NIP29_USER_KINDS,
+  ...NIP29_ADMIN_KINDS,
+  ...NIP29_RELAY_KINDS,
+]);
 
 interface NostrProviderProps {
   children: React.ReactNode;
@@ -15,6 +29,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   const { children } = props;
   const { config } = useAppContext();
   const { logins } = useNostrLogin();
+  const { family } = useKuboFamily();
 
   // Create NPool instance only once
   const pool = useRef<NPool | undefined>(undefined);
@@ -22,38 +37,84 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // Use refs so the pool always has the latest data
   const effectiveRelays = useRef(getEffectiveRelays(config.relayMetadata, config.useAppRelays));
 
-  // Stable ref to the current user's signer for NIP-42 AUTH.
-  // The `open()` callback reads from this ref when a relay sends an AUTH
-  // challenge, so it always uses the latest signer without recreating the pool.
+  // Stable refs to signers used for NIP-42 AUTH. The `open()` callback
+  // reads from these when a relay sends an AUTH challenge, so they
+  // always use the latest signer without recreating the pool.
   const signerRef = useRef<NostrSigner | undefined>(undefined);
+  // Parent-pinned signer for NIP-29 relays — kid accounts are not
+  // members of the parent's private groups, so the relay would
+  // silently EOSE 39001/39002 on a kid-AUTH'd connection. Falls back
+  // to the active signer when no family is configured (solo install)
+  // or the parent isn't currently among `logins`.
+  const parentSignerRef = useRef<NostrSigner | undefined>(undefined);
 
-  // Derive the current signer from the active login. This mirrors the
-  // logic in useCurrentUser but avoids a circular dependency (useCurrentUser
-  // depends on NostrContext which we are providing here).
-  const currentLogin = logins[0];
-  const currentSigner = useMemo(() => {
-    if (!currentLogin) return undefined;
+  // Helper to materialise an NUser signer from any stored login type.
+  // Pulled out so we can resolve both the active login and the parent
+  // login the same way.
+  const signerFromLogin = (login: typeof logins[number] | undefined): NostrSigner | undefined => {
+    if (!login) return undefined;
     try {
-      switch (currentLogin.type) {
+      switch (login.type) {
         case 'nsec':
-          return NUser.fromNsecLogin(currentLogin).signer;
+          return NUser.fromNsecLogin(login).signer;
         case 'bunker':
           // pool.current is guaranteed to exist here: the pool is created
           // synchronously during the first render (below), and useMemo runs
           // after the render body has executed.
-          return NUser.fromBunkerLogin(currentLogin, pool.current!).signer;
+          return NUser.fromBunkerLogin(login, pool.current!).signer;
         case 'extension':
-          return NUser.fromExtensionLogin(currentLogin).signer;
+          return NUser.fromExtensionLogin(login).signer;
         default:
           return undefined;
       }
     } catch {
       return undefined;
     }
-  }, [currentLogin]);
+  };
 
-  // Keep the ref in sync so the AUTH callback always sees the latest signer.
+  // Derive the current signer from the active login. This mirrors the
+  // logic in useCurrentUser but avoids a circular dependency (useCurrentUser
+  // depends on NostrContext which we are providing here).
+  const currentLogin = logins[0];
+  const currentSigner = useMemo(
+    () => signerFromLogin(currentLogin),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentLogin],
+  );
+
+  // Derive the parent signer (when a family is configured + the parent
+  // login is present in `logins`). Mirrors the resolution rules in
+  // useParentSigner — solo installs (no family) fall back to the
+  // active login; a family with the parent logged out returns undefined
+  // so AUTH fails explicitly rather than silently signing as a kid.
+  const parentSigner = useMemo(() => {
+    if (!family) return currentSigner;
+    for (const login of logins) {
+      try {
+        let pk: string | undefined;
+        switch (login.type) {
+          case 'nsec':
+            pk = NUser.fromNsecLogin(login).pubkey;
+            break;
+          case 'extension':
+            pk = NUser.fromExtensionLogin(login).pubkey;
+            break;
+          case 'bunker':
+            pk = NUser.fromBunkerLogin(login, pool.current!).pubkey;
+            break;
+        }
+        if (pk === family.parentPubkey) return signerFromLogin(login);
+      } catch {
+        // ignore — try the next login
+      }
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logins, family, currentSigner]);
+
+  // Keep the refs in sync so the AUTH callback always sees the latest signer.
   signerRef.current = currentSigner;
+  parentSignerRef.current = parentSigner;
 
   // Update effective relays ref when config changes. The NPool reads from
   // this ref, so new queries automatically use the updated relay set.
@@ -71,13 +132,29 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   if (!pool.current) {
     pool.current = new NPool({
       open(url: string) {
+        // NIP-29 relays gate the moderation/relay-state kinds (39001,
+        // 39002, kind-9 chat in private groups, kind-9000/9001 etc.)
+        // behind NIP-42 AUTH for non-public groups, returning EOSE with
+        // no events when the AUTH'd identity isn't a member. In Kubo's
+        // parental model a kid is rarely a member of the parent's
+        // groups, so AUTH'ing as the active kid silently empties the
+        // members tab. Pin AUTH on these specific relays to the parent
+        // identity instead. For everything else, keep using the active
+        // signer (NIP-65 sync, write-relay AUTH challenges, etc.).
+        const isNip29Relay = (NIP29_RELAYS as readonly string[]).includes(url);
         return new NRelay1(url, {
           // NIP-42: Respond to relay AUTH challenges by signing a kind
-          // 22242 ephemeral event with the current user's signer.
+          // 22242 ephemeral event with the relevant signer.
           auth: async (challenge: string) => {
-            const signer = signerRef.current;
+            const signer = isNip29Relay
+              ? (parentSignerRef.current ?? signerRef.current)
+              : signerRef.current;
             if (!signer) {
-              throw new Error('AUTH failed: no signer available (user not logged in)');
+              throw new Error(
+                isNip29Relay
+                  ? 'AUTH failed: parent must be logged in to read this group on this device.'
+                  : 'AUTH failed: no signer available (user not logged in)',
+              );
             }
             return signer.signEvent({
               kind: 22242,
@@ -104,6 +181,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
           return new Map([...DITTO_RELAYS, DIVINE_RELAY].map(url => [url, filters]));
         }
 
+        // NIP-29 fallback: if every filter targets only NIP-29 kinds, fan out
+        // to the configured NIP-29 relays. Group-aware hooks should always
+        // route via `nostr.relay(url).query(...)` to the specific group's
+        // host instead of relying on this branch — it's defensive only.
+        if (filters.every((f) => f?.kinds?.length && f.kinds.every((k) => NIP29_KIND_SET.has(k)))) {
+          return new Map(NIP29_RELAYS.map(url => [url, filters]));
+        }
+
         // Route to all read relays
         const readRelays = effectiveRelays.current.relays
           .filter(r => r.read)
@@ -121,7 +206,19 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
         return routes;
       },
-      eventRouter(_event: NostrEvent) {
+      eventRouter(event: NostrEvent) {
+        // NIP-29 user/admin events with an `h` tag must reach exactly one
+        // relay (the group's host). Group-aware hooks handle that via
+        // `nostr.relay(url).event(...)`. Returning [] here prevents the
+        // pool from also fanning the event out to the user's default
+        // write relays.
+        if (
+          (NIP29_USER_KINDS.has(event.kind) || NIP29_ADMIN_KINDS.has(event.kind)) &&
+          event.tags.some(([t]) => t === 'h')
+        ) {
+          return [];
+        }
+
         // Get write relays from effective relays
         const writeRelays = effectiveRelays.current.relays
           .filter(r => r.write)

@@ -15,6 +15,24 @@ export const DIVINE_RELAY = 'wss://divine.video/';
 /** Relay used for Zapstore app metadata (kind 32267) and releases (kind 30063). */
 export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev';
 
+/**
+ * NIP-29 managed-group relays. Each NIP-29 group lives on exactly one
+ * relay and is addressed as `<host>'<group-id>` — the group's host is
+ * the source of truth for membership, metadata, and chat. These are the
+ * relays Kubo offers in the Create Group dialog.
+ */
+export const NIP29_RELAYS = [
+  'wss://groups.0xchat.com/',
+  'wss://relay.groups.nip29.com/',
+] as const;
+
+/**
+ * Default suggested group for fresh installs. Pre-created via nostrord
+ * on 2026-05-07. Public-readable (private=off) and open-join (closed=off)
+ * so testers can self-join from the onboarding tooltip.
+ */
+export const KUBO_TESTERS_GROUP = "groups.0xchat.com'kubo-testers";
+
 /** Normalize a relay URL for deduplication (lowercase, strip trailing slash). */
 function normalizeUrl(url: string): string {
   return url.toLowerCase().replace(/\/+$/, '');
