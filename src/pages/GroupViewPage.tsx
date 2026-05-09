@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
  * /parent/groups/:addr — single NIP-29 group view (chat / members / about).
  *
  * The route param is a URL-encoded full group address `<host>'<gid>`,
- * e.g. `groups.0xchat.com'kubo-testers`. All data is sourced from the
+ * e.g. `relay.kubo.watch'meycharghge`. All data is sourced from the
  * group's host relay via {@link useGroup} / {@link useGroupMessages};
  * admin actions are gated by `group.isAdmin`.
  */
@@ -117,11 +117,7 @@ export function GroupViewPage() {
   // Z-index sits below the nav (40) and below dialogs (250).
   return (
     <div
-      className="fixed inset-x-0 flex flex-col bg-background pt-2 z-10"
-      style={{
-        top: 'calc(env(safe-area-inset-top, 0px) + 3rem)',
-        bottom: 'calc(var(--bottom-nav-height, 2.75rem) + 28px + env(safe-area-inset-bottom, 0px))',
-      }}
+      className="flex flex-col bg-background pt-2 z-10"
     >
       {/* Top bar */}
       <div className="flex items-center gap-2 px-4 flex-shrink-0">
@@ -135,7 +131,7 @@ export function GroupViewPage() {
           <ChevronLeft className="size-5" />
         </Button>
         <div
-          className="size-9 rounded-full flex-shrink-0 overflow-hidden bg-primary flex items-center justify-center text-primary-foreground text-[12px] font-semibold"
+          className="size-9 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-primary-foreground text-[12px] font-semibold"
           aria-hidden
         >
           {group?.picture ? (

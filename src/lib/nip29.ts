@@ -4,7 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
  * NIP-29 (managed groups) protocol helpers.
  *
  * Group address format: `<host>'<group-id>` (e.g.
- * `groups.0xchat.com'kubo-testers`). The host is bare (no scheme,
+ * `relay.kubo.watch'meycharghge`). The host is bare (no scheme,
  * no path); we expand it to `wss://<host>/` when connecting.
  */
 
@@ -28,11 +28,11 @@ export const NIP29_KINDS = {
 } as const;
 
 export interface ParsedGroupAddr {
-  /** Bare host, e.g. `groups.0xchat.com`. */
+  /** Bare host, e.g. `relay.kubo.watch`. */
   host: string;
-  /** Group id, e.g. `kubo-testers`. */
+  /** Group id, e.g. `meycharghge`. */
   gid: string;
-  /** Connection URL, e.g. `wss://groups.0xchat.com/`. */
+  /** Connection URL, e.g. `wss://relay.kubo.watch/`. */
   relay: string;
 }
 

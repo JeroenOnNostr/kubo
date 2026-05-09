@@ -24,6 +24,7 @@ export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev';
 export const NIP29_RELAYS = [
   'wss://groups.0xchat.com/',
   'wss://relay.groups.nip29.com/',
+  'wss://relay.kubo.watch/'
 ] as const;
 
 /**
@@ -31,7 +32,7 @@ export const NIP29_RELAYS = [
  * on 2026-05-07. Public-readable (private=off) and open-join (closed=off)
  * so testers can self-join from the onboarding tooltip.
  */
-export const KUBO_TESTERS_GROUP = "groups.0xchat.com'kubo-testers";
+export const KUBO_TESTERS_GROUP = "relay.kubo.watch'meycharghge";
 
 /** Normalize a relay URL for deduplication (lowercase, strip trailing slash). */
 function normalizeUrl(url: string): string {
