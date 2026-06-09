@@ -56,6 +56,7 @@ import { EditKidFeedSettingsPage } from "@/pages/EditKidFeedSettingsPage";
 import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
 import { ParentTrustIndexPage } from "@/pages/ParentTrustIndexPage";
+import { ParentTrustDiagnosticsPage } from "@/pages/ParentTrustDiagnosticsPage";
 import { ParentAlertsPage } from "@/pages/ParentAlertsPage";
 import { ParentFeedPage } from "@/pages/ParentFeedPage";
 import { renderKuboFeedSourcesRoutes } from "@/kuboFeedSourcesRoutes";
@@ -337,9 +338,10 @@ export function AppRouter() {
             <Route path="/parent/upload"        element={<ContentUploaderPage />} />
             <Route path="/parent/video/:id"     element={<VideoViewPage       />} />
             <Route path="/parent/profile/:npub" element={<ProfileViewPage     />} />
-            <Route path="/parent/trust"         element={<ParentTrustIndexPage />} />
-            <Route path="/parent/trust/people"  element={<TrustPeoplePage     />} />
-            <Route path="/parent/trust/places"  element={<TrustPlacesPage     />} />
+            <Route path="/parent/trust"             element={<ParentTrustIndexPage />} />
+            <Route path="/parent/trust/people"      element={<TrustPeoplePage     />} />
+            <Route path="/parent/trust/places"      element={<TrustPlacesPage     />} />
+            <Route path="/parent/trust/diagnostics" element={<ParentTrustDiagnosticsPage />} />
             <Route path="/parent/groups/invite/:host/:gid/:code" element={<GroupInviteLandingPage />} />
             <Route path="/parent/groups/:addr"  element={<GroupViewPage       />} />
             <Route path="/parent/alerts"        element={<ParentAlertsPage    />} />

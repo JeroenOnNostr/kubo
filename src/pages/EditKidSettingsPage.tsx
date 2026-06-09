@@ -22,6 +22,8 @@ import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
 import type { KidSettings } from '@/hooks/useKuboFamily';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 /**
  * /parent/kid-settings — per-kid knobs for whichever kid is the active signer.
@@ -33,7 +35,9 @@ import { useDebounce } from '@/hooks/useDebounce';
 export function EditKidSettingsPage() {
   const nav = useNavigate();
   const kid = useSelectedKid();
-  const { feedSettings } = useFeedSettings();
+  const { feedSettings, updateFeedSettings } = useFeedSettings();
+  const { updateSettings: updateEncryptedSettings } = useEncryptedSettings();
+  const { user } = useCurrentUser();
 
   const [age, setAge]             = useState(6);
   const [dailyLimit, setDaily]    = useState(45); // minutes
@@ -350,6 +354,39 @@ export function EditKidSettingsPage() {
             saveField({ nextPostButton: v });
           }}
           aria-label={`"Next post" button`}
+        />
+      </div>
+
+      {/* TEPP integration — family-wide flag, surfaced here because parents
+          are configuring kid behaviour. Off keeps the existing on-device
+          trust UI; on publishes assignments as Nostr events and gates the
+          kid feed/actions through them. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <Label className="flex items-center gap-2">
+            Publish trust as TEPP events
+            <span className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+              experimental · all kids
+            </span>
+          </Label>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            On: trust assignments publish as Nostr events and gate what every
+            kid in this family can see and do. Off: assignments stay on this
+            device only. First-boot migrates existing assignments and seeds an
+            unassigned kid from their follow list.
+          </p>
+        </div>
+        <Switch
+          checked={!!feedSettings.featureTepp}
+          onCheckedChange={async (v) => {
+            updateFeedSettings({ featureTepp: v });
+            if (user) {
+              await updateEncryptedSettings.mutateAsync({
+                feedSettings: { ...feedSettings, featureTepp: v },
+              }).catch(() => {});
+            }
+          }}
+          aria-label="Publish trust as TEPP events"
         />
       </div>
 

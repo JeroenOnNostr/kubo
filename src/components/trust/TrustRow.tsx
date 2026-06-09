@@ -24,6 +24,14 @@ interface TrustRowProps {
    * radius so an expand panel rendered directly below reads as a continuation.
    */
   expanded?: boolean;
+  /**
+   * When true, dim the row and show a `restrictionLabel` pill — this
+   * pubkey is denied by the active kid's TEPP construct (blacklist,
+   * global restriction, or no admission).
+   */
+  restricted?: boolean;
+  /** Short pill label shown when `restricted` is true ("Blacklisted", "Restricted", …). */
+  restrictionLabel?: string;
 }
 
 const LEVEL_DOT: Record<TrustLevel, string> = {
@@ -46,10 +54,14 @@ const LEVEL_DOT: Record<TrustLevel, string> = {
  */
 export function TrustRow({
   avatar, avatarBg, name, subtitle, level, onClick, onProfileClick, expanded = false,
+  restricted = false, restrictionLabel,
 }: TrustRowProps) {
   const avatarEl = (
     <div
-      className="size-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
+      className={cn(
+        'size-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0',
+        restricted && 'opacity-60',
+      )}
       style={avatarBg ? { backgroundColor: avatarBg } : undefined}
       aria-hidden
     >
@@ -57,9 +69,24 @@ export function TrustRow({
     </div>
   );
 
+  const restrictionPill = restricted ? (
+    <span
+      className={cn(
+        'ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide',
+        'bg-destructive/15 text-destructive flex-shrink-0',
+      )}
+      title={restrictionLabel ?? 'Restricted'}
+    >
+      {restrictionLabel ?? 'Restricted'}
+    </span>
+  ) : null;
+
   const nameEl = (
-    <div className="flex-1 min-w-0">
-      <div className="text-sm font-semibold truncate">{name}</div>
+    <div className={cn('flex-1 min-w-0', restricted && 'opacity-60')}>
+      <div className="text-sm font-semibold truncate flex items-center">
+        <span className="truncate">{name}</span>
+        {restrictionPill}
+      </div>
       {subtitle && (
         <div className="text-[11px] text-muted-foreground truncate">{subtitle}</div>
       )}

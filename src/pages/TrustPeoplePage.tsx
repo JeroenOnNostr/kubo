@@ -9,6 +9,7 @@ import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { TrustFollowRow } from '@/components/trust/TrustFollowRow';
 import { TrustLegend } from '@/components/trust/TrustLegend';
 import { TrustSection } from '@/components/trust/TrustSection';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthors } from '@/hooks/useAuthors';
 import { useKuboFamily, type KuboTrustLevel } from '@/hooks/useKuboFamily';
 import type { SearchProfile } from '@/hooks/useSearchProfiles';
@@ -171,6 +172,7 @@ export function TrustHeader({
   active: 'people' | 'places';
 }) {
   const nav = useNavigate();
+  const { config } = useAppContext();
 
   return (
     <>
@@ -189,6 +191,17 @@ export function TrustHeader({
           Places
         </SegButton>
       </div>
+      {/* Diagnostics link — only when TEPP is on. Helps the parent see why
+          trust assignments aren't filtering the kid feed. */}
+      {config.feedSettings.featureTepp && (
+        <button
+          type="button"
+          onClick={() => nav('/parent/trust/diagnostics')}
+          className="self-end text-[11px] text-muted-foreground hover:text-primary underline-offset-2 hover:underline"
+        >
+          Diagnostics →
+        </button>
+      )}
     </>
   );
 }

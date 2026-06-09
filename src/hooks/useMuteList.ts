@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent, NostrFilter, NostrSigner } from '@nostrify/nostrify';
@@ -315,9 +316,17 @@ export function useMuteList() {
     return items.filter((item) => item.type === 'thread').map((item) => item.value);
   };
 
+  // Stable reference: `muteItems.data || []` would allocate a fresh empty
+  // array on every render, and consumers feed `muteItems` into `useMemo`
+  // dependency arrays (e.g. KidFeedList's feed-item memo). An unstable empty
+  // array there recomputes the memo every render, whose result drives a
+  // setState effect → "Maximum update depth exceeded". Memoize so the empty
+  // case is referentially stable.
+  const muteItemsList = useMemo(() => muteItems.data ?? [], [muteItems.data]);
+
   return {
     muteList: query.data,
-    muteItems: muteItems.data || [],
+    muteItems: muteItemsList,
     isLoading: query.isLoading || muteItems.isLoading,
     isError: query.isError || muteItems.isError,
     error: query.error || muteItems.error,

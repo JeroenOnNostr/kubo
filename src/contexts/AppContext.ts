@@ -192,6 +192,8 @@ export interface FeedSettings {
   showWikipedia: boolean;
   /** Show the Bluesky bridge sidebar entry. */
   showBluesky: boolean;
+  /** TEPP (Trust Extension Permission Protocol) integration. Default off; see kubo/docs/tepp-integration.md. */
+  featureTepp: boolean;
 }
 
 /**

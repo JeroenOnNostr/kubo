@@ -112,6 +112,7 @@ export function TestApp({ children }: TestAppProps) {
       showArchive: false,
       showWikipedia: false,
       showBluesky: false,
+      featureTepp: false,
     },
     sidebarOrder: [],
     nip85StatsPubkey:

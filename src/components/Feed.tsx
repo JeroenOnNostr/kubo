@@ -30,6 +30,7 @@ import { getEnabledFeedKinds } from '@/lib/extraKinds';
 import { diversifyFeedPages } from '@/lib/feedDiversity';
 import { isRepostKind, shouldHideFeedEvent } from '@/lib/feedUtils';
 import { isEventMuted } from '@/lib/muteHelpers';
+import { useKuboTeppFeedFilter } from '@/hooks/useKuboTeppFeedFilter';
 import { SubHeaderBar } from '@/components/SubHeaderBar';
 import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import { TabButton } from '@/components/TabButton';
@@ -164,6 +165,20 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     isFetchingNextPage,
   } = activeQuery;
 
+  // Seed events for the TEPP reference-closure prefetch (so replies/quotes
+  // evaluate to a concrete verdict instead of `pending`). Flatten both query
+  // shapes to raw events before any filtering.
+  const teppSeedEvents = useMemo<import('@nostrify/nostrify').NostrEvent[]>(() => {
+    if (!rawData?.pages) return [];
+    if (useDittoQuery) {
+      return (rawData.pages as unknown as import('@nostrify/nostrify').NostrEvent[][]).flat();
+    }
+    return (rawData.pages as unknown as { items: FeedItem[] }[])
+      .flatMap((page) => page.items)
+      .map((item) => item.event);
+  }, [rawData?.pages, useDittoQuery]);
+  const teppFilter = useKuboTeppFeedFilter(teppSeedEvents);
+
   // Auto-fetch page 2 as soon as page 1 arrives for smoother scrolling
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage && rawData?.pages?.length === 1) {
@@ -199,6 +214,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
               seen.add(event.id);
               if (shouldHideFeedEvent(event)) return false;
               if (muteItems.length > 0 && isEventMuted(event, muteItems)) return false;
+              if (teppFilter.enabled && !teppFilter.shouldShow(event)) return false;
               return true;
             })
             .map((event): FeedItem => ({ event, sortTimestamp: event.created_at })),
@@ -218,9 +234,10 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
         seen.add(key);
         if (shouldHideFeedEvent(item.event)) return false;
         if (muteItems.length > 0 && isEventMuted(item.event, muteItems)) return false;
+        if (teppFilter.enabled && !teppFilter.shouldShow(item.event)) return false;
         return true;
       });
-  }, [rawData?.pages, muteItems, useDittoQuery]);
+  }, [rawData?.pages, muteItems, useDittoQuery, teppFilter]);
 
   // Show skeletons while loading, but not if the curator list query errored
   // (that would leave logged-out users staring at infinite skeletons).
@@ -395,6 +412,15 @@ function SavedFeedContent({ feed }: { feed: SavedFeed }) {
 
   const isLoading = isResolving || isFeedLoading;
 
+  const teppSeedEvents = useMemo<import('@nostrify/nostrify').NostrEvent[]>(
+    () =>
+      (rawData?.pages ?? [])
+        .flatMap((page) => page.items)
+        .map((item) => item.event),
+    [rawData?.pages],
+  );
+  const teppFilter = useKuboTeppFeedFilter(teppSeedEvents);
+
   // Prefix key -- usePageRefresh does prefix matching, so this invalidates
   // the full ['tab-feed', tabKey, kindsKey, authorsKey, searchKey] used by useTabFeed.
   const queryKey = useMemo(
@@ -422,9 +448,10 @@ function SavedFeedContent({ feed }: { feed: SavedFeed }) {
         seen.add(key);
         if (shouldHideFeedEvent(item.event)) return false;
         if (muteItems.length > 0 && isEventMuted(item.event, muteItems)) return false;
+        if (teppFilter.enabled && !teppFilter.shouldShow(item.event)) return false;
         return true;
       });
-  }, [rawData?.pages, muteItems]);
+  }, [rawData?.pages, muteItems, teppFilter]);
 
   if (isLoading && feedItems.length === 0) {
     return (
@@ -491,11 +518,16 @@ function HashtagFeedContent({ tag }: { tag: string }) {
     },
   });
 
+  const teppFilter = useKuboTeppFeedFilter(events);
+
   const filteredEvents = useMemo((): NostrEvent[] => {
     if (!events) return [];
-    if (muteItems.length === 0) return events;
-    return events.filter((e) => !isEventMuted(e, muteItems));
-  }, [events, muteItems]);
+    return events.filter((e) => {
+      if (muteItems.length > 0 && isEventMuted(e, muteItems)) return false;
+      if (teppFilter.enabled && !teppFilter.shouldShow(e)) return false;
+      return true;
+    });
+  }, [events, muteItems, teppFilter]);
 
   if (isLoading && filteredEvents.length === 0) {
     return (
@@ -549,11 +581,16 @@ function GeotagFeedContent({ tag }: { tag: string }) {
     },
   });
 
+  const teppFilter = useKuboTeppFeedFilter(events);
+
   const filteredEvents = useMemo((): NostrEvent[] => {
     if (!events) return [];
-    if (muteItems.length === 0) return events;
-    return events.filter((e) => !isEventMuted(e, muteItems));
-  }, [events, muteItems]);
+    return events.filter((e) => {
+      if (muteItems.length > 0 && isEventMuted(e, muteItems)) return false;
+      if (teppFilter.enabled && !teppFilter.shouldShow(e)) return false;
+      return true;
+    });
+  }, [events, muteItems, teppFilter]);
 
   if (isLoading && filteredEvents.length === 0) {
     return (

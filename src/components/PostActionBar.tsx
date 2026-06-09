@@ -13,6 +13,7 @@ import { useEventStats } from '@/hooks/useTrending';
 import { useActionVisibility } from '@/hooks/useActionVisibility';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { useToast } from '@/hooks/useToast';
+import { useTrustRequests } from '@/hooks/useTrustRequests';
 import { canZap } from '@/lib/canZap';
 import { formatNumber } from '@/lib/formatNumber';
 import { shareOrCopy } from '@/lib/share';
@@ -39,8 +40,30 @@ export function PostActionBar({
   const shareOrigin = useShareOrigin();
   const author = useAuthor(event.pubkey);
   const metadata = author.data?.metadata;
-  const av = useActionVisibility();
+  const av = useActionVisibility(event);
   const canZapAuthor = av.showZap && user && canZap(metadata);
+
+  // TEPP-denied request flow: when the verdict says the kid can VIEW but not
+  // INTERACT, surface a "Request to interact" CTA. Profile-side
+  // `RequestInteractButton` shares the same hook so state stays consistent.
+  const teppVerdict = av.teppVerdict;
+  const teppDeniedInteraction = !!teppVerdict
+    && teppVerdict.visible
+    && !teppVerdict.canInteract;
+  const trustRequests = useTrustRequests(user?.pubkey);
+  const handleRequestInteract = useCallback(async () => {
+    if (!user) return;
+    try {
+      await trustRequests.request(event.pubkey);
+      toast({ title: 'Asked your parent for permission' });
+    } catch (err) {
+      toast({
+        title: 'Could not send the request',
+        description: err instanceof Error ? err.message : String(err),
+        variant: 'destructive',
+      });
+    }
+  }, [user, event.pubkey, trustRequests, toast]);
 
   const { data: stats } = useEventStats(event.id, event);
   const repostTotal = (stats?.reposts ?? 0) + (stats?.quotes ?? 0);
@@ -61,10 +84,28 @@ export function PostActionBar({
   }, [event, toast, shareOrigin]);
 
   const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
-  if (!anyButtonVisible) return null;
+  // When TEPP denies interaction with a view-only author, surface the
+  // request CTA even when no other buttons are visible.
+  if (!anyButtonVisible && !teppDeniedInteraction) return null;
 
   return (
     <div className={`flex items-center justify-between py-1 border-t border-b border-border${className ? ` ${className}` : ''}`}>
+      {/* TEPP request CTA — shown only when the kid is allowed to view the
+          author but not to interact, and the parent has not already granted. */}
+      {teppDeniedInteraction && !trustRequests.hasPending(event.pubkey) && (
+        <button
+          type="button"
+          onClick={handleRequestInteract}
+          className="text-xs text-muted-foreground hover:text-primary underline px-2"
+          title="Tap to ask your parent if you can interact with this creator."
+        >
+          Ask to interact
+        </button>
+      )}
+      {teppDeniedInteraction && trustRequests.hasPending(event.pubkey) && (
+        <span className="text-xs text-muted-foreground px-2">Request pending…</span>
+      )}
+
       {/* Reply / Comments */}
       {av.showReply && (
         <button

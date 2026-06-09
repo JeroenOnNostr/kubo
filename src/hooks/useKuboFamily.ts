@@ -116,6 +116,33 @@ export interface KuboFamily {
    * coachmark tour. Unset = tour has not run yet.
    */
   coachmarksCompletedAt?: number;
+  /**
+   * TEPP integration (feedSettings.featureTepp). Unix-ms timestamp of when
+   * the migration completed for this family. Unset = migration has not
+   * finished yet (will run on next boot when featureTepp is on).
+   */
+  teppMigratedAt?: number;
+  /**
+   * Persisted migration plan so partial migrations resume on reload. Cleared
+   * once `teppMigratedAt` is set.
+   */
+  teppMigrationPlan?: import('@/lib/teppMigration').TeppMigrationPlan;
+  /**
+   * Per-kid, per-tier event ids of the most recently published TEPP
+   * permission events. Used by `useTrustAssignments.setLevel/clear` to
+   * re-publish the kid's state event with the current set of public-ref
+   * permissions. Without this, a new permission event is on the wire but
+   * the construct's permission walk only sees old refs.
+   */
+  teppLatestPermissionIds?: {
+    [kidPubkey: string]: {
+      view?: string;
+      interact?: string;
+      extend?: string;
+      viewRelay?: string;
+      interactRelay?: string;
+    };
+  };
 }
 
 /**
@@ -304,6 +331,48 @@ export async function clearTrustLevel(
     ...current,
     trustAssignments: { ...assignments, [kidPubkey]: rest },
   });
+}
+
+/** Permission-id tiers tracked under `family.teppLatestPermissionIds[kid]`. */
+export type TeppPermissionTier =
+  | 'view'
+  | 'interact'
+  | 'extend'
+  | 'viewRelay'
+  | 'interactRelay';
+
+/**
+ * Atomically record the latest TEPP permission event id for a kid/tier.
+ *
+ * Reads the LATEST persisted family (via `readLatest`) and merges onto it,
+ * rather than a caller-supplied closure-captured snapshot. The trust-assignment
+ * flow writes `trustAssignments` first (setTrustLevel/clearTrustLevel) and then
+ * records the published permission id; merging onto a stale render snapshot
+ * here would clobber that just-written assignment back to its pre-write state
+ * (localStorage `trustAssignments` ends up undefined → the People list shows
+ * nothing and `clear`'s `previousLevel` guard then publishes no revocation).
+ * Going through `readLatest` also closes the two-rapid-clicks concurrent-write
+ * race that a memory-snapshot read would leave open. (KUBO-134 / KUBO-135)
+ */
+export async function recordTeppPermissionId(
+  kidPubkey: string,
+  tier: TeppPermissionTier,
+  eventId: string,
+): Promise<KuboFamily | null> {
+  const current = await readLatest();
+  if (!current) return null;
+  const next: KuboFamily = {
+    ...current,
+    teppLatestPermissionIds: {
+      ...(current.teppLatestPermissionIds ?? {}),
+      [kidPubkey]: {
+        ...(current.teppLatestPermissionIds?.[kidPubkey] ?? {}),
+        [tier]: eventId,
+      },
+    },
+  };
+  await writeAndNotify(next);
+  return next;
 }
 
 export async function setRelayTrustLevel(

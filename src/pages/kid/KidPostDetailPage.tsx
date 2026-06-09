@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
@@ -9,6 +9,7 @@ import { useAddrEvent, useEvent } from '@/hooks/useEvent';
 import { useComments } from '@/hooks/useComments';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { useKuboTeppEvaluateEvent } from '@/hooks/useKuboTeppEvaluateEvent';
 import { useKidLayoutOptions } from '@/contexts/KuboKidLayoutContext';
 import { useProfileMedia } from '@/hooks/useProfileMedia';
 import { parseImetaMap, type ImetaEntry } from '@/lib/imeta';
@@ -69,6 +70,22 @@ export function KidPostDetailPage() {
     decoded?.kind === 'addr' ? addrQuery.data : eventQuery.data;
   const isLoading =
     decoded?.kind === 'addr' ? addrQuery.isLoading : eventQuery.isLoading;
+
+  // TEPP deep-link guard: if the active user is a kid AND the construct denies
+  // visibility for this event (blacklisted author, no admit, etc.), bounce out
+  // before rendering. The feed filter normally hides this — this catches the
+  // case where the kid has a direct link to a denied post.
+  const activePubkey = user?.pubkey;
+  const activeIsKid = !!activePubkey && !!family?.kids.some((k) => k.pubkey === activePubkey);
+  const teppVerdict = useKuboTeppEvaluateEvent(
+    event ?? undefined,
+    activeIsKid ? activePubkey : undefined,
+  );
+  useEffect(() => {
+    if (!event) return;
+    if (!activeIsKid) return;
+    if (teppVerdict.raw && !teppVerdict.visible) nav(-1);
+  }, [event, activeIsKid, teppVerdict, nav]);
 
   const author = useAuthor(event?.pubkey);
   const meta = author.data?.metadata;

@@ -60,10 +60,13 @@ export function NextPostFAB({
     onAdvance();
     setCooldownStartedAt(Date.now());
     // Double-rAF: wait for React to commit the new cap (which paints the
-    // newly-unlocked post at full height) before measuring its position.
+    // newly-unlocked posts at full height) before measuring position.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const el = getPostElement(unlockedCount);
+        // KidHomePage advances by 2 posts per tap; we land on the SECOND
+        // newly-unlocked post (idx = pre-advance unlockedCount + 1) so the
+        // first one sits just above the viewport, ready to scroll back to.
+        const el = getPostElement(unlockedCount + 1);
         if (!el) return;
         const target =
           el.getBoundingClientRect().top + window.scrollY - KID_FEED_PEEK_PX;

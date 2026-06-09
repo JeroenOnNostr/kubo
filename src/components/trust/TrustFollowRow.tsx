@@ -6,6 +6,7 @@ import { TrustAssignmentBar } from '@/components/trust/TrustAssignmentBar';
 import { TrustRow } from '@/components/trust/TrustRow';
 import { useAuthor } from '@/hooks/useAuthor';
 import { type KuboTrustLevel } from '@/hooks/useKuboFamily';
+import { useKuboTeppEvaluateAuthor } from '@/hooks/useKuboTeppEvaluateAuthor';
 import { genUserName } from '@/lib/genUserName';
 
 interface TrustFollowRowProps {
@@ -35,6 +36,7 @@ export const TrustFollowRow = memo(function TrustFollowRow({
 }: TrustFollowRowProps) {
   const nav = useNavigate();
   const { data: author } = useAuthor(pubkey);
+  const teppVerdict = useKuboTeppEvaluateAuthor(pubkey, kidPubkey);
   const [expanded, setExpanded] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +72,16 @@ export const TrustFollowRow = memo(function TrustFollowRow({
         name={displayName}
         level={assigned}
         expanded={expanded}
+        restricted={!teppVerdict.visible}
+        restrictionLabel={
+          teppVerdict.visible
+            ? undefined
+            : teppVerdict.layer === 'blacklist'
+              ? 'Blacklisted'
+              : teppVerdict.layer === 'global'
+                ? 'Restricted'
+                : 'Not admitted'
+        }
         onClick={() => setExpanded((e) => !e)}
         onProfileClick={() => nav(`/parent/profile/${nip19.npubEncode(pubkey)}`)}
       />

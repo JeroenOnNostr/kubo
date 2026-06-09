@@ -53,6 +53,14 @@ export default tseslint.config(
     },
   },
   {
+    // Vendored TEPP pure-logic files. Never edited locally — see src/lib/tepp/SOURCE.md.
+    // Disable lint rules that would otherwise force edits to upstream code.
+    files: ["src/lib/tepp/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
     files: ["**/*.html"],
     plugins: {
       "@html-eslint": htmlEslint,

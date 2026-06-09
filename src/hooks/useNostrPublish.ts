@@ -5,6 +5,8 @@ import type { NUser } from "@nostrify/react/login";
 
 import { useAppContext } from "./useAppContext";
 import { useCurrentUser } from "./useCurrentUser";
+import { useKuboTeppGate } from "./useKuboTeppGate";
+import { useKuboFamily } from "./useKuboFamily";
 import { sendToInboxRelays } from "@/lib/inboxRelays";
 
 import type { NostrEvent } from "@nostrify/nostrify";
@@ -66,6 +68,8 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const { family } = useKuboFamily();
+  const teppGate = useKuboTeppGate();
 
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
@@ -74,6 +78,27 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
       // pin publishes to the parent identity (see useParentSigner).
       const effectiveUser = t.signer ?? user;
       if (effectiveUser) {
+        // TEPP gate: when the *effective* signer is a kid in the family,
+        // run the template through the construct's outbound evaluator. The
+        // gate is a no-op when featureTepp is off, no construct is loaded,
+        // or the effective signer isn't a kid (e.g. parent posting).
+        const isKidSigner = !!family?.kids.some((k) => k.pubkey === effectiveUser.pubkey);
+        if (isKidSigner && teppGate.enabled) {
+          // teppGate is bound to the *active* useCurrentUser. If the
+          // effective signer differs from the active user (rare — group ops
+          // explicitly pass a parent signer), we skip the gate to avoid
+          // false denies. Phase 5 covers the active-kid-publishing case;
+          // active-parent-with-kid-as-explicit-signer is out of scope.
+          if (effectiveUser.pubkey === user?.pubkey) {
+            await teppGate.gate({
+              kind: t.kind,
+              content: t.content ?? '',
+              tags: t.tags ?? [],
+              pubkey: effectiveUser.pubkey,
+              created_at: t.created_at ?? Math.floor(Date.now() / 1000),
+            });
+          }
+        }
         // Extract `prev` and `signer` before building the event — neither is part of the Nostr event schema.
         const { prev, signer: _signer, ...template } = t;
         const tags = [...(template.tags ?? [])];

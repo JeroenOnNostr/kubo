@@ -202,6 +202,8 @@ export const FeedSettingsSchema = z.looseObject({
   showArchive: z.boolean().optional(),
   showWikipedia: z.boolean().optional(),
   showBluesky: z.boolean().optional(),
+  // TEPP integration. Default off; flips on per-family/per-kid in Phase 7.
+  featureTepp: z.boolean().optional(),
 });
 
 /** Schema for a NIP-01 filter object (lenient — allows variable placeholder strings). */
