@@ -117,7 +117,11 @@ export function GroupViewPage() {
   // Z-index sits below the nav (40) and below dialogs (250).
   return (
     <div
-      className="flex flex-col bg-background pt-2 z-10"
+      className="fixed inset-x-0 flex flex-col bg-background pt-2 z-10"
+      style={{
+        top: 'calc(env(safe-area-inset-top, 0px) + 3rem)',
+        bottom: 'calc(var(--bottom-nav-height, 2.75rem) + 28px + env(safe-area-inset-bottom, 0px))',
+      }}
     >
       {/* Top bar */}
       <div className="flex items-center gap-2 px-4 flex-shrink-0">
