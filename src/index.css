@@ -10,7 +10,6 @@
     /* Mobile chrome dimensions — referenced by layout utility classes below */
     --top-bar-height: 2.5rem;   /* MobileTopBar h-10 = 40px */
     --bottom-nav-height: 2.75rem; /* MobileBottomNav h-11 = 44px */
-    @apply max-w-sm mx-auto;
   }
 
   .dark {

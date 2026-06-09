@@ -30,7 +30,7 @@ export function KuboKidBottomNav({ showBlobbi = false }: KuboKidBottomNavProps) 
 
   return (
     <nav
-      className="max-w-sm mx-auto fixed bottom-0 left-0 right-0 z-40"
+      className="fixed bottom-0 left-0 right-0 z-40"
       style={{ background: '#142E6B', borderTop: '1px solid rgba(255,255,255,0.08)' }}
     >
       <div className="h-14 flex items-center">
