@@ -67,15 +67,17 @@ export function KidHomePage() {
   const nextPostButtonOn = !!kidSettings?.nextPostButton;
 
   // KUBO-063: scroll-cap state for the "Next post" FAB. `unlockedCount`
-  // starts at 1 (just post 0 visible) and only grows. It's passed into
-  // KidFeedList as `capAtIndex` — see that component for the clipping
-  // logic that makes the cap a hard wall without a scroll listener.
-  const [unlockedCount, setUnlockedCount] = useState(1);
+  // starts at 2 (posts 0 and 1 visible) and only grows — each tap reveals
+  // more posts. It's passed into KidFeedList as `capAtIndex` — see that
+  // component for the clipping logic that makes the cap a hard wall
+  // without a scroll listener.
+  const INITIAL_UNLOCKED_COUNT = 2;
+  const [unlockedCount, setUnlockedCount] = useState(INITIAL_UNLOCKED_COUNT);
   // Reset the cap whenever the active signer changes (e.g. parent swaps
   // to a different kid via signer-swap, or a kid logs in). Without this
   // the next kid starts with the previous kid's progress already unlocked.
   useEffect(() => {
-    setUnlockedCount(1);
+    setUnlockedCount(INITIAL_UNLOCKED_COUNT);
     window.scrollTo(0, 0);
   }, [user?.pubkey]);
   const postRefs = useRef<(HTMLElement | null)[]>([]);
