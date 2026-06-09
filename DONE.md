@@ -4,6 +4,26 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-06-09
+
+- **KUBO-134: Drop :root max-w-sm constraint + nav width hints** (`7bac1fa8`)
+  Sebastian's PR #1 ([a2e7b70e](https://github.com/JeroenOnNostr/kubo/pull/1)) applied `@apply max-w-sm mx-auto` to `:root` (which is `<html>`) and added compensating `max-w-sm mx-auto` to both bottom navs. Setting max-width on the viewport's containing block doesn't center content, and `position: fixed` descendants ignore it — hence the duplicate hint on the navs. User-visible symptom: the whole app squeezed into a ~384px column with empty bands on either side. Reverted both: dropped the `:root` `@apply` in [index.css](src/index.css), removed the `max-w-sm mx-auto` from [KuboBottomNav.tsx](src/components/KuboBottomNav.tsx) and [KuboKidBottomNav.tsx](src/components/KuboKidBottomNav.tsx). The codebase already has the right primitive for column-on-desktop at [MainLayout.tsx:91](src/components/MainLayout.tsx#L91) (`sidebar:max-w-[600px]` on the content column).
+
+- **KUBO-135: Restore sidebar:hidden on parent bottom nav** (`eca62351`)
+  PR #1 dropped the `sidebar:hidden` modifier from [KuboBottomNav](src/components/KuboBottomNav.tsx). The `sidebar:` variant is a 900px breakpoint ([tailwind.config.ts:23](tailwind.config.ts#L23)) — every other piece of mobile chrome in the codebase ([MobileBottomNav.tsx:59](src/components/MobileBottomNav.tsx#L59), [MobileTopBar.tsx:27](src/components/MobileTopBar.tsx#L27), [PageHeader.tsx:31](src/components/PageHeader.tsx#L31)) uses `sidebar:hidden` so the desktop `MainLayout` sidebar takes over without double-rendering mobile chrome.
+
+- **KUBO-136: Restore fixed wrapper on GroupViewPage so chat scroll works** (`cd33129e`)
+  PR #1 dropped the outer wrapper's `fixed inset-x-0` positioning and inline `top`/`bottom` calc that locked the page to the visible viewport area. The chat tab at [GroupChatTab.tsx:232-233](src/components/groups/GroupChatTab.tsx#L232-L233) uses `flex-1 + min-h-0 + overflow-y-auto`, which only produces a bounded scroll area when the parent's height is bounded. Without the wrapper the message list grows unbounded, extends `<main>`, and the composer drifts behind the bottom nav once you scroll. The original inline comment block at [GroupViewPage.tsx:106-117](src/pages/GroupViewPage.tsx#L106-L117) explained exactly this rationale; PR #1 removed both the code and the explanation. Restored both.
+
+- **KUBO-137: Restore bg-primary on group avatar fallbacks + trailing comma** (`2297aa5b`)
+  PR #1 dropped `bg-primary` from the size-12 fallback avatar in [GroupAboutTab.tsx](src/components/groups/GroupAboutTab.tsx) and the size-9 header avatar in [GroupViewPage.tsx](src/pages/GroupViewPage.tsx). When a group has no picture, those divs render the group's first letter as `text-primary-foreground` (light) — without `bg-primary` it sits on `bg-background` and disappears or has poor contrast in dark mode. The intended pattern is preserved at [SuggestedGroupTile.tsx:82](src/components/groups/SuggestedGroupTile.tsx#L82). Also restored the trailing comma after `'wss://relay.kubo.watch/'` in `NIP29_RELAYS` for `as const`-array style consistency.
+
+- **KUBO-138: Restore dev:true on rollup native-binary lockfile entries** (`d16c8f91`)
+  PR #1 stripped `"dev": true` from 25 rollup optional native-binary entries in [package-lock.json](package-lock.json) — artifact of `npm install --omit=dev` running in Sebastian's environment. Regenerated with a clean `npm install` (full devDependencies) to restore the markers.
+
+- **PR #1 merged + retained, regressions fixed on top** (`a2e7b70e` merge / `0ca5d4ff` reapply / `7bac1fa8`–`d16c8f91` fixes)
+  Sebastian's [PR #1](https://github.com/JeroenOnNostr/kubo/pull/1) moved the testers group from `groups.0xchat.com'kubo-testers` to a self-hosted `relay.kubo.watch'meycharghge` (the part we actually wanted) but bundled four UI regressions (KUBO-134/135/136/137 above). Session arc: reviewed → merged on GitHub → reverted locally to test pre-PR state → reverted-the-revert to restore Sebastian's content → KUBO-134–138 fixed the regressions on top. Sebastian's relay/group swap remains live. Local brand/main needs to be pushed to origin before others pull (origin is still at `a2e7b70e`).
+
 ## 2026-05-07
 
 - **KUBO-122: Use APP_RELAYS as nostrconnect fallback** (`809bb326`, cherry-pick of upstream Ditto's `9090ecfa`; shipped in v0.4.4)
