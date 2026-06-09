@@ -88,6 +88,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { YouTubeEmbed } from "@/components/YouTubeEmbed";
 import { extractYouTubeEmbedInfo } from "@/lib/linkEmbed";
 import { isYouTubeUrl } from "@/lib/videoEvent";
+import { KID_TILE_ROUNDING } from "@/lib/kidFeedLayout";
 import { VoiceMessagePlayer } from "@/components/VoiceMessagePlayer";
 import { ZapDialog } from "@/components/ZapDialog";
 import { useAppContext } from "@/hooks/useAppContext";
@@ -363,6 +364,11 @@ export const NoteCard = memo(function NoteCard({
   // Check if the current user can zap this event's author
   const canZapAuthor = av.showZap && user && canZap(metadata);
 
+  // Whether any action button (reply/repost/react/zap/share/more) renders below
+  // the content. Drives the full-bleed video-card bottom treatment below.
+  const anyButtonVisible =
+    av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
+
   const { onClick: openPost, onAuxClick: auxOpenPost } = useOpenPost(
     `/${encodedId}`,
   );
@@ -433,6 +439,23 @@ export const NoteCard = memo(function NoteCard({
   const isNormalVideo = event.kind === 21;
   const isShortVideo = event.kind === 22;
   const isVideo = isNormalVideo || isShortVideo;
+
+  // Full-bleed video card (kind 21/22) with no action row beneath it — e.g. a
+  // kid feed where all interaction buttons are toggled off. In that case the
+  // player is treated as the LAST element: it sits flush with the tile bottom
+  // (corners rounded to match, card bottom padding dropped) instead of leaving
+  // an empty band of card padding below it. When any button IS visible we keep
+  // the previous layout: buttons below the player and the card extends past it.
+  //
+  // ASSUMPTION (load-bearing): when no action buttons render, nothing else
+  // renders below VideoContent inside the <article> either — the description
+  // and hashtags are the only other candidates, and both are hidden in the kid
+  // feed (description via the [data-kubo-hide-video-desc] CSS rule, hashtags via
+  // the showHashtags toggle). If you ever add a footer element below the video
+  // (e.g. a "watched 3m ago" line), this flag will make the player sit flush
+  // against THAT instead of the tile bottom — gate it on that element's absence
+  // too, or switch to measuring whether the video is the last child.
+  const isFullBleedVideoCard = isVideo && !compact && !anyButtonVisible;
   const isMusicTrack = event.kind === 36787;
   const isMusicPlaylist = event.kind === 34139;
   const isPodcastEpisode = event.kind === 30054;
@@ -585,7 +608,7 @@ export const NoteCard = memo(function NoteCard({
         {isPhoto ? (
           <PhotoContent event={event} />
         ) : isVideo ? (
-          <VideoContent event={event} />
+          <VideoContent event={event} flushBottom={isFullBleedVideoCard} />
         ) : isVine ? (
           <>
             {vineTitle && (
@@ -766,7 +789,6 @@ export const NoteCard = memo(function NoteCard({
   );
 
   // ── Shared action buttons (used in all layouts) ──
-  const anyButtonVisible = av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
   const actionButtons = anyButtonVisible ? (
     <div className="flex items-center gap-5 mt-3 -ml-2">
       {av.showReply && (
@@ -1104,7 +1126,10 @@ export const NoteCard = memo(function NoteCard({
   return (
     <article
       className={cn(
-        "relative px-4 py-3 border-b border-border transition-colors overflow-hidden",
+        "relative px-4 border-b border-border transition-colors overflow-hidden",
+        // Drop bottom padding for a full-bleed video card so the player sits
+        // flush with the tile bottom (rounded to match); otherwise pad both ends.
+        isFullBleedVideoCard ? "pt-3 pb-0" : "py-3",
         !viewOnly && "hover:bg-secondary/30 cursor-pointer",
         highlight && "animate-highlight-fade",
         className,
@@ -1374,7 +1399,7 @@ function fmtDuration(seconds: string | undefined): string | undefined {
 }
 
 /** Inline video player for NIP-71 kind 21/22 events. */
-function VideoContent({ event }: { event: NostrEvent }) {
+function VideoContent({ event, flushBottom = false }: { event: NostrEvent; flushBottom?: boolean }) {
   const { url, thumbnail, duration, dim, blurhash } = useMemo(
     () => parseVideoImeta(event.tags),
     [event.tags],
@@ -1426,7 +1451,25 @@ function VideoContent({ event }: { event: NostrEvent }) {
       {title && <p className="font-semibold text-[15px]">{title}</p>}
       <div
         data-kubo-video
-        className="relative rounded-xl overflow-hidden bg-black"
+        className={cn(
+          // Full-bleed: break out of the card's px-4 so the player spans the
+          // tile's inner width (YouTube-Kids look).
+          //
+          // No bg-black here on purpose: both children (YouTubeEmbed's facade
+          // button and VideoPlayer) already paint their own black backing. A
+          // bg-black on THIS wrapper would peek through as a ~1px hairline along
+          // the bottom whenever the child's aspect-ratio box rounds to a
+          // fractional height shorter than this wrapper (visible once the player
+          // went full-bleed and the width — hence the rounded height — changed).
+          "relative -mx-4 overflow-hidden",
+          // When the player is the last element, round all four corners to the
+          // tile's radius (KID_TILE_ROUNDING, shared with KidFeedList) so the
+          // player's corners line up exactly with the tile's, and nudge -1px to
+          // hide the hairline so its bottom edge becomes the tile's bottom edge.
+          // Otherwise round all corners at the default radius (an action row /
+          // card padding sits below it, so the player floats inside the tile).
+          flushBottom ? cn(KID_TILE_ROUNDING, "-mb-px") : "rounded-xl",
+        )}
         onClickCapture={youtubeId ? handleFirstPlay : undefined}
       >
         {youtubeId ? (

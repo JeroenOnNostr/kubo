@@ -58,11 +58,16 @@ export function LinkEmbed({ url, className, navigateToComments, showActions = tr
   let embed: React.ReactNode;
 
   if (youtubeInfo) {
+    // Break the player out of the NoteCard's px-4 padding so it spans the full
+    // inner width of the surrounding tile, matching the YouTube-Kids feed look.
+    // The DiscussBar below keeps its normal padding (it sits outside this wrapper).
     embed = (
-      <YouTubeEmbed
-        videoId={youtubeInfo.id}
-        aspect={youtubeInfo.isShort ? 'short' : 'video'}
-      />
+      <div className="-mx-4 overflow-hidden">
+        <YouTubeEmbed
+          videoId={youtubeInfo.id}
+          aspect={youtubeInfo.isShort ? 'short' : 'video'}
+        />
+      </div>
     );
   } else if (tweetId) {
     embed = <TweetEmbed tweetId={tweetId} />;

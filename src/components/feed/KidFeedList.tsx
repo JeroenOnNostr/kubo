@@ -10,6 +10,7 @@ import { useKidFeed } from '@/hooks/useKidFeed';
 import { getKidSettings } from '@/hooks/useKuboFamily';
 import { useMuteList } from '@/hooks/useMuteList';
 import { shouldHideFeedEvent } from '@/lib/feedUtils';
+import { KID_TILE_ROUNDING } from '@/lib/kidFeedLayout';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
 import type { FeedItem } from '@/lib/feedUtils';
@@ -130,10 +131,12 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: Kid
 
   // Wrapper classes for the per-card chrome. NoteCard stays stock Ditto;
   // we only control the outer surround so the kid view can use its
-  // translucent-white-on-deep-blue aesthetic.
+  // translucent-white-on-deep-blue aesthetic. The kid tile's rounding comes
+  // from KID_TILE_ROUNDING (shared with NoteCard's full-bleed video player so
+  // their corners stay in lockstep).
   const cardWrapperClass =
     variant === 'kid'
-      ? 'rounded-2xl overflow-hidden bg-white/10'
+      ? cn(KID_TILE_ROUNDING, 'overflow-hidden bg-white/10')
       : 'rounded-2xl overflow-hidden bg-card';
 
   if (showSkeleton) {
