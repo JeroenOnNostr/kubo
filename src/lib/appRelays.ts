@@ -24,7 +24,7 @@ export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev';
 export const NIP29_RELAYS = [
   'wss://groups.0xchat.com/',
   'wss://relay.groups.nip29.com/',
-  'wss://relay.kubo.watch/'
+  'wss://relay.kubo.watch/',
 ] as const;
 
 /**

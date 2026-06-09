@@ -135,7 +135,7 @@ export function GroupViewPage() {
           <ChevronLeft className="size-5" />
         </Button>
         <div
-          className="size-9 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-primary-foreground text-[12px] font-semibold"
+          className="size-9 rounded-full flex-shrink-0 overflow-hidden bg-primary flex items-center justify-center text-primary-foreground text-[12px] font-semibold"
           aria-hidden
         >
           {group?.picture ? (
