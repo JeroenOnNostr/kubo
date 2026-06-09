@@ -103,34 +103,60 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
                 cross-origin (youtube-nocookie.com). Tap-to-play/pause still works
                 with controls hidden. Do NOT remove this without re-checking the
                 small-frame chrome (KUBO-141). */}
+            {/* Scale trick (KUBO-142): the SAME ~480x270 floor that bloats the
+                control bar also bloats the title bar, the YouTube/"Watch on"
+                wordmark, and the channel-avatar chip — controls=0 hides the bar
+                but leaves those, rendered at their fixed minimum px size, huge
+                relative to the ~353px on-screen frame. We can't size them via
+                CSS/DOM (cross-origin) and no URL param controls them
+                (showinfo/modestbranding are dead). So we render the iframe at 2x
+                the box (w/h-[200%]) — making YouTube think it's a ~706px player,
+                ABOVE the floor, so it lays out small/proportional chrome — then
+                scale-50 from the top-left corner shrinks the whole player (video
+                AND chrome together) back to exactly fill the inset-0 box. Net
+                rendered size = 200% * 0.5 = 100%, same framing as before, but the
+                chrome is now proportional. Higher internal res may bump YouTube's
+                quality tier slightly; transform is GPU-composited so ~free.
+                If chrome is still a touch large, raise both the 200% and the
+                inverse scale together (e.g. 250% + scale of 0.4). */}
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&controls=0`}
               title="YouTube video"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               sandbox="allow-scripts allow-same-origin allow-presentation"
-              className="absolute inset-0 w-full h-full -mb-px -mr-px"
+              className="absolute top-0 left-0 w-[200%] h-[200%] origin-top-left scale-50 -mb-px -mr-px"
             />
             {/* Kid-mode click-eaters covering YouTube's player UI tap targets
                 that would let the kid escape the parent-approved video:
-                the share / chain-icon button and the "More videos" pill on
-                the lower-left, and the YouTube wordmark on the lower-right.
-                Same defense layer as the existing Android nav guard, just
-                client-side for the actions that don't go through navigation
-                (clipboard write, in-iframe video swap).
-                Positioned above the red seek bar so play/pause (centre) and
-                the fullscreen toggle (bottom-right corner) stay tappable.
+                the share / chain-icon button (bottom-left), the "More videos"
+                button (bottom-centre), and the YouTube wordmark (bottom-right),
+                which all surface on tap/pause along the bottom row of the
+                player. Same defense layer as the existing Android nav guard,
+                just client-side for the actions that don't go through
+                navigation (clipboard write, in-iframe video swap).
+
+                After the KUBO-142 scale trick the chrome lays out across the
+                full bottom band (see screenshot in KUBO-143), so the masks are
+                percentage-based to track it. We mask the whole bottom ~28% of
+                the frame EXCEPT the extreme bottom-right corner, which stays
+                open for the fullscreen toggle. The centre play/pause button
+                sits at ~50% height, well above this band, so it stays tappable.
                 Transparent + cursor-default so the masks don't read as broken
                 UI. Only painted when the iframe is mounted (activated). */}
             {isKidMode && (
               <>
+                {/* Bottom band minus the bottom-right fullscreen corner: covers
+                    chain icon, "More videos", and the wordmark. */}
                 <div
-                  className="absolute left-0 right-[35%] bottom-[12%] h-12 z-10 cursor-default"
+                  className="absolute left-0 right-[18%] bottom-0 h-[28%] z-10 cursor-default"
                   onClick={(e) => e.stopPropagation()}
                   aria-hidden
                 />
+                {/* Right edge above the fullscreen corner: covers the upper part
+                    of the wordmark without blocking the fullscreen toggle. */}
                 <div
-                  className="absolute right-0 w-[30%] bottom-[12%] h-12 z-10 cursor-default"
+                  className="absolute right-0 w-[18%] bottom-[12%] h-[16%] z-10 cursor-default"
                   onClick={(e) => e.stopPropagation()}
                   aria-hidden
                 />
