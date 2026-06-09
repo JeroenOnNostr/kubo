@@ -67,10 +67,10 @@ export function KidHomePage() {
   const nextPostButtonOn = !!kidSettings?.nextPostButton;
 
   // KUBO-063: scroll-cap state for the "Next post" FAB. `unlockedCount`
-  // starts at 2 (posts 0 and 1 visible) and only grows — each tap reveals
-  // more posts. It's passed into KidFeedList as `capAtIndex` — see that
-  // component for the clipping logic that makes the cap a hard wall
-  // without a scroll listener.
+  // starts at 2 (posts 0 and 1 visible) and only grows in steps of 2 —
+  // each tap reveals two more posts. It's passed into KidFeedList as
+  // `capAtIndex` — see that component for the clipping logic that makes
+  // the cap a hard wall without a scroll listener.
   const INITIAL_UNLOCKED_COUNT = 2;
   const [unlockedCount, setUnlockedCount] = useState(INITIAL_UNLOCKED_COUNT);
   // Reset the cap whenever the active signer changes (e.g. parent swaps
@@ -193,7 +193,7 @@ export function KidHomePage() {
       {nextPostButtonOn && (
         <NextPostFAB
           unlockedCount={unlockedCount}
-          onAdvance={() => setUnlockedCount((n) => n + 1)}
+          onAdvance={() => setUnlockedCount((n) => n + 2)}
           getPostElement={getPostElement}
         />
       )}
