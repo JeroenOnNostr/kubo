@@ -30,6 +30,7 @@ export interface KidSettings {
   showReplyAction?: boolean;
   showRepostAction?: boolean;
   showReactionAction?: boolean;
+  /** @deprecated KUBO-102 — favorite is now always-on for kids; no longer read. */
   showFavoriteAction?: boolean;
   showZapAction?: boolean;
   showShareAction?: boolean;
@@ -505,10 +506,9 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   showReplyAction: false,
   showRepostAction: false,
   showReactionAction: false,
-  // Default-ON: the kid view's bottom navbar already shows a Favorites tab,
-  // so the in-feed star needs to be visible by default or the tab is permanently
-  // empty. The star is the one outbound write a kid can make even in viewOnly
-  // mode — it's a private (NIP-44 encrypted) list, no public footprint.
+  // @deprecated KUBO-102 — favorite is now unconditionally on for kids (the
+  // star is a private NIP-44 list, exempt from the TEPP interact-gate). This
+  // field is no longer read by useActionVisibility; kept true for back-compat.
   showFavoriteAction: true,
   showZapAction: false,
   showShareAction: false,

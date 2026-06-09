@@ -129,7 +129,7 @@ const hardcodedConfig: AppConfig = {
     showReplyAction: true,
     showRepostAction: true,
     showReactionAction: true,
-    showFavoriteAction: true,
+    showFavoriteAction: true, // deprecated KUBO-102 — favorite always-on for kids; kept for back-compat
     showShareAction: true,
     showMoreAction: true,
     showNip05: false,

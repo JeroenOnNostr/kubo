@@ -3,6 +3,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
+import { useKuboTeppGate, TeppDeniedError } from '@/hooks/useKuboTeppGate';
 import { useNWC } from '@/hooks/useNWCContext';
 import type { NWCConnection } from '@/hooks/useNWC';
 import { nip57 } from 'nostr-tools';
@@ -28,6 +29,9 @@ export function useZaps(
   const queryClient = useQueryClient();
   const author = useAuthor(target?.pubkey);
   const { sendPayment, getActiveConnection } = useNWC();
+  // TEPP outbound gate. No-op unless the active user is a kid with a construct
+  // loaded — then a zap to a view-only (or blacklisted) author is denied.
+  const teppGate = useKuboTeppGate();
   const [isZapping, setIsZapping] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
 
@@ -117,6 +121,27 @@ export function useZaps(
         relays: config.relayMetadata.relays.map(r => r.url),
         comment
       });
+
+      // TEPP gate: a kid may not zap a view-only author. The zap request carries
+      // a p-tag for the target, so the outgoing evaluator denies when the target
+      // is admitted only at view-only (or is blacklisted). Zaps bypass
+      // useNostrPublish (they go straight to the LNURL endpoint), so we gate
+      // explicitly here. No-op when the gate is inactive (flag off / not a kid /
+      // no construct). Non-TEPP failures fail open, mirroring the gate itself.
+      try {
+        await teppGate.gate(zapRequest);
+      } catch (gateErr) {
+        if (gateErr instanceof TeppDeniedError) {
+          toast({
+            title: 'You can view this creator but not zap them',
+            description: 'Ask your parent for permission to interact.',
+            variant: 'destructive',
+          });
+          setIsZapping(false);
+          return;
+        }
+        // Non-TEPP failure (e.g. reference-closure prefetch threw): fail open.
+      }
 
       // Sign the zap request (but don't publish to relays - only send to LNURL endpoint)
       if (!user.signer) {

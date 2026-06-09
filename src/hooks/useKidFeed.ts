@@ -1,13 +1,16 @@
+import { useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import type { NostrEvent } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useFeedSettings } from './useFeedSettings';
 import { useFollowList } from './useFollowActions';
 import { fetchPacksByAtags } from './useFollowPacks';
 import { useKidFeedSourcesSelector } from './useKidFeedSources';
+import { useKuboTeppConstruct } from './useKuboTeppConstruct';
 import { useSelectedKid } from './useSelectedKid';
+import { getTeppAllowedAuthors } from '@/lib/tepp-adapters/allowedAuthors';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 import {
   getPaginationCursor,
@@ -80,7 +83,30 @@ export function useKidFeed() {
   const communitiesKey = [...sources.communities].sort().join(',');
   const packsKey = [...sources.packs].sort().join(',');
 
-  const followsReady = !!user && followList !== undefined;
+  // TEPP allowlist (KUBO-102). When featureTepp is on and the active kid has a
+  // loaded construct, the feed is scoped at QUERY time to the authors the
+  // parent assigned view/interact (plus the kid's own pubkey). The relay does
+  // the filtering, so disallowed authors are never fetched — no firehose, no
+  // client-side reference-closure walk, no fail-open window. When the flag is
+  // off / no construct, `allowedAuthors` is null and the legs behave as before
+  // (relay firehose, follows union).
+  const { construct: teppConstruct, loading: teppLoading } =
+    useKuboTeppConstruct(kidPubkey ?? undefined);
+  const allowedAuthors = useMemo(
+    () => (teppConstruct ? getTeppAllowedAuthors(teppConstruct) : null),
+    [teppConstruct],
+  );
+  const allowedKey = allowedAuthors ? [...allowedAuthors].sort().join(',') : '';
+
+  // When TEPP is on, hold the feed query until the construct resolves. Without
+  // this, the brief window before the construct loads would run the unscoped
+  // firehose and flash disallowed authors into the feed (the fail-open bug).
+  // `useKuboTeppConstruct` returns loading:false the moment it settles to a
+  // construct OR a terminal reason (no-association, flag-off, etc.), so a kid
+  // with no usable construct still proceeds (unscoped) rather than hanging.
+  const teppReady = !feedSettings.featureTepp || !teppLoading;
+
+  const followsReady = !!user && followList !== undefined && teppReady;
 
   return useInfiniteQuery<FeedPage, Error>({
     // `followList` deliberately excluded — we invalidate explicitly on
@@ -93,6 +119,7 @@ export function useKidFeed() {
       relaysKey,
       communitiesKey,
       packsKey,
+      allowedKey,
     ],
     queryFn: async ({ pageParam }) => {
       const signal = AbortSignal.timeout(10_000);
@@ -131,12 +158,19 @@ export function useKidFeed() {
       }
 
       // ── Fan out up to three legs in parallel ───────────────────────────
+      // TEPP allowlist set for this query (null = flag off / no construct).
+      const allowSet = allowedAuthors ? new Set(allowedAuthors) : null;
+
       const legA = (async (): Promise<NostrEvent[]> => {
         if (!user) return [];
         const follows = followList ?? [];
-        const authors = Array.from(
+        let authors = Array.from(
           new Set([...follows, user.pubkey, ...packAuthors]),
         );
+        // When TEPP is active, the kid only sees assigned authors — intersect
+        // the follows/pack union with the allowlist so unassigned follows
+        // don't leak into the feed.
+        if (allowSet) authors = authors.filter((a) => allowSet.has(a.toLowerCase()));
         if (authors.length === 0 || allKinds.length === 0) return [];
         try {
           return await nostr.query(
@@ -150,12 +184,18 @@ export function useKidFeed() {
 
       const legB = (async (): Promise<NostrEvent[]> => {
         if (sources.relays.length === 0 || postKinds.length === 0) return [];
+        // TEPP allowlist: scope the relay query to assigned authors so the
+        // relay does the filtering — no firehose, no client-side hiding.
+        // An empty allowlist means "nobody assigned" → skip the relay leg
+        // entirely (querying with authors:[] would match everything on some
+        // relays).
+        if (allowSet && allowSet.size === 0) return [];
+        const filter: NostrFilter = allowSet
+          ? { kinds: postKinds, authors: [...allowSet], until, limit }
+          : { kinds: postKinds, until, limit };
         try {
           const group = nostr.group(sources.relays);
-          return await group.query(
-            [{ kinds: postKinds, until, limit }],
-            { signal },
-          );
+          return await group.query([filter], { signal });
         } catch {
           return [];
         }
@@ -165,16 +205,16 @@ export function useKidFeed() {
         if (sources.communities.length === 0) return [];
         const communityKinds = [1, 1111].filter((k) => postKinds.includes(k));
         if (communityKinds.length === 0) return [];
+        if (allowSet && allowSet.size === 0) return [];
+        const filter: NostrFilter = {
+          kinds: communityKinds,
+          '#a': sources.communities,
+          ...(allowSet ? { authors: [...allowSet] } : {}),
+          until,
+          limit,
+        };
         try {
-          return await nostr.query(
-            [{
-              kinds: communityKinds,
-              '#a': sources.communities,
-              until,
-              limit,
-            }],
-            { signal },
-          );
+          return await nostr.query([filter], { signal });
         } catch {
           return [];
         }

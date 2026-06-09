@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useRef } from 'react';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { MutableRefObject, ReactNode } from 'react';
@@ -58,7 +59,12 @@ function Wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  // MemoryRouter so KidNavigationInterceptor's useNavigate() has a Router.
+  return (
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
 }
 
 describe('KidFeedList capAtIndex (KUBO-066)', () => {

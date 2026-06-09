@@ -99,20 +99,23 @@ export function evaluateEvent(
   const verdicts: ReferenceVerdict[] = []
 
   // Author of the outer event is itself a reference (the most fundamental one).
-  // For inbound: author must be admitted at view-only or better.
-  // For outgoing: author admission is implicitly the subject's own pubkey if signing as the subject; otherwise a pubkey ref.
-  if (direction === 'incoming') {
-    verdicts.push(
-      evaluatePubkeyReference(
-        event.pubkey.toLowerCase(),
-        'event-author',
-        event.pubkey,
-        construct,
-        direction,
-        ctx,
-      ),
-    )
-  }
+  // - incoming: author must be admitted at view-only or better.
+  // - outgoing: author must be interaction-admitted. When the signer IS the
+  //   subject (the kid's own draft in the write-gate), evaluatePubkeyReference
+  //   short-circuits to 'admit-implicit-subject' (subject-self), so the
+  //   write-gate is unaffected. When evaluating someone else's note for button
+  //   visibility (useKuboTeppEvaluateEvent → canInteract), a view-only author
+  //   now correctly yields deny instead of an empty-references default-permit.
+  verdicts.push(
+    evaluatePubkeyReference(
+      event.pubkey.toLowerCase(),
+      'event-author',
+      event.pubkey,
+      construct,
+      direction,
+      ctx,
+    ),
+  )
 
   // If global denies, prepend that and shortcut everything else.
   if (globalDeny) {

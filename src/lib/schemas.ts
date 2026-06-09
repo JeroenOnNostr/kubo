@@ -188,6 +188,7 @@ export const FeedSettingsSchema = z.looseObject({
   showReplyAction: z.boolean().optional(),
   showRepostAction: z.boolean().optional(),
   showReactionAction: z.boolean().optional(),
+  // deprecated KUBO-102 — favorite always-on for kids; kept so stored configs still parse
   showFavoriteAction: z.boolean().optional(),
   showShareAction: z.boolean().optional(),
   showMoreAction: z.boolean().optional(),

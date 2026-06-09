@@ -42,7 +42,6 @@ const EmojiPackDialog = lazy(() => import("@/components/EmojiPackDialog").then(m
 // Kubo chrome + boot gate (PR 1)
 import { KuboBootGate } from "@/components/KuboBootGate";
 import { KuboParentLayout } from "@/components/KuboParentLayout";
-import { KuboPlaceholderPage } from "@/components/KuboPlaceholderPage";
 import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";

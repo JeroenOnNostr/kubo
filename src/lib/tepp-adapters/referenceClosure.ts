@@ -22,6 +22,16 @@ import { extractReferences, referencedEventIds } from '@/lib/tepp/references';
 /** Default closure depth — mirrors the evaluator's `maxDepth`. */
 export const DEFAULT_CLOSURE_DEPTH = 4;
 
+/**
+ * Hard cap on how many distinct referenced ids we will ever request across all
+ * hops of a single closure walk. A misbehaving relay (e.g. an HTTP relay that
+ * 404s every id-lookup) combined with a large seed batch can otherwise fan out
+ * into an unbounded request storm. Once this many ids have been requested the
+ * walk stops and the remaining references are treated as resolved-absent
+ * (fail-open) — exactly how a failed hop is already handled.
+ */
+export const MAX_CLOSURE_IDS = 500;
+
 export interface PrefetchClosureResult {
   /** event id -> event, for every reference we managed to fetch (plus the seeds). */
   cache: Map<string, NostrEvent>;
@@ -78,6 +88,8 @@ export async function prefetchReferenceClosure(
   const timeoutMs = opts.timeoutMs ?? 4000;
   const cache = opts.cache ?? new Map<string, NostrEvent>();
   const missing = new Set<string>();
+  // Running total of distinct ids requested across all hops — circuit breaker.
+  let requestedCount = 0;
 
   // Seeds themselves are addressable by id during recursion (a reply can
   // reference another seed in the same batch).
@@ -92,7 +104,16 @@ export async function prefetchReferenceClosure(
     for (const id of missing) want.delete(id);
     if (want.size === 0) break;
 
+    // Circuit breaker: never request more than MAX_CLOSURE_IDS ids total. If a
+    // relay 404s/errors and the frontier keeps producing fresh ids, this caps
+    // the blast radius. Remaining wanted ids fail open (resolved-absent).
+    if (requestedCount + want.size > MAX_CLOSURE_IDS) {
+      for (const id of want) missing.add(id);
+      break;
+    }
+
     const wantList = [...want];
+    requestedCount += wantList.length;
     const signals = [AbortSignal.timeout(timeoutMs)];
     if (opts.signal) signals.push(opts.signal);
     let fetched: NostrEvent[] = [];

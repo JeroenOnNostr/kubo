@@ -45,10 +45,12 @@ export function useActionVisibility(event?: NostrEvent) {
     showReply:         interactGate && pick(kid?.showReplyAction,    feedSettings.showReplyAction),
     showRepost:        interactGate && pick(kid?.showRepostAction,   feedSettings.showRepostAction),
     showReaction:      interactGate && pick(kid?.showReactionAction, feedSettings.showReactionAction),
-    // Favorite (star) is kid-only — gate hard on isKid so the button never
-    // appears for parent / non-Kubo accounts even if the global toggle is on.
-    // TEPP also gates favorite since it's an interaction.
-    showFavorite:      isKid && interactGate && pick(kid?.showFavoriteAction, feedSettings.showFavoriteAction),
+    // Favorite (star) is kid-only and ALWAYS on. It's a private NIP-44
+    // encrypted list (kind 30003, items in encrypted content), not a public
+    // interaction, so it is exempt from the TEPP interact-gate and has no
+    // parent toggle. Gate hard on isKid so it never shows for parent /
+    // non-Kubo accounts.
+    showFavorite:      isKid,
     showZap:           interactGate && pick(kid?.showZapAction,      feedSettings.showZaps),
     showShare:         interactGate && pick(kid?.showShareAction,    feedSettings.showShareAction),
     // `showMore` is intentionally NOT TEPP-gated: kids can always open the menu (mute/report).
