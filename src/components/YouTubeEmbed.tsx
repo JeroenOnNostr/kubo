@@ -143,7 +143,7 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
           // sub-pixel hairline that aspect-ratio rounding can leave between
           // the iframe edge and the parent's overflow-hidden clip.
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1`}
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&controls=0`}
             title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
             allowFullScreen
