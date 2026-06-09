@@ -29,19 +29,55 @@
     <meta name="theme-color" content="#161b2e" media="(prefers-color-scheme: dark)">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <link rel="manifest" href="/manifest.webmanifest">
-    <style>@keyframes ditto-spin{to{transform:rotate(360deg)}}</style>
+    <style>@keyframes ditto-spin{to{transform:rotate(360deg)}}@keyframes kubo-ping{75%,100%{transform:scale(2);opacity:0}}@keyframes kubo-pulse{50%{opacity:.5}}</style>
   </head>
-  <body style="margin:0;background:hsl(228 20% 10%)">
+  <body style="margin:0;background:#1E3A8A">
     <!-- Pre-React loading screen. Lives OUTSIDE #root so React doesn't
-         touch it. Removed by main.tsx once the app has mounted. -->
-    <div id="preloader" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:hsl(228 20% 10%)">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:24px">
-        <img data-logo src="/logo-color.svg" alt="" width="48" height="48" style="display:block">
-        <div data-spinner style="width:24px;height:24px;border:2.5px solid hsl(24 95% 53% / 0.25);border-top-color:hsl(24 95% 53%);border-radius:50%;animation:ditto-spin .7s linear infinite"></div>
+         touch it. Removed by main.tsx once the app has mounted.
+         KEEP IN SYNC with src/components/KuboLoadingScreen.tsx (kid variant):
+         this is its pre-React twin, so the very first paint already IS the
+         "Getting your videos ready…" splash and the handoff to React is
+         invisible (logo+halo, white spinner, title, three pulsing dots on
+         #1E3A8A). theme.js no longer recolors it. -->
+    <div id="preloader" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#1E3A8A">
+      <!-- Font: system-ui ONLY (no Inter). The preloader paints before the
+           Inter webfont loads; including Inter here caused a font-display:swap
+           reflow (text slightly grew) when Inter arrived. The preloader is a
+           sub-second splash that fades away, so a system font is correct and
+           shift-free. The React app still uses Inter. (KUBO-140) -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:32px;text-align:center;max-width:24rem;padding:0 1.5rem;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+        <!-- Logo with gentle pulse halo -->
+        <div style="position:relative">
+          <div style="position:absolute;inset:0;border-radius:9999px;background:rgba(255,255,255,0.2);opacity:.3;animation:kubo-ping 1s cubic-bezier(0,0,.2,1) infinite"></div>
+          <!-- Inline SVG (not <img>) so the logo paints synchronously with no
+               decode gap — keep in sync with src/components/KuboMark.tsx. -->
+          <svg data-logo width="72" height="72" viewBox="0 0 70 70" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;position:relative">
+            <rect x="70" y="34.0001" width="34.0001" height="34.0001" rx="9" transform="rotate(-180 70 34.0001)" fill="#06B6D4"></rect>
+            <rect x="70" y="70.0001" width="34.0001" height="34.0001" rx="9" transform="rotate(-180 70 70.0001)" fill="#22C55E"></rect>
+            <rect x="34" y="34.0001" width="34.0001" height="34.0001" rx="9" transform="rotate(-180 34 34.0001)" fill="#F97316"></rect>
+            <rect x="34" y="70.0001" width="34.0001" height="34.0001" rx="9" transform="rotate(-180 34 70.0001)" fill="#6366F1"></rect>
+          </svg>
+        </div>
+        <!-- Spinner + text -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+          <div style="position:relative;width:40px;height:40px">
+            <div style="position:absolute;inset:0;border-radius:9999px;border:2.5px solid rgba(255,255,255,0.2)"></div>
+            <div data-spinner style="position:absolute;inset:0;border-radius:9999px;border:2.5px solid transparent;border-top-color:#ffffff;animation:ditto-spin 1s linear infinite"></div>
+          </div>
+          <p style="margin:0;font-size:14px;line-height:20px;font-weight:500;color:#ffffff">Getting your videos ready…</p>
+        </div>
+        <!-- Animated dots -->
+        <div style="display:flex;gap:6px">
+          <div style="width:6px;height:6px;border-radius:9999px;background:rgba(255,255,255,0.4);animation:kubo-pulse 2s cubic-bezier(.4,0,.6,1) infinite;animation-delay:0ms"></div>
+          <div style="width:6px;height:6px;border-radius:9999px;background:rgba(255,255,255,0.4);animation:kubo-pulse 2s cubic-bezier(.4,0,.6,1) infinite;animation-delay:200ms"></div>
+          <div style="width:6px;height:6px;border-radius:9999px;background:rgba(255,255,255,0.4);animation:kubo-pulse 2s cubic-bezier(.4,0,.6,1) infinite;animation-delay:400ms"></div>
+        </div>
       </div>
     </div>
-    <!-- Blocking script: reads theme from localStorage and applies it
-         before first paint so the preloader matches the user's theme. -->
+    <!-- Blocking script: reads the saved theme from localStorage and sets the
+         <html> theme class before first paint (for the app once React mounts).
+         It deliberately does NOT recolor the preloader — that stays the blue
+         kid splash above. -->
     <script src="/theme.js"></script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

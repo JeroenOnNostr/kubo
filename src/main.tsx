@@ -79,7 +79,9 @@ createRoot(document.getElementById("root")!).render(
   </ErrorBoundary>
 );
 
-// Remove the HTML preloader after React has painted.
-requestAnimationFrame(() => {
-  document.getElementById('preloader')?.remove();
-});
+// NOTE: the #preloader is removed inside <App> via useLayoutEffect (not here
+// via requestAnimationFrame). A blind rAF removed it before React's first
+// paint, leaving a blank-blue frame between the static preloader and the
+// React loading screen. useLayoutEffect runs after the first commit's DOM is
+// in place but before paint, so the React splash is already on screen when
+// the preloader is removed — no flash, no font/layout jump.

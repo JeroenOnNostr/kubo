@@ -12,6 +12,7 @@ import { DMProvider, type DMConfig } from "@/components/DMProvider";
 import { InitialSyncGate } from "@/components/InitialSyncGate";
 import { NativeNotifications } from "@/components/NativeNotifications";
 import NostrProvider from "@/components/NostrProvider";
+import { TeppMigrationRunner } from "@/components/TeppMigrationRunner";
 import { NostrSync } from "@/components/NostrSync";
 import { PlausibleProvider } from "@/components/PlausibleProvider";
 import { SentryProvider } from "@/components/SentryProvider";
@@ -142,6 +143,7 @@ const hardcodedConfig: AppConfig = {
     showArchive: true,
     showWikipedia: true,
     showBluesky: true,
+    featureTepp: false,
   },
   sidebarOrder: [
     "feed",
@@ -210,6 +212,12 @@ const defaultConfig: AppConfig = {
 export function App() {
   useNsecPasteGuard();
 
+  // NOTE: the #preloader is NOT removed here. It is the single boot loading
+  // screen and stays up (React renders null on loading paths, so it shows
+  // through) until real content paints underneath — dismissed via
+  // dismissPreloader() from KidHomePage (feed ready) / InitialSyncGate (app
+  // content mounted) / the safety timeout in lib/preloader.ts. (KUBO-140)
+
   useEffect(() => {
     // Initialize system bars for mobile apps.
     // On Android 16+ (API 36), edge-to-edge is enforced by the OS so
@@ -232,6 +240,7 @@ export function App() {
                 <NostrProvider>
                   <NostrSync />
                   <NativeNotifications />
+                  <TeppMigrationRunner />
 
                     <NWCProvider>
                     <DMProvider config={dmConfig}>

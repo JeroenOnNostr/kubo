@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 
 import { KidNavigationInterceptor } from '@/components/feed/KidNavigationInterceptor';
@@ -69,9 +69,23 @@ interface KidFeedListProps {
    * scroll target for the newly-unlocked post without DOM string queries.
    */
   postRefs?: MutableRefObject<(HTMLElement | null)[]>;
+  /**
+   * Fired exactly once, the first time the feed's initial page settles
+   * (whether or not it has any items). Lets `KidHomePage` hold the boot
+   * loading screen until the feed is actually populated, so the kid sees
+   * one continuous load instead of a sync spinner followed by a feed
+   * skeleton. Re-arms if the component remounts (e.g. a kid swap).
+   */
+  onFirstLoadSettled?: () => void;
+  /**
+   * Called with the current (deduped, filtered) feed items whenever they
+   * change. Lets `KidHomePage` prefetch the first few video thumbnails to hold
+   * the boot splash until they're ready, without re-running the feed query.
+   */
+  onFeedItems?: (items: FeedItem[]) => void;
 }
 
-export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: KidFeedListProps) {
+export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFirstLoadSettled, onFeedItems }: KidFeedListProps) {
   const { user } = useCurrentUser();
   const {
     data,
@@ -109,6 +123,12 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: Kid
     return out;
   }, [data?.pages, muteItems]);
 
+  // Surface the current feed items so KidHomePage can prefetch the first few
+  // video thumbnails (boot-splash gate) without re-running the feed query.
+  useEffect(() => {
+    onFeedItems?.(feedItems);
+  }, [feedItems, onFeedItems]);
+
   const { scrollRef } = useInfiniteScroll({
     hasNextPage: !!hasNextPage,
     isFetchingNextPage,
@@ -118,16 +138,30 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs }: Kid
 
   // In tap-to-advance mode the IntersectionObserver sentinel is unmounted
   // (no more infinite scroll), so page-fetching is driven by the cap itself:
-  // prefetch when the kid is within 2 posts of the edge of loaded data.
+  // prefetch when the kid is within 3 posts of the edge of loaded data.
+  // The FAB advances by 2 posts per tap, so a step-1 buffer would let the
+  // cap leap past the trigger; widening to 3 keeps a one-tap-ahead buffer.
   useEffect(() => {
     if (typeof capAtIndex !== 'number') return;
     if (!hasNextPage || isFetchingNextPage) return;
-    if (capAtIndex >= feedItems.length - 2) {
+    if (capAtIndex >= feedItems.length - 3) {
       fetchNextPage();
     }
   }, [capAtIndex, feedItems.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const showSkeleton = isPending || (isLoading && !data);
+
+  // Signal the first settle of the initial page exactly once. Guarded by a
+  // ref so background refetches (which can briefly re-raise the loading
+  // flags) never re-fire it. See `onFirstLoadSettled` prop docs.
+  const settledFired = useRef(false);
+  useEffect(() => {
+    if (settledFired.current) return;
+    if (!showSkeleton) {
+      settledFired.current = true;
+      onFirstLoadSettled?.();
+    }
+  }, [showSkeleton, onFirstLoadSettled]);
 
   // Wrapper classes for the per-card chrome. NoteCard stays stock Ditto;
   // we only control the outer surround so the kid view can use its

@@ -13,6 +13,9 @@ import { KidFeedList } from '@/components/feed/KidFeedList';
 import { KidNavigationInterceptor } from '@/components/feed/KidNavigationInterceptor';
 import { NoteCard } from '@/components/NoteCard';
 import { Skeleton } from '@/components/ui/skeleton';
+import { dismissPreloader } from '@/lib/preloader';
+import { usePrefetchKidThumbnails } from '@/hooks/usePrefetchKidThumbnails';
+import type { FeedItem } from '@/lib/feedUtils';
 
 /**
  * /kid — the kid app entry point.
@@ -73,13 +76,44 @@ export function KidHomePage() {
   // the cap a hard wall without a scroll listener.
   const INITIAL_UNLOCKED_COUNT = 2;
   const [unlockedCount, setUnlockedCount] = useState(INITIAL_UNLOCKED_COUNT);
-  // Reset the cap whenever the active signer changes (e.g. parent swaps
-  // to a different kid via signer-swap, or a kid logs in). Without this
-  // the next kid starts with the previous kid's progress already unlocked.
+
+  // KUBO-140: the single boot loading screen is the static #preloader
+  // (index.html). It stays up while the feed loads underneath, and is
+  // dismissed once BOTH (a) the feed's first notes page has settled AND (b)
+  // the first few visible video thumbnails are warmed — so the feed reveals
+  // already painted, no thumbnail pop-in. KidFeedList surfaces the items via
+  // onFeedItems; usePrefetchKidThumbnails warms them (and has its own
+  // timeouts so a slow/missing thumbnail never hangs boot).
+  const [feedSettled, setFeedSettled] = useState(false);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
+  const thumbsReady = usePrefetchKidThumbnails(feedItems, {
+    n: 3,
+    enabled: feedSettled,
+  });
+
+  useEffect(() => {
+    if (feedSettled && thumbsReady) dismissPreloader();
+  }, [feedSettled, thumbsReady]);
+
+  // Reset the scroll cap AND re-arm the splash gate whenever the active signer
+  // changes (parent swaps kid via signer-swap, or a kid logs in). Without this
+  // the next kid starts with the previous kid's progress unlocked and the
+  // gate wouldn't re-arm for the new feed.
   useEffect(() => {
     setUnlockedCount(INITIAL_UNLOCKED_COUNT);
+    setFeedSettled(false);
+    setFeedItems([]);
     window.scrollTo(0, 0);
   }, [user?.pubkey]);
+
+  // Safety net: never keep the preloader up longer than the feed query's own
+  // 10s timeout (AbortSignal.timeout(10_000) in useKidFeed). If notes never
+  // arrive, dismiss anyway. (lib/preloader has an 11s backstop; this is the
+  // tighter one, and the prefetch hook caps at ~2.5s once notes do arrive.)
+  useEffect(() => {
+    const t = setTimeout(() => dismissPreloader(), 10_000);
+    return () => clearTimeout(t);
+  }, []);
   const postRefs = useRef<(HTMLElement | null)[]>([]);
   const getPostElement = useCallback(
     (idx: number) => postRefs.current[idx] ?? null,
@@ -178,13 +212,18 @@ export function KidHomePage() {
   return (
     <div className="min-h-dvh pb-24 flex flex-col gap-3 px-5 pt-2">
       {/* Scrollable feed — Nostr events from the kid's follow list, kinds
-          driven by feedSettings. Videos play inline via NoteCard + VideoPlayer. */}
+          driven by feedSettings. Videos play inline via NoteCard + VideoPlayer.
+          KidFeedList is mounted immediately so its query runs; the #preloader
+          (index.html) stays on top until onFirstLoadSettled fires, then we
+          dismiss it to reveal the already-painted feed (see markFeedReady). */}
       <div className="flex-1">
         <KidFeedList
           variant="kid"
           emptyMessage="Nothing here yet — ask a grown-up!"
           capAtIndex={nextPostButtonOn ? unlockedCount : undefined}
           postRefs={nextPostButtonOn ? postRefs : undefined}
+          onFirstLoadSettled={() => setFeedSettled(true)}
+          onFeedItems={setFeedItems}
         />
       </div>
 

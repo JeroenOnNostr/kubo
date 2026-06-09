@@ -1,18 +1,16 @@
-// Reads the saved theme from localStorage and applies it to <html> and the
-// preloader background before first paint. Runs as a blocking <script> so
-// there's no flash of the wrong theme.
+// Reads the saved theme from localStorage and applies the theme class to
+// <html> before first paint, so the app renders in the right theme with no
+// flash of the wrong one. Runs as a blocking <script>.
+//
+// Note: this intentionally does NOT recolor the #preloader or <body>. Kubo
+// is the kid app, so the pre-React splash is the blue KuboLoadingScreen look
+// (#1E3A8A + white spinner, set statically in index.html) regardless of the
+// app theme — that way launch is one continuous blue screen through to the
+// feed, instead of a white-theme preloader followed by the blue kid screen.
 (function () {
-  // Builtin themes — must match builtinThemes in src/themes.ts
-  var builtins = {
-    dark:  { bg: 'hsl(228 20% 10%)', primary: 'hsl(24 95% 53%)' },
-    light: { bg: 'hsl(30 40% 98%)',  primary: 'hsl(24 95% 53%)' }
-  };
-
   var theme = 'dark';
-  var colors = builtins.dark;
-  var cfg;
   try {
-    cfg = JSON.parse(localStorage.getItem('nostr:app-config') || '{}');
+    var cfg = JSON.parse(localStorage.getItem('nostr:app-config') || '{}');
     if (cfg.theme) theme = cfg.theme;
   } catch (e) {}
 
@@ -21,48 +19,5 @@
     theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
 
-  if (theme === 'custom') {
-    // Custom theme: read colors from customTheme.colors (ThemeConfig format)
-    try {
-      var ct = cfg && cfg.customTheme;
-      if (ct && ct.colors) {
-        var bg = ct.colors.background;
-        var pr = ct.colors.primary;
-        if (bg && pr) {
-          colors = { bg: 'hsl(' + bg + ')', primary: 'hsl(' + pr + ')' };
-        }
-      }
-    } catch (e) {}
-  } else if (theme === 'light' || theme === 'dark') {
-    // Check for configured theme overrides (ThemesConfig in cfg.themes)
-    try {
-      var themes = cfg && cfg.themes;
-      if (themes && themes[theme] && themes[theme].colors) {
-        var tc = themes[theme].colors;
-        if (tc.background && tc.primary) {
-          colors = { bg: 'hsl(' + tc.background + ')', primary: 'hsl(' + tc.primary + ')' };
-        } else {
-          colors = builtins[theme];
-        }
-      } else {
-        colors = builtins[theme];
-      }
-    } catch (e) {
-      colors = builtins[theme];
-    }
-  } else {
-    colors = builtins.dark;
-  }
-
   document.documentElement.className = theme;
-  document.body.style.background = colors.bg;
-  var p = document.getElementById('preloader');
-  if (p) {
-    p.style.background = colors.bg;
-    var spinner = p.querySelector('[data-spinner]');
-    if (spinner) {
-      spinner.style.borderColor = colors.primary.replace(')', ' / 0.25)');
-      spinner.style.borderTopColor = colors.primary;
-    }
-  }
 })();

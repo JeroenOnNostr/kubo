@@ -25,7 +25,6 @@ import {
   useState,
 } from "react";
 import { DittoLogo } from "@/components/DittoLogo";
-import { KuboMark } from "@/components/KuboMark";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { IntroImage } from "@/components/IntroImage";
 import { ProfileCard } from "@/components/ProfileCard";
@@ -39,6 +38,7 @@ import { useAuthors } from "@/hooks/useAuthors";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useEncryptedSettings, getLocalSettingsSync } from "@/hooks/useEncryptedSettings";
 import { type SyncPhase, useInitialSync } from "@/hooks/useInitialSync";
+import { useKuboFamily } from "@/hooks/useKuboFamily";
 import { useLoginActions } from "@/hooks/useLoginActions";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { OnboardingContext } from "@/hooks/useOnboarding";
@@ -46,6 +46,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { toast } from "@/hooks/useToast";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { genUserName } from "@/lib/genUserName";
+import { dismissPreloader } from "@/lib/preloader";
 import { getAvatarShape, isValidAvatarShape } from "@/lib/avatarShape";
 import { resolveTheme, resolveThemeConfig } from "@/themes";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,15 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   const { user } = useCurrentUser();
   const { phase, markComplete } = useInitialSync();
   const { isLoading: settingsLoading } = useEncryptedSettings();
+  const { family } = useKuboFamily();
+
+  // KUBO-140: when the active login is a kid, the boot loading screen must
+  // already be the blue kid splash — otherwise the kid sees the app-theme
+  // (white) sync screen first and the blue "Getting your videos ready…"
+  // overlay second, reading as two loads. Rendering the kid variant here
+  // makes it one continuous blue screen from launch through feed-ready.
+  const isKid =
+    !!user && !!family?.kids.some((k) => k.pubkey === user.pubkey);
   const [preloadApp, setPreloadApp] = useState(false);
   const [signupActive, setSignupActive] = useState(false);
   // Track whether we've shown the app at least once so we don't re-gate on
@@ -113,7 +123,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   if (phase === "syncing" || phase === "found") {
     return (
       <OnboardingContext.Provider value={contextValue}>
-        <SyncScreen phase={phase} />
+        <SyncScreen phase={phase} isKid={isKid} />
       </OnboardingContext.Provider>
     );
   }
@@ -140,7 +150,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
     if (!hasLocalSync) {
       return (
         <OnboardingContext.Provider value={contextValue}>
-          <SyncScreen phase="syncing" />
+          <SyncScreen phase="syncing" isKid={isKid} />
         </OnboardingContext.Provider>
       );
     }
@@ -160,58 +170,14 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
 // Sync Screen
 // ---------------------------------------------------------------------------
 
-function SyncScreen({ phase }: { phase: SyncPhase }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-8 px-6 text-center max-w-sm">
-        {/* Logo with gentle pulse */}
-        <div className="relative">
-          <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping opacity-30" />
-          <KuboMark size={72} className="relative" />
-        </div>
-
-        {/* Spinner */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative w-10 h-10">
-            <div className="absolute inset-0 rounded-full border-[2.5px] border-primary/20" />
-            <div className="absolute inset-0 rounded-full border-[2.5px] border-transparent border-t-primary animate-spin" />
-          </div>
-
-          <div className="space-y-1.5">
-            <p className="text-sm font-medium text-foreground">
-              {phase === "found"
-                ? "Settings restored"
-                : "Syncing your settings..."}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {phase === "found"
-                ? "Welcome back! Loading your experience..."
-                : "Checking for your preferences across devices"}
-            </p>
-          </div>
-        </div>
-
-        {phase === "syncing" && (
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse"
-                style={{ animationDelay: `${i * 200}ms` }}
-              />
-            ))}
-          </div>
-        )}
-
-        {phase === "found" && (
-          <div className="flex items-center gap-2 text-primary">
-            <Check className="w-4 h-4" />
-            <span className="text-sm font-medium">All set</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+// KUBO-140: the boot loading screen is the single static #preloader
+// (index.html) — it is already on screen and stays up while sync runs. So the
+// sync gate renders NOTHING here (the preloader shows through) rather than a
+// second React loading element that would visibly swap with the preloader.
+// Downstream screens dismiss the preloader: KidHomePage (feed ready),
+// KuboBootGate (non-kid destinations), and the lib/preloader safety timeout.
+function SyncScreen(_props: { phase: SyncPhase; isKid?: boolean }) {
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +278,13 @@ function SetupQuestionnaire({
   const [step, setStep] = useState<Step>(steps[0]);
   const [isSaving, setIsSaving] = useState(false);
   const [hasFollows, setHasFollows] = useState<boolean | null>(null);
+
+  // This is interactive onboarding content rendered straight from the sync
+  // gate (it bypasses KuboBootGate), so dismiss the boot #preloader once it
+  // mounts — otherwise the preloader would sit on top of the questionnaire.
+  useEffect(() => {
+    dismissPreloader();
+  }, []);
 
   // Signup-specific state
   const [nsec, setNsec] = useState("");

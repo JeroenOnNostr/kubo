@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { cn } from '@/lib/utils';
+import { findThumbnail } from '@/lib/youtubeThumbnail';
 
 // Tracks the currently-active YouTubeEmbed across the app so that starting a
 // new one preempts the previous (only one YouTube video plays at a time).
@@ -18,63 +21,6 @@ interface YouTubeEmbedProps {
 }
 
 /**
- * YouTube thumbnail sizes to try, in preference order.
- *
- * - `sddefault.jpg` (640×480) — available for most videos, good enough for the
- *   ~568px max render width on desktop (even on 2x Retina it's acceptable for
- *   a temporary thumbnail that gets replaced by an iframe on click)
- * - `hqdefault.jpg` (480×360) — universally available fallback with letterbox bars
- *
- * `maxresdefault.jpg` (1280×720) is omitted intentionally: it 404s for many
- * videos, and in a feed with multiple YouTube links the wasted requests add up.
- * The thumbnail is disposable — it only exists until the user clicks play.
- *
- * YouTube's CDN serves a 120×90 gray placeholder when a requested size doesn't
- * exist. We probe off-screen with `new Image()` and check naturalWidth to detect
- * this, so the gray image is never rendered visibly.
- */
-const THUMBNAIL_SIZES = ['sddefault', 'hqdefault'] as const;
-
-function thumbnailUrl(videoId: string, size: string): string {
-  return `https://i.ytimg.com/vi/${videoId}/${size}.jpg`;
-}
-
-/** Probe thumbnail sizes off-screen and resolve with the first valid URL. */
-function findThumbnail(videoId: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-
-    function tryIndex(i: number) {
-      if (i >= THUMBNAIL_SIZES.length) {
-        if (!settled) {
-          settled = true;
-          resolve(null);
-        }
-        return;
-      }
-
-      const img = new Image();
-      img.onload = () => {
-        if (settled) return;
-        // YouTube serves a 120×90 gray placeholder when the size doesn't exist.
-        if (img.naturalWidth <= 120 && img.naturalHeight <= 90) {
-          tryIndex(i + 1);
-        } else {
-          settled = true;
-          resolve(thumbnailUrl(videoId, THUMBNAIL_SIZES[i]));
-        }
-      };
-      img.onerror = () => {
-        if (!settled) tryIndex(i + 1);
-      };
-      img.src = thumbnailUrl(videoId, THUMBNAIL_SIZES[i]);
-    }
-
-    tryIndex(0);
-  });
-}
-
-/**
  * Renders a YouTube video embed with a privacy-respecting click-to-load facade.
  *
  * Shows a thumbnail and play button instead of mounting the iframe immediately,
@@ -87,6 +33,13 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
   const [activated, setActivated] = useState(false);
   const [resolvedThumb, setResolvedThumb] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Kid-mode detection mirrors useActionVisibility / useKuboTeppFeedFilter:
+  // active signer matches one of the family's kid pubkeys.
+  const { user } = useCurrentUser();
+  const { family } = useKuboFamily();
+  const isKidMode =
+    !!user?.pubkey && !!family?.kids.some((k) => k.pubkey === user.pubkey);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,17 +92,51 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
         style={{ aspectRatio: aspect === 'short' ? '9 / 16' : '16 / 9' }}
       >
         {activated ? (
-          // Stretched 1px beyond the wrapper on bottom/right to hide the
-          // sub-pixel hairline that aspect-ratio rounding can leave between
-          // the iframe edge and the parent's overflow-hidden clip.
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&controls=0`}
-            title="YouTube video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            sandbox="allow-scripts allow-same-origin allow-presentation"
-            className="absolute inset-0 w-full h-full -mb-px -mr-px"
-          />
+          <>
+            {/* controls=0 hides YouTube's native control bar. It's a documented
+                player param (NOT a player modification), and the player's own
+                branding logic keeps the bottom-right wordmark. We need it because
+                the tile player is well below YouTube's ~480x270 minimum (it's
+                ~388x218 on a phone), and below that floor YouTube does NOT shrink
+                its control chrome — so play/pause/CC/fullscreen/seek render huge
+                and obstruct the video. We can't restyle them: the iframe is
+                cross-origin (youtube-nocookie.com). Tap-to-play/pause still works
+                with controls hidden. Do NOT remove this without re-checking the
+                small-frame chrome (KUBO-141). */}
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&controls=0`}
+              title="YouTube video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              className="absolute inset-0 w-full h-full -mb-px -mr-px"
+            />
+            {/* Kid-mode click-eaters covering YouTube's player UI tap targets
+                that would let the kid escape the parent-approved video:
+                the share / chain-icon button and the "More videos" pill on
+                the lower-left, and the YouTube wordmark on the lower-right.
+                Same defense layer as the existing Android nav guard, just
+                client-side for the actions that don't go through navigation
+                (clipboard write, in-iframe video swap).
+                Positioned above the red seek bar so play/pause (centre) and
+                the fullscreen toggle (bottom-right corner) stay tappable.
+                Transparent + cursor-default so the masks don't read as broken
+                UI. Only painted when the iframe is mounted (activated). */}
+            {isKidMode && (
+              <>
+                <div
+                  className="absolute left-0 right-[35%] bottom-[12%] h-12 z-10 cursor-default"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-hidden
+                />
+                <div
+                  className="absolute right-0 w-[30%] bottom-[12%] h-12 z-10 cursor-default"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-hidden
+                />
+              </>
+            )}
+          </>
         ) : (
           <button
             type="button"
