@@ -5,7 +5,7 @@ import { NUser, useNostrLogin } from '@nostrify/react/login';
 import type { NostrSigner } from '@nostrify/types';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
-import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY, NIP29_RELAYS } from '@/lib/appRelays';
+import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY, NIP29_RELAYS, WARMUP_RELAYS } from '@/lib/appRelays';
 import { NostrBatcher } from '@/lib/NostrBatcher';
 
 /** NIP-29 kinds emitted by users (chat + join/leave). */
@@ -250,6 +250,24 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
         pool.current.close();
       }
     };
+  }, []);
+
+  // Eagerly open the fastest app relays on boot so the first feed/follow-list
+  // query doesn't pay the WebSocket+TLS+NIP-42 AUTH handshake inline (the
+  // dominant cost on the Android APK over a mobile network). Routed per-relay
+  // via nostr.relay(url) so it bypasses reqRouter and opens exactly these
+  // sockets. `limit: 0` is the minimal subscription that creates the socket
+  // and keeps it alive past NRelay1's ~30s idle-close until the real query
+  // arrives and reuses it. Best-effort — failures are swallowed and the lazy
+  // path still works if warm-up misses. Runs once, in parallel with React
+  // mount / family bootstrap / cache hydration. (KUBO-142)
+  useEffect(() => {
+    const nostr = batcher.current ?? pool.current;
+    if (!nostr) return;
+    const signal = AbortSignal.timeout(4000);
+    for (const url of WARMUP_RELAYS) {
+      nostr.relay(url).query([{ kinds: [1], limit: 0 }], { signal }).catch(() => {});
+    }
   }, []);
 
   // Provide the batcher as the `nostr` object. It has the same interface

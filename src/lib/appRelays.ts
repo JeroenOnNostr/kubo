@@ -9,6 +9,18 @@ export const DITTO_RELAYS: string[] = [
   'wss://relay.dreamith.to/',
 ];
 
+/**
+ * Fastest app relays to eagerly warm on boot so the first feed/follow-list
+ * query doesn't pay the WebSocket+TLS+NIP-42 AUTH handshake inline. Subset of
+ * APP_RELAYS (Kubo-owned + Ditto relays — not the slower public ones).
+ * Opened in parallel with React mount; see NostrProvider's warm-up effect.
+ */
+export const WARMUP_RELAYS: string[] = [
+  'wss://relay.kubo.watch/',
+  'wss://relay.ditto.pub/',
+  'wss://relay.dreamith.to/',
+];
+
 /** Relay used for kind 34236 addressable short video events, used by divine */
 export const DIVINE_RELAY = 'wss://divine.video/';
 

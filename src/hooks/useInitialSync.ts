@@ -339,12 +339,13 @@ export function useInitialSync() {
       clearTimeout(timeout);
 
       if (foundSettings) {
-        setPhase("found");
-        // Auto-complete after a brief moment so user sees the success state
-        setTimeout(() => {
-          markSyncComplete();
-          setPhase("complete");
-        }, 1200);
+        // Transition straight to "complete" — the old 1.2s dwell on the
+        // "found" phase showed nothing (the static #preloader covers both
+        // "syncing" and "found"; SyncScreen renders null), so it was pure
+        // dead time in front of the feed query. Mounting AppRouter → the kid
+        // feed immediately shaves ~1.2s off the cold/first-launch boot. (KUBO-142)
+        markSyncComplete();
+        setPhase("complete");
       } else {
         setPhase("not-found");
       }
