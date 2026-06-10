@@ -143,7 +143,9 @@ const hardcodedConfig: AppConfig = {
     showArchive: true,
     showWikipedia: true,
     showBluesky: true,
-    featureTepp: false,
+    // KUBO-150: TEPP on by default. kubo.json also sets this true; keeping the
+    // hardcoded fallback in agreement avoids any merge path resolving to false.
+    featureTepp: true,
   },
   sidebarOrder: [
     "feed",
