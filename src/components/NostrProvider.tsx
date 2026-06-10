@@ -7,6 +7,13 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY, NIP29_RELAYS, WARMUP_RELAYS } from '@/lib/appRelays';
 import { NostrBatcher } from '@/lib/NostrBatcher';
+import {
+  isTeppKind,
+  routesForEvent,
+  teppReadRelays,
+  getFamilyRelaysSnapshot,
+  subscribeFamilyRelays,
+} from '@/lib/tepp-adapters/familyRelays';
 
 /** NIP-29 kinds emitted by users (chat + join/leave). */
 const NIP29_USER_KINDS = new Set([9, 11, 9021, 9022]);
@@ -36,6 +43,12 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
   // Use refs so the pool always has the latest data
   const effectiveRelays = useRef(getEffectiveRelays(config.relayMetadata, config.useAppRelays));
+
+  // KUBO-173: the private family relay set TEPP events are confined to. Read
+  // from a ref (kept in sync with the device-local store below) so the
+  // long-lived reqRouter/eventRouter closures always see the latest set without
+  // recreating the pool.
+  const familyRelaysRef = useRef<string[]>(getFamilyRelaysSnapshot());
 
   // Stable refs to signers used for NIP-42 AUTH. The `open()` callback
   // reads from these when a relay sends an AUTH challenge, so they
@@ -128,6 +141,18 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     effectiveRelays.current = getEffectiveRelays(config.relayMetadata, config.useAppRelays);
   }, [config.relayMetadata, config.useAppRelays]);
 
+  // KUBO-173: keep the family-relay ref in sync with the device-local store.
+  // Subscribe imperatively (the routers read the ref, not React state) so a
+  // parent changing the family relay in settings is reflected on the next query
+  // without recreating the pool. Prime once on mount in case bootstrap resolved
+  // before the subscription attached.
+  useEffect(() => {
+    familyRelaysRef.current = getFamilyRelaysSnapshot();
+    return subscribeFamilyRelays(() => {
+      familyRelaysRef.current = getFamilyRelaysSnapshot();
+    });
+  }, []);
+
   // Initialize NPool only once
   if (!pool.current) {
     pool.current = new NPool({
@@ -194,6 +219,22 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
           .filter(r => r.read)
           .map(r => r.url);
 
+        // KUBO-173 (read side): TEPP construct queries (association/state/
+        // permission/blacklist/global) read from the private family relay set —
+        // that's where the eventRouter confines them on the write side, so the
+        // construct can only assemble against relays that hold those events. The
+        // pure `teppReadRelays` decides: TEPP-only query + a configured family
+        // set → read the family set ∪ the read relays; otherwise → null (defer to
+        // the default read fan-out below, so construct assembly keeps working
+        // before a private relay is configured, and the by-id referenced-event
+        // fetch `{ids:[…]}` stays on the general path).
+        const teppRelays = teppReadRelays(filters, familyRelaysRef.current, readRelays);
+        if (teppRelays) {
+          const teppRoutes = new Map<string, NostrFilter[]>();
+          for (const url of teppRelays) teppRoutes.set(url, filters);
+          return teppRoutes;
+        }
+
         // Include zapstore relay for kind 32267 (apps), 30063 (releases), and 3063 (assets)
         const ZAPSTORE_KINDS = [32267, 30063, 3063];
         if (filters.every((f) => f?.kinds?.every((k) => ZAPSTORE_KINDS.includes(k)))) {
@@ -223,6 +264,22 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
         const writeRelays = effectiveRelays.current.relays
           .filter(r => r.write)
           .map(r => r.url);
+
+        // KUBO-173: kind-aware routing. TEPP events (kid↔parent association,
+        // permission/blacklist/global lists, allowed-time windows) describe a
+        // minor's social graph + daily schedule and must NEVER fan out to the
+        // public write relays. `routesForEvent` confines them to the configured
+        // family relay set; with none configured it falls back to the primary
+        // write relay (privacyWarning is surfaced to the parent in settings).
+        // Non-TEPP events keep the existing public write-relay routing exactly.
+        if (isTeppKind(event.kind)) {
+          const decision = routesForEvent(event, {
+            familyRelays: familyRelaysRef.current,
+            primaryRelay: writeRelays[0],
+            defaultRelays: writeRelays,
+          });
+          return [...new Set(decision.relays)];
+        }
 
         const allRelays = new Set<string>(writeRelays);
 

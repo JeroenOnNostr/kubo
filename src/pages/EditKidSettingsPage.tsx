@@ -24,6 +24,7 @@ import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useFamilyRelays } from '@/lib/tepp-adapters/familyRelays';
 
 /**
  * /parent/kid-settings — per-kid knobs for whichever kid is the active signer.
@@ -39,6 +40,21 @@ export function EditKidSettingsPage() {
   const { updateSettings: updateEncryptedSettings } = useEncryptedSettings();
   const { user } = useCurrentUser();
   const { family } = useKuboFamily();
+  const { familyRelays, setFamilyRelays } = useFamilyRelays();
+
+  // KUBO-173: TEPP is "on" when the authoritative family flag is set (falling
+  // back to the feedSettings mirror for installs that predate the field) — same
+  // resolution the toggle's `checked` uses. Drives the family-relay field +
+  // privacy warning visibility.
+  const teppOn = family?.teppEnforced ?? !!feedSettings.featureTepp;
+
+  // KUBO-173: the private family relay TEPP events are confined to. Single URL
+  // in the UI (the set supports more, but one private relay covers the family
+  // use-case). Local draft state so typing doesn't write on every keystroke.
+  const [familyRelayInput, setFamilyRelayInput] = useState('');
+  useEffect(() => {
+    setFamilyRelayInput(familyRelays[0] ?? '');
+  }, [familyRelays]);
 
   const [age, setAge]             = useState(6);
   const [dailyLimit, setDaily]    = useState(45); // minutes
@@ -402,6 +418,56 @@ export function EditKidSettingsPage() {
           aria-label="Publish trust as TEPP events"
         />
       </div>
+
+      {/* KUBO-173 — family relay (privacy). When TEPP is on, trust settings are
+          published as Nostr events. Without a private family relay they go to
+          public relays where anyone can read this kid's allow-list, block-list,
+          and daily schedule. This field confines TEPP events to one private
+          relay; the warning below shows when TEPP is on but no relay is set. */}
+      {teppOn && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="family-relay">Family relay</Label>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            A private relay just for your family. Trust settings are sent only
+            here, so other people can't see who this kid follows or when they're
+            allowed online.
+          </p>
+          <input
+            id="family-relay"
+            type="url"
+            inputMode="url"
+            placeholder="wss://your-family-relay.example/"
+            value={familyRelayInput}
+            onChange={(e) => setFamilyRelayInput(e.target.value)}
+            onBlur={() => {
+              const next = familyRelayInput.trim();
+              if ((familyRelays[0] ?? '') === next) return;
+              setFamilyRelays(next ? [next] : []).catch((err) => {
+                console.error('Failed to save family relay:', err);
+                toast({
+                  title: 'Could not save family relay',
+                  description: err instanceof Error ? err.message : 'Please try again.',
+                  variant: 'destructive',
+                });
+              });
+            }}
+            aria-label="Family relay URL"
+            className={cn(
+              'h-11 px-3 rounded-xl bg-card text-foreground text-sm',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+            )}
+          />
+          {!familyRelays.some((r) => r.trim()) && (
+            <p
+              role="alert"
+              className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed"
+            >
+              Trust settings are stored on public relays. Set a family relay to
+              keep them private.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Post actions — per-kid button visibility */}
       <div className="flex flex-col gap-2">
