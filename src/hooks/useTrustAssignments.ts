@@ -11,14 +11,18 @@ import {
 } from '@/hooks/useKuboTeppPublish';
 import {
   KIND_PERMISSION_INTERACTION_NPUB_A,
+  KIND_PERMISSION_INTERACTION_NPUB_B,
   KIND_PERMISSION_VIEW_NPUB_A,
+  KIND_PERMISSION_VIEW_NPUB_B,
   KIND_PERMISSION_INTERACTION_RELAY,
   KIND_PERMISSION_VIEW_RELAY,
 } from '@/lib/tepp/kinds';
-import type { PermissionRef } from '@/lib/tepp/types';
+import type { Construct, PermissionRef } from '@/lib/tepp/types';
 
 import {
+  clearPendingRevocation,
   getFamilySnapshot,
+  recordPendingRevocation,
   recordTeppPermissionId,
   setTrustLevelsBatch,
   useKuboFamily,
@@ -66,6 +70,101 @@ export function shouldUnfollowOnClear(
   return !!kidPubkey && activePubkey === kidPubkey;
 }
 
+/**
+ * The npub-list permission kinds (mode A + mode B) that admit a target at a
+ * given trust tier. `interact`/`extend` both live in the kind-8710/8711
+ * interaction lists; `view` lives in the kind-8712/8713 view lists.
+ */
+function npubKindsForTier(tier: KuboTrustLevel): number[] {
+  return tier === 'view'
+    ? [KIND_PERMISSION_VIEW_NPUB_A, KIND_PERMISSION_VIEW_NPUB_B]
+    : [KIND_PERMISSION_INTERACTION_NPUB_A, KIND_PERMISSION_INTERACTION_NPUB_B];
+}
+
+/**
+ * KUBO-169: does the assembled CONSTRUCT admit `pubkey` at (at least) `tier`?
+ *
+ * The construct is the trustworthy oracle for "what is actually published"
+ * (KUBO-156). `interact` admits anyone in the interaction lists; `view` admits
+ * anyone in EITHER the view lists OR the interaction lists (interact ⊇ view —
+ * an interaction grant subsumes view, so it must not be reported as missing).
+ *
+ * Exported for unit testing.
+ */
+export function constructAdmitsAtTier(
+  construct: Construct,
+  pubkey: string,
+  tier: KuboTrustLevel,
+): boolean {
+  const lower = pubkey.toLowerCase();
+  // For `view`, an interact-tier entry also satisfies it (no-downgrade: never
+  // re-grant view to someone the construct already admits at interact).
+  const kinds =
+    tier === 'view'
+      ? [
+          KIND_PERMISSION_VIEW_NPUB_A,
+          KIND_PERMISSION_VIEW_NPUB_B,
+          KIND_PERMISSION_INTERACTION_NPUB_A,
+          KIND_PERMISSION_INTERACTION_NPUB_B,
+        ]
+      : npubKindsForTier(tier);
+  return construct.entries.some(
+    (e) =>
+      kinds.includes(e.kind) &&
+      (e.items as Array<{ pubkey?: string } | string>).some((i) =>
+        typeof i === 'string' ? i === lower : i?.pubkey === lower,
+      ),
+  );
+}
+
+/**
+ * KUBO-169 pure diff helper: of `members` that localStorage records at `tier`,
+ * which ones are NOT yet admitted by the published construct? These are the
+ * grants that must be (re-)published — localStorage says "done" but the wire
+ * disagrees (assigned-while-TEPP-off, or a failed publish). Reconcile uses the
+ * CONSTRUCT, not localStorage, as the oracle for "published".
+ *
+ * `assignments` is the kid's `trustAssignments[kid]` map. Only members whose
+ * recorded tier === `tier` are considered (so an interact entry isn't surfaced
+ * as a missing view grant).
+ *
+ * Exported for unit testing.
+ */
+export function computeMissingGrants(
+  assignments: Record<string, KuboTrustLevel> | undefined,
+  construct: Construct,
+  tier: KuboTrustLevel,
+): string[] {
+  if (!assignments) return [];
+  return Object.entries(assignments)
+    .filter(([, lvl]) => lvl === tier)
+    .map(([pubkey]) => pubkey)
+    .filter((pubkey) => !constructAdmitsAtTier(construct, pubkey, tier));
+}
+
+/**
+ * KUBO-167 pure ordering orchestrator for request approval. Extracted from the
+ * hook so the critical sequencing is unit-testable without `renderHook` (repo
+ * idiom): write trust → (when enforced) publish the grant → clear the request
+ * ONLY past a successful publish. A publish rejection propagates BEFORE
+ * `clearRequest` runs, so a failed approval leaves the request pending and can
+ * be retried. Returns nothing; throws whatever `publishGrant` throws.
+ *
+ * Exported for unit testing.
+ */
+export async function runApprovalSequence(opts: {
+  enforced: boolean;
+  writeTrust: () => Promise<void>;
+  publishGrant: () => Promise<void>;
+  clearRequest: () => Promise<void>;
+}): Promise<void> {
+  await opts.writeTrust();
+  if (opts.enforced) {
+    await opts.publishGrant(); // throws → clearRequest below never runs
+  }
+  await opts.clearRequest();
+}
+
 export interface TrustAssignmentsApi {
   get: (targetPubkey: string) => KuboTrustLevel | undefined;
   setLevel: (targetPubkey: string, level: KuboTrustLevel) => Promise<void>;
@@ -85,6 +184,38 @@ export interface TrustAssignmentsApi {
    */
   setLevelsBatch: (targetPubkeys: string[], level: KuboTrustLevel) => Promise<void>;
   clear: (targetPubkey: string) => Promise<void>;
+  /**
+   * KUBO-167: approve a kid's request-to-interact. Grants `interact` (writes
+   * localStorage AND, when TEPP is enforced, publishes 8710 + state), then
+   * clears the pending request — but ONLY on publish success. If the publish
+   * fails the request is RETAINED (the error is re-thrown to the caller so the
+   * UI can toast) so approval can be retried; without this the kid would see
+   * "approved" while the construct never admits them (permanent divergence).
+   */
+  approveRequest: (targetPubkey: string) => Promise<void>;
+  /**
+   * KUBO-169: publish a grant for `members` at `level` covering anyone the
+   * CONSTRUCT does not yet admit, regardless of whether localStorage changed.
+   * Bypasses the no-localStorage-change early-return that `setLevelsBatch`
+   * uses — the reconcile path needs the construct, not localStorage, as the
+   * "published" oracle. ONE permission + ONE state publish for the whole union.
+   * Throws on publish failure (so the reconcile guard can allow a retry).
+   */
+  publishMissingGrants: (members: string[], level: KuboTrustLevel) => Promise<void>;
+  /**
+   * KUBO-169: retry a previously-failed revocation of `targetPubkey` at
+   * `previousLevel`. Re-publishes the surviving same-tier list (without the
+   * target) + state. On success clears the `pendingRevocations` marker. Throws
+   * on failure so the marker survives for the next session. The localStorage
+   * trust entry was already removed by the original `clear`.
+   */
+  retryRevocation: (targetPubkey: string, previousLevel: KuboTrustLevel) => Promise<void>;
+  /**
+   * KUBO-169: clear a `pendingRevocations` marker for a target the construct has
+   * already stopped admitting (no publish needed — the wire is already correct).
+   * Thin wrapper over the store's `clearPendingRevocation`.
+   */
+  clearPendingRevocationMarker: (targetPubkey: string) => Promise<void>;
 }
 
 /**
@@ -107,7 +238,7 @@ export interface TrustAssignmentsApi {
  * mutators throw. Callers should guard on `useSelectedKid()` first.
  */
 export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignmentsApi {
-  const { family, setTrustLevel, clearTrustLevel } = useKuboFamily();
+  const { family, setTrustLevel, clearTrustLevel, clearTrustRequest } = useKuboFamily();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { unfollowMany } = useFollowActions();
@@ -126,6 +257,45 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
       return kidAssignments?.[targetPubkey];
     },
     [kidAssignments],
+  );
+
+  /**
+   * Publish a same-tier npub grant: ONE permission event (carrying the full
+   * `existingNpubs` ∪ {target} list — caller computes the list) + ONE state
+   * event. THROWS on failure; the caller decides whether to swallow+toast
+   * (interactive `setLevel`) or propagate (`approveRequest`, reconcile). Shared
+   * by setLevel / approveRequest so the publish path is identical.
+   */
+  const publishTierGrant = useCallback(
+    async (
+      targetPubkey: string,
+      level: KuboTrustLevel,
+      existingNpubs: string[],
+    ): Promise<void> => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      const input = makeTrustTierUpsert({
+        kidPubkey,
+        targetPubkey,
+        tier: level,
+        existingNpubs,
+      });
+      const permissionEvent = await publishPermission.mutateAsync(input);
+      // Capture the event id under teppLatestPermissionIds so the next state
+      // publish references the new permission. recordTeppPermissionId reads the
+      // latest persisted family and merges, preserving the trustAssignments
+      // entry instead of clobbering it with a stale snapshot.
+      const nextFamily = await recordTeppPermissionId(
+        kidPubkey,
+        level,
+        permissionEvent.id,
+      );
+      if (nextFamily) {
+        await publishState.mutateAsync({
+          publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
+        });
+      }
+    },
+    [kidPubkey, publishPermission, publishState],
   );
 
   const setLevel = useCallback(
@@ -162,34 +332,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
       // remove the target from the view list. v1 keeps that out of scope
       // (the parent can clear+re-set; or future Phase-4b refactor).
       try {
-        const input = makeTrustTierUpsert({
-          kidPubkey,
-          targetPubkey,
-          tier: level,
-          existingNpubs: sameTierExisting,
-        });
-        const permissionEvent = await publishPermission.mutateAsync(input);
-
-        // Capture the event id under teppLatestPermissionIds so the next
-        // state-event publish references the new permission. Without this,
-        // the construct's permission walk only ever sees the original empty
-        // (or stale) set of public refs.
-        // Records the permission id by reading the latest persisted family and
-        // merging — so it preserves the trustAssignments entry setTrustLevel
-        // just wrote instead of clobbering it with a stale snapshot.
-        const nextFamily = await recordTeppPermissionId(
-          kidPubkey,
-          level,
-          permissionEvent.id,
-        );
-        if (nextFamily) {
-          // Re-publish the state event with the full set of currently-known
-          // permission ids. This is what makes a fresh assignment actually
-          // appear in the kid's construct on next refetch.
-          await publishState.mutateAsync({
-            publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
-          });
-        }
+        await publishTierGrant(targetPubkey, level, sameTierExisting);
       } catch (err) {
         toast({
           title: 'TEPP publish failed',
@@ -200,7 +343,36 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         // state so the parent can retry without losing their selection.
       }
     },
-    [kidPubkey, setTrustLevel, featureTepp, family, publishPermission, publishState, toast],
+    [kidPubkey, setTrustLevel, featureTepp, family, publishTierGrant, toast],
+  );
+
+  /**
+   * KUBO-167 — approve a kid's request-to-interact. Ordering matters: write
+   * localStorage trust, then (TEPP on) publish the grant, then clear the
+   * request ONLY if the publish succeeded. A failed publish RE-THROWS without
+   * clearing the request, so the parent's Approve can be retried and the kid is
+   * never stuck "approved-but-denied" (permanent divergence).
+   */
+  const approveRequest = useCallback(
+    async (targetPubkey: string) => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      await runApprovalSequence({
+        enforced: featureTepp,
+        writeTrust: () => setTrustLevel(kidPubkey, targetPubkey, 'interact'),
+        publishGrant: () => {
+          // Read the post-write snapshot so the grant carries the full
+          // interact list (not just this one target).
+          const fresh = getFamilySnapshot()?.trustAssignments?.[kidPubkey] ?? {};
+          const sameTierExisting = Object.entries(fresh)
+            .filter(([, tier]) => tier === 'interact')
+            .map(([pubkey]) => pubkey)
+            .filter((p) => p !== targetPubkey);
+          return publishTierGrant(targetPubkey, 'interact', sameTierExisting);
+        },
+        clearRequest: () => clearTrustRequest(kidPubkey, targetPubkey),
+      });
+    },
+    [kidPubkey, setTrustLevel, featureTepp, publishTierGrant, clearTrustRequest],
   );
 
   const setLevelIfUnassigned = useCallback(
@@ -247,23 +419,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
           .filter(([, tier]) => tier === level)
           .map(([pubkey]) => pubkey);
         // fullTierList is non-empty (it contains newlyAssigned), so [0] is safe.
-        const input = makeTrustTierUpsert({
-          kidPubkey,
-          targetPubkey: fullTierList[0],
-          tier: level,
-          existingNpubs: fullTierList,
-        });
-        const permissionEvent = await publishPermission.mutateAsync(input);
-        const nextFamily = await recordTeppPermissionId(
-          kidPubkey,
-          level,
-          permissionEvent.id,
-        );
-        if (nextFamily) {
-          await publishState.mutateAsync({
-            publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
-          });
-        }
+        await publishTierGrant(fullTierList[0], level, fullTierList);
       } catch (err) {
         toast({
           title: 'TEPP publish failed',
@@ -273,7 +429,55 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         // Keep the localStorage writes — the parent can re-toggle to retry.
       }
     },
-    [kidPubkey, featureTepp, setLevelIfUnassigned, publishPermission, publishState, toast],
+    [kidPubkey, featureTepp, setLevelIfUnassigned, publishTierGrant, toast],
+  );
+
+  /**
+   * Publish a same-tier npub revocation: re-publish the surviving list (without
+   * `targetPubkey`) + state. THROWS on failure; callers decide whether to
+   * swallow+toast (`clear`) or propagate (`retryRevocation`). Shared so the
+   * revocation wire format is identical across the original clear and the
+   * KUBO-169 retry path.
+   */
+  const publishTierRevocation = useCallback(
+    async (targetPubkey: string, previousLevel: KuboTrustLevel): Promise<void> => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      // All three tiers are addressed by `${kidPubkey}:${tier}:npub`.
+      //   - view     → kind 8712 (view npub)
+      //   - interact → kind 8710 (interaction npub)
+      //   - extend   → kind 8710 with an `extend` pair tag, on its own d-tag
+      const kind =
+        previousLevel === 'view'
+          ? KIND_PERMISSION_VIEW_NPUB_A
+          : KIND_PERMISSION_INTERACTION_NPUB_A;
+      // Read post-write snapshot to compute the surviving same-tier list. The
+      // closure-captured `kidAssignments` is stale relative to anything written
+      // this session, and the cleared entry is already gone from localStorage.
+      const fresh = getFamilySnapshot()?.trustAssignments?.[kidPubkey] ?? {};
+      const sameTierRemaining = Object.entries(fresh)
+        .filter(([pubkey, tier]) => tier === previousLevel && pubkey !== targetPubkey)
+        .map(([pubkey]) => pubkey);
+      const permissionEvent = await publishPermission.mutateAsync({
+        kind,
+        dIdentifier: `${kidPubkey}:${previousLevel}:npub`,
+        npubItems: sameTierRemaining.map((pubkey) => ({ pubkey })),
+        extendPairs:
+          previousLevel === 'extend'
+            ? [{ kind: KIND_PERMISSION_INTERACTION_NPUB_A, mutation: 'as-is' }]
+            : undefined,
+      });
+      const nextFamily = await recordTeppPermissionId(
+        kidPubkey,
+        previousLevel,
+        permissionEvent.id,
+      );
+      if (nextFamily) {
+        await publishState.mutateAsync({
+          publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
+        });
+      }
+    },
+    [kidPubkey, publishPermission, publishState],
   );
 
   const clear = useCallback(
@@ -284,53 +488,29 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         getFamilySnapshot()?.trustAssignments?.[kidPubkey]?.[targetPubkey];
       await clearTrustLevel(kidPubkey, targetPubkey);
 
-      if (!featureTepp || !previousLevel) return;
-
-      // All three tiers are addressed by `${kidPubkey}:${tier}:npub`.
-      //   - view     → kind 8712 (view npub)
-      //   - interact → kind 8710 (interaction npub)
-      //   - extend   → kind 8710 with an `extend` pair tag, on its own d-tag
-      // Re-publish the surviving same-tier list so the cleared target is
-      // removed from the wire. For `extend`, also re-emit the extend pair so
-      // the kind-8710 event keeps its mode-A semantics for whoever remains.
-      const kind =
-        previousLevel === 'view'
-          ? KIND_PERMISSION_VIEW_NPUB_A
-          : KIND_PERMISSION_INTERACTION_NPUB_A;
-      // Read post-write snapshot to compute the surviving same-tier list.
-      // The closure-captured `kidAssignments` is stale relative to anything
-      // written this session.
-      const fresh = getFamilySnapshot()?.trustAssignments?.[kidPubkey] ?? {};
-      const sameTierRemaining = Object.entries(fresh)
-        .filter(([pubkey, tier]) => tier === previousLevel && pubkey !== targetPubkey)
-        .map(([pubkey]) => pubkey);
+      if (!featureTepp || !previousLevel) {
+        // featureTepp off (or nothing was assigned): localStorage clear is the
+        // whole operation. Drop any stale revocation marker so we don't retry a
+        // publish for a tier that's no longer enforced.
+        if (previousLevel) void clearPendingRevocation(kidPubkey, targetPubkey);
+        return;
+      }
 
       try {
-        const permissionEvent = await publishPermission.mutateAsync({
-          kind,
-          dIdentifier: `${kidPubkey}:${previousLevel}:npub`,
-          npubItems: sameTierRemaining.map((pubkey) => ({ pubkey })),
-          extendPairs:
-            previousLevel === 'extend'
-              ? [{ kind: KIND_PERMISSION_INTERACTION_NPUB_A, mutation: 'as-is' }]
-              : undefined,
-        });
-        const nextFamily = await recordTeppPermissionId(
-          kidPubkey,
-          previousLevel,
-          permissionEvent.id,
-        );
-        if (nextFamily) {
-          await publishState.mutateAsync({
-            publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
-          });
-        }
+        await publishTierRevocation(targetPubkey, previousLevel);
+        // Success → ensure no stale marker lingers (e.g. a prior failed clear of
+        // the same target that later succeeded).
+        await clearPendingRevocation(kidPubkey, targetPubkey);
       } catch (err) {
         toast({
           title: 'TEPP publish failed',
           description: err instanceof Error ? err.message : String(err),
           variant: 'destructive',
         });
+        // KUBO-169: localStorage already removed the entry, but the wire still
+        // admits the target. Record the failed revocation so the reconcile
+        // phase retries the publish next session until the construct drops them.
+        await recordPendingRevocation(kidPubkey, targetPubkey, previousLevel);
       }
 
       // KUBO-164 coherence: clearing a person's trust must also drop them from
@@ -358,8 +538,74 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         }
       }
     },
-    [kidPubkey, clearTrustLevel, featureTepp, publishPermission, publishState, toast, user?.pubkey, unfollowMany],
+    [kidPubkey, clearTrustLevel, featureTepp, publishTierRevocation, toast, user?.pubkey, unfollowMany],
   );
 
-  return { get, setLevel, setLevelIfUnassigned, setLevelsBatch, clear };
+  /**
+   * KUBO-169 reconcile primitive: publish a grant covering exactly `members` at
+   * `level`, using the construct (caller-computed via `computeMissingGrants`) —
+   * NOT the localStorage-change check — as the oracle. ONE permission + ONE
+   * state publish for the union of (current same-tier list ∪ members). Throws
+   * on failure so the reconcile guard can retry next session.
+   */
+  const publishMissingGrants = useCallback(
+    async (members: string[], level: KuboTrustLevel): Promise<void> => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      if (!featureTepp || members.length === 0) return;
+      // Union of the currently-recorded same-tier list and the members we're
+      // (re-)admitting. The members are already in localStorage at this tier
+      // (reconcile diffs localStorage-granted-but-not-on-wire), so this is
+      // typically just the current full list — but we union defensively.
+      const fresh = getFamilySnapshot()?.trustAssignments?.[kidPubkey] ?? {};
+      const fullTierList = [
+        ...new Set([
+          ...Object.entries(fresh)
+            .filter(([, tier]) => tier === level)
+            .map(([pubkey]) => pubkey),
+          ...members,
+        ]),
+      ];
+      if (fullTierList.length === 0) return;
+      // ONE publish for the whole union (the permission event is replaceable by
+      // its d-tag), then ONE state publish. No per-member amplification.
+      await publishTierGrant(fullTierList[0], level, fullTierList);
+    },
+    [kidPubkey, featureTepp, publishTierGrant],
+  );
+
+  /**
+   * KUBO-169 reconcile primitive: retry a previously-failed revocation. The
+   * localStorage entry was already removed by `clear`, so we just re-publish the
+   * surviving same-tier list (without the target) + state. On success clear the
+   * pendingRevocations marker; on failure propagate so the marker survives.
+   */
+  const retryRevocation = useCallback(
+    async (targetPubkey: string, previousLevel: KuboTrustLevel): Promise<void> => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      if (!featureTepp) return;
+      await publishTierRevocation(targetPubkey, previousLevel);
+      await clearPendingRevocation(kidPubkey, targetPubkey);
+    },
+    [kidPubkey, featureTepp, publishTierRevocation],
+  );
+
+  const clearPendingRevocationMarker = useCallback(
+    async (targetPubkey: string): Promise<void> => {
+      if (!kidPubkey) return;
+      await clearPendingRevocation(kidPubkey, targetPubkey);
+    },
+    [kidPubkey],
+  );
+
+  return {
+    get,
+    setLevel,
+    setLevelIfUnassigned,
+    setLevelsBatch,
+    clear,
+    approveRequest,
+    publishMissingGrants,
+    retryRevocation,
+    clearPendingRevocationMarker,
+  };
 }

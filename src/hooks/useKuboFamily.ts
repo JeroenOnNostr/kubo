@@ -166,6 +166,20 @@ export interface KuboFamily {
       interactRelay?: string;
     };
   };
+  /**
+   * KUBO-169: per-kid, per-target record of a trust REVOCATION whose permission
+   * publish failed. The localStorage trust entry is already removed (the parent
+   * sees them gone in Trust → People), but the published construct still admits
+   * them on the wire. The reconcile phase (`useEnsureParentTrust`) retries the
+   * revocation publish each session until the construct no longer admits the
+   * target, then clears the marker. The value is the tier the target HAD when
+   * cleared (so the retry re-publishes the correct kind-8710/8712 list).
+   */
+  pendingRevocations?: {
+    [kidPubkey: string]: {
+      [targetPubkey: string]: KuboTrustLevel;
+    };
+  };
 }
 
 /**
@@ -325,6 +339,10 @@ export async function removeKid(pubkey: string): Promise<void> {
     const { [pubkey]: _removedFs, ...restFs } = current.feedSources;
     next.feedSources = restFs;
   }
+  if (current.pendingRevocations && pubkey in current.pendingRevocations) {
+    const { [pubkey]: _removedPr, ...restPr } = current.pendingRevocations;
+    next.pendingRevocations = restPr;
+  }
   await writeAndNotify(next);
 }
 
@@ -451,6 +469,57 @@ export async function recordTeppPermissionId(
   };
   await writeAndNotify(next);
   return next;
+}
+
+// ─── Pending revocations (KUBO-169 failed-clear retries) ─────────────────────
+
+/**
+ * Record a failed trust revocation so the reconcile phase can retry it. Keyed
+ * by kid → target, value is the tier the target HELD when cleared (needed to
+ * re-publish the right permission list). Idempotent on the (kid, target) pair —
+ * re-recording just overwrites the tier (which is stable for a given target).
+ */
+export async function recordPendingRevocation(
+  kidPubkey: string,
+  targetPubkey: string,
+  previousLevel: KuboTrustLevel,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  const pending = current.pendingRevocations ?? {};
+  const kidPending = pending[kidPubkey] ?? {};
+  if (kidPending[targetPubkey] === previousLevel) return; // no-op
+  await writeAndNotify({
+    ...current,
+    pendingRevocations: {
+      ...pending,
+      [kidPubkey]: { ...kidPending, [targetPubkey]: previousLevel },
+    },
+  });
+}
+
+/**
+ * Clear a pending-revocation marker once its publish has succeeded (the
+ * construct no longer admits the target). Prunes the empty kid bucket. No-op if
+ * no marker exists for the pair.
+ */
+export async function clearPendingRevocation(
+  kidPubkey: string,
+  targetPubkey: string,
+): Promise<void> {
+  const current = await readLatest();
+  if (!current) return;
+  const pending = current.pendingRevocations ?? {};
+  const kidPending = pending[kidPubkey];
+  if (!kidPending || !(targetPubkey in kidPending)) return;
+  const { [targetPubkey]: _removed, ...restTargets } = kidPending;
+  const nextPending = { ...pending };
+  if (Object.keys(restTargets).length === 0) {
+    delete nextPending[kidPubkey];
+  } else {
+    nextPending[kidPubkey] = restTargets;
+  }
+  await writeAndNotify({ ...current, pendingRevocations: nextPending });
 }
 
 export async function setRelayTrustLevel(

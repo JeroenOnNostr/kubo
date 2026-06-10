@@ -6,6 +6,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { useToast } from '@/hooks/useToast';
+import { useTrustAssignments } from '@/hooks/useTrustAssignments';
 import { genUserName } from '@/lib/genUserName';
 
 /**
@@ -237,9 +238,16 @@ function RequestShell({
 // ─── Interact (live) ─────────────────────────────────────────────────────────
 
 function InteractTile({ alert }: { alert: InteractAlertItem }) {
-  const { approveTrustRequest, clearTrustRequest } = useKuboFamily();
+  const { clearTrustRequest } = useKuboFamily();
   const { toast } = useToast();
   const { data: author } = useAuthor(alert.targetPubkey);
+  // KUBO-167: approval must publish the TEPP grant (8710 + state) — not just a
+  // localStorage write — so the construct actually admits the creator. The
+  // store-only `approveTrustRequest` left the kid "approved" but permanently
+  // denied on the wire (and the no-downgrade invariant then blocked any
+  // re-grant). `approveRequest` grants `interact`, publishes when TEPP is
+  // enforced, and clears the request ONLY on publish success.
+  const trust = useTrustAssignments(alert.kidPubkey);
 
   const metadata = author?.metadata;
   const subject =
@@ -247,9 +255,10 @@ function InteractTile({ alert }: { alert: InteractAlertItem }) {
 
   const handleApprove = async () => {
     try {
-      await approveTrustRequest(alert.kidPubkey, alert.targetPubkey);
+      await trust.approveRequest(alert.targetPubkey);
       toast({ title: 'Trust set to Interact' });
     } catch (err) {
+      // Publish failed → the request was NOT cleared (so the parent can retry).
       toast({
         title: 'Could not approve request',
         description: err instanceof Error ? err.message : String(err),
