@@ -5,8 +5,9 @@ import { evaluateEvent } from './evaluate'
 import {
   KIND_PERMISSION_INTERACTION_NPUB_A,
   KIND_PERMISSION_VIEW_NPUB_A,
+  KIND_PERMISSION_VIEW_RELAY,
 } from './kinds'
-import type { Construct, ConstructEntry } from './types'
+import type { Construct, ConstructEntry, ParsedBlacklist } from './types'
 
 /**
  * Regression coverage for the KUBO-102 interact-gate fix.
@@ -34,13 +35,37 @@ function npubEntry(kind: number, pubkey: string): ConstructEntry {
   }
 }
 
-function makeConstruct(entries: ConstructEntry[]): Construct {
+function makeConstruct(entries: ConstructEntry[], blacklist?: ParsedBlacklist): Construct {
   return {
     subject: KID,
     guardians: ['9'.repeat(64)],
     entries,
+    blacklist,
     extensionTraces: [],
     inertAuditFindings: [],
+  }
+}
+
+function relayEntry(kind: number, urls: string[]): ConstructEntry {
+  return {
+    kind,
+    sourceEventId: `${kind}-relay`,
+    source: 'direct',
+    items: urls,
+    restrictions: [],
+    monitorRelays: [],
+  }
+}
+
+function blacklist(opts: { relays?: string[]; pubkeys?: string[] } = {}): ParsedBlacklist {
+  return {
+    raw: { id: 'b'.repeat(64) } as unknown as Event,
+    guardian: '9'.repeat(64),
+    blockedPubkeys: opts.pubkeys ?? [],
+    blockedRelays: opts.relays ?? [],
+    blockedEvents: [],
+    signatureValid: true,
+    parseProblems: [],
   }
 }
 
@@ -185,5 +210,65 @@ describe('evaluateEvent — kid follow list at view threshold (KUBO-147)', () =>
     ])
     const reply = note(KID, [['p', VIEW_AUTHOR]])
     expect(evaluateEvent(reply, construct, 'outgoing').result).toBe('deny')
+  })
+})
+
+/**
+ * KUBO-161: relay-hint references must not hard-deny.
+ *
+ * The seeded Kubo construct emits only npub-list permissions (no relay lists),
+ * yet nearly every real note carries a relay hint on its p/e tags. Without this
+ * fix, an admitted author's note hard-denies on the hint and the feed blanks.
+ */
+const DAMUS = 'wss://relay.damus.io'
+
+describe('evaluateEvent — relay-hint over-deny (KUBO-161)', () => {
+  it('incoming: admitted author + relay hint + zero relay lists → permit', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+    ])
+    const ev = note(VIEW_AUTHOR, [['p', KID, DAMUS]])
+    const verdict = evaluateEvent(ev, construct, 'incoming')
+    expect(verdict.result).not.toBe('deny')
+    expect(verdict.result).toBe('permit-view-only')
+  })
+
+  it('outgoing: subject reply + relay hint + zero relay lists → permit', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_INTERACTION_NPUB_A, INTERACT_AUTHOR),
+    ])
+    const ev = note(KID, [['p', INTERACT_AUTHOR, DAMUS]])
+    const verdict = evaluateEvent(ev, construct, 'outgoing')
+    expect(verdict.result).not.toBe('deny')
+  })
+
+  it('relay-blacklisted hint → deny even with zero relay permission lists', () => {
+    const construct = makeConstruct(
+      [npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR)],
+      blacklist({ relays: [DAMUS] }),
+    )
+    const ev = note(VIEW_AUTHOR, [['p', KID, DAMUS]])
+    expect(evaluateEvent(ev, construct, 'incoming').result).toBe('deny')
+  })
+
+  it('relay allow-list present + non-listed relay → incoming permit-with-redactions', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+      relayEntry(KIND_PERMISSION_VIEW_RELAY, ['wss://allowed.example']),
+    ])
+    const ev = note(VIEW_AUTHOR, [['p', KID, DAMUS]])
+    const verdict = evaluateEvent(ev, construct, 'incoming')
+    expect(verdict.result).toBe('permit-with-redactions')
+  })
+
+  it('relay allow-list present + non-listed relay → outgoing deny', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_INTERACTION_NPUB_A, INTERACT_AUTHOR),
+      relayEntry(KIND_PERMISSION_VIEW_RELAY, ['wss://allowed.example']),
+    ])
+    // Outgoing draft by the kid referencing an interact author via a hint to a
+    // non-listed relay.
+    const ev = note(KID, [['p', INTERACT_AUTHOR, DAMUS]])
+    expect(evaluateEvent(ev, construct, 'outgoing').result).toBe('deny')
   })
 })

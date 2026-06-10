@@ -94,8 +94,20 @@ export function evaluateEvent(
     }
   }
 
+  // KUBO-161 deviation: when the construct carries zero relay permission
+  // entries AND no relay blacklist entries, relays are unrestricted — skip
+  // relay-reference evaluation entirely. The seeded Kubo construct emits only
+  // npub-list permissions (no relay lists), yet nearly every real note carries
+  // relay hints on its p/e tags; without this, an admitted author's note
+  // hard-denies on the hint and the whole feed blanks. When relay lists DO
+  // exist, semantics are unchanged here and relay-hint denies are downgraded to
+  // redactable-on-incoming in `finalize`.
+  const relaysUnrestricted = !constructHasRelayRules(construct)
+
   // Extract references from the event.
-  const refs = extractReferences(event)
+  const refs = relaysUnrestricted
+    ? extractReferences(event).filter((r) => r.type !== 'relay')
+    : extractReferences(event)
   const verdicts: ReferenceVerdict[] = []
 
   // Author of the outer event is itself a reference (the most fundamental one).
@@ -543,6 +555,22 @@ function decideFromCandidates(
   }
 }
 
+/**
+ * KUBO-161 deviation: true if the construct constrains relays at all, i.e. it
+ * carries at least one relay permission entry (interaction or view relay-list)
+ * OR a non-empty relay blacklist. When false, relay references are unrestricted
+ * and skipped entirely in `evaluateEvent`.
+ */
+function constructHasRelayRules(construct: Construct): boolean {
+  if (construct.blacklist && construct.blacklist.blockedRelays.length > 0) return true
+  return construct.entries.some(
+    (e) =>
+      (e.kind === RELAY_INTERACTION_KIND || e.kind === RELAY_VIEW_KIND) &&
+      Array.isArray(e.items) &&
+      (e.items as string[]).length > 0,
+  )
+}
+
 /** True if the hex is recognised somewhere in the construct as a pubkey. */
 function isHexKnownAsPubkey(hex: string, construct: Construct): boolean {
   const lower = hex.toLowerCase()
@@ -632,11 +660,20 @@ function finalize(
     .filter((x) => x.v.outcome === 'deny')
 
   const redactableIndices = denyIndices
-    .filter(
-      (x) =>
+    .filter((x) => {
+      // KUBO-161 deviation: a relay-hint allow-list miss is metadata, not
+      // content — on incoming it is redactable (mask the hint, keep the note).
+      // On outgoing it stays a hard deny (you can't redact what you publish).
+      // A relay BLACKLIST deny is a deliberate parent block and stays hard in
+      // both directions.
+      if (x.v.refType === 'relay') {
+        return direction === 'incoming' && x.v.layer !== 'blacklist'
+      }
+      return (
         (x.v.refType === 'event' || x.v.refType === 'hex-ambiguous') &&
-        (x.v.layer === 'recursion-inner-refs' || x.v.layer === 'recursion-author'),
-    )
+        (x.v.layer === 'recursion-inner-refs' || x.v.layer === 'recursion-author')
+      )
+    })
     .map((x) => x.i)
   const redactableSet = new Set(redactableIndices)
 
