@@ -42,6 +42,7 @@ const EmojiPackDialog = lazy(() => import("@/components/EmojiPackDialog").then(m
 // Kubo chrome + boot gate (PR 1)
 import { KuboBootGate } from "@/components/KuboBootGate";
 import { KuboParentLayout } from "@/components/KuboParentLayout";
+import { RequireParentGate } from "@/components/auth/RequireParentGate";
 import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
@@ -328,6 +329,13 @@ export function AppRouter() {
           {/* All kid-scoped pages derive their kid from the active Nostr
               signer (logins[0]) via useSelectedKid — the top-right gear
               dropdown on the Feed tab swaps signers. No :id params. */}
+          {/* KUBO-153: RequireParentGate wraps the whole /parent/* subtree.
+              When the in-memory parentUnlocked flag is unset it renders the
+              PIN dialog in place (no parent chrome / data hooks leak through),
+              so every entry into /parent/* — gear, back-gesture, deep link,
+              raw URL — is gated. Nested INSIDE the guard so KuboParentLayout's
+              trust/association hooks only run once unlocked. */}
+          <Route element={<RequireParentGate />}>
           <Route element={<KuboParentLayout />}>
             <Route path="/parent"               element={<Navigate to="/parent/home" replace />} />
             <Route path="/parent/home"          element={<KidDashboardPage    />} />
@@ -348,6 +356,7 @@ export function AppRouter() {
             <Route path="/parent/feed-settings" element={<EditKidFeedSettingsPage />} />
             <Route path="/parent/keys"          element={<KidKeysPage         />} />
             <Route path="/parent/wot"           element={<WoTScorePage        />} />
+          </Route>
           </Route>
 
           {/* ─── Kubo onboarding ─────────────────────────────── */}

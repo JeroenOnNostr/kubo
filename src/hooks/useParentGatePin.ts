@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
 import { secureStorage } from '@/lib/secureStorage';
+import {
+  cooldownRemainingMs,
+  isInCooldown,
+  recordPinFailure,
+  recordPinSuccess,
+  subscribeParentUnlock,
+} from '@/lib/parentUnlockStore';
 
 /**
  * Local-only parent-gate PIN.
@@ -11,9 +18,12 @@ import { secureStorage } from '@/lib/secureStorage';
  * - Deliberately *not* a Nostr event — this is the "trust the device" gate
  *   between the kid mode and the parent dashboard, not a multi-device
  *   authenticator. Multi-device / biometric auth lands with KUBO-011.
- * - No retry lockout in the MVP; the PIN is 6 digits and this is a single-
- *   device kid/parent shared phone, not a hostile environment. Easy to
- *   add later if we expand the threat model.
+ * - KUBO-153: retry lockout. 5 consecutive wrong PINs → a 60s cooldown that
+ *   doubles each subsequent lockout (60s, 120s, 240s, …). Counters live
+ *   in-memory only (`parentUnlockStore`) — a kid clearing storage just resets
+ *   the cooldown, which is acceptable for the Kubo threat model. `verifyPin`
+ *   refuses (returns `false`) while a cooldown is active, and the remaining
+ *   cooldown is surfaced via `cooldownMs` for a visible countdown in the UI.
  */
 const SALT_KEY = 'kubo:parent-gate:salt';
 const HASH_KEY = 'kubo:parent-gate:hash';
@@ -43,14 +53,39 @@ export interface ParentGatePin {
   isSet: boolean | null;
   /** Write a new 6-digit PIN. Overwrites any existing one. */
   setPin: (pin: string) => Promise<void>;
-  /** Return true iff the supplied 6-digit PIN matches the stored hash. */
+  /**
+   * Return true iff the supplied 6-digit PIN matches the stored hash.
+   * Returns false (without touching the hash) while a lockout cooldown is
+   * active. A correct PIN clears the failure counter; a wrong one advances it
+   * and may start a cooldown (KUBO-153).
+   */
   verifyPin: (pin: string) => Promise<boolean>;
   /** Wipe the stored PIN (used on account reset). */
   clearPin: () => Promise<void>;
+  /** Remaining lockout cooldown in ms (0 when not cooling down). Reactive. */
+  cooldownMs: number;
 }
 
 export function useParentGatePin(): ParentGatePin {
   const [isSet, setIsSet] = useState<boolean | null>(null);
+
+  // Reactive cooldown so the dialog can render a live countdown. The store
+  // emits on every failure/success/lockout; we also tick once a second while a
+  // cooldown is active so the displayed seconds count down to zero.
+  const cooldownMs = useSyncExternalStore(
+    (onChange) => {
+      const unsub = subscribeParentUnlock(onChange);
+      const interval = setInterval(() => {
+        if (isInCooldown()) onChange();
+      }, 1000);
+      return () => {
+        unsub();
+        clearInterval(interval);
+      };
+    },
+    () => cooldownRemainingMs(),
+    () => 0,
+  );
 
   // Initial probe — is a PIN already stored?
   useEffect(() => {
@@ -76,6 +111,8 @@ export function useParentGatePin(): ParentGatePin {
   }, []);
 
   const verifyPin = useCallback(async (pin: string) => {
+    // Refuse during a lockout cooldown — don't even read the hash.
+    if (isInCooldown()) return false;
     if (!/^\d{6}$/.test(pin)) return false;
     const [salt, hash] = await Promise.all([
       secureStorage.getItem(SALT_KEY),
@@ -83,7 +120,12 @@ export function useParentGatePin(): ParentGatePin {
     ]);
     if (!salt || !hash) return false;
     const candidate = await sha256Hex(salt + pin);
-    return candidate === hash;
+    if (candidate === hash) {
+      recordPinSuccess();
+      return true;
+    }
+    recordPinFailure();
+    return false;
   }, []);
 
   const clearPin = useCallback(async () => {
@@ -92,5 +134,5 @@ export function useParentGatePin(): ParentGatePin {
     setIsSet(false);
   }, []);
 
-  return { isSet, setPin, verifyPin, clearPin };
+  return { isSet, setPin, verifyPin, clearPin, cooldownMs };
 }

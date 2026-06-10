@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { useParentGatePin } from '@/hooks/useParentGatePin';
+import { unlockParent } from '@/lib/parentUnlockStore';
 
 /**
  * Passcode dialog for switching out of the kid app into the parent app.
@@ -16,6 +17,14 @@ import { useParentGatePin } from '@/hooks/useParentGatePin';
  * On first use the dialog becomes a 2-step setup (pick a PIN, confirm it).
  * Thereafter it verifies against the stored hash. Wrong code shakes and
  * clears. Cancel closes.
+ *
+ * KUBO-153: on a successful verify (or first-run setup) this sets the
+ * in-memory `parentUnlocked` flag so `RequireParentGate` lets the /parent/*
+ * subtree render. By default it then navigates to /parent/home (the kid-app
+ * gear / back-gesture entry points). When rendered IN PLACE by the route
+ * guard (`navigateOnSuccess={false}`), it skips navigation so the original
+ * deep link the parent was trying to reach renders instead. A live cooldown
+ * countdown is shown after too many wrong attempts.
  */
 
 type Phase =
@@ -27,12 +36,22 @@ type Phase =
 export function ParentGateDialog({
   open,
   onOpenChange,
+  navigateOnSuccess = true,
+  onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * When true (default), navigate to /parent/home after unlock — the behaviour
+   * the kid-app gear and back-gesture entry points expect. The route guard
+   * passes false so the parent stays on the deep link they were reaching for.
+   */
+  navigateOnSuccess?: boolean;
+  /** Called after the unlock flag is set (both verify and first-run setup). */
+  onSuccess?: () => void;
 }) {
   const nav = useNavigate();
-  const { isSet, setPin, verifyPin } = useParentGatePin();
+  const { isSet, setPin, verifyPin, cooldownMs } = useParentGatePin();
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [code, setCode] = useState('');
@@ -70,9 +89,16 @@ export function ParentGateDialog({
       const ok = await verifyPin(six);
       setBusy(false);
       if (ok) {
+        // KUBO-153: mark the parent gate as unlocked BEFORE we navigate, so
+        // RequireParentGate lets the /parent/* subtree render.
+        unlockParent();
+        onSuccess?.();
         close();
-        nav('/parent/home');
+        if (navigateOnSuccess) nav('/parent/home');
       } else {
+        // A wrong PIN may have just tripped the cooldown — verifyPin returns
+        // false either way; the reactive `cooldownMs` drives the countdown
+        // copy below, so we only need a generic message here.
         setErr('Incorrect code.');
         // Clear after the shake animation so the dots visibly reset.
         setTimeout(() => {
@@ -104,8 +130,12 @@ export function ParentGateDialog({
       setBusy(true);
       try {
         await setPin(six);
+        // First-run setup counts as a successful unlock too, so the parent
+        // who just created the PIN isn't immediately re-prompted by the guard.
+        unlockParent();
+        onSuccess?.();
         close();
-        nav('/parent/home');
+        if (navigateOnSuccess) nav('/parent/home');
       } catch {
         setErr('Could not save the passcode. Try again.');
       } finally {
@@ -114,8 +144,13 @@ export function ParentGateDialog({
     }
   };
 
+  // KUBO-153: while a lockout cooldown is active the keypad is disabled and a
+  // live countdown is shown. Round up so "1s left" doesn't flash as 0.
+  const cooldownActive = cooldownMs > 0;
+  const cooldownSeconds = Math.ceil(cooldownMs / 1000);
+
   const handleKey = (n: string) => {
-    if (busy) return;
+    if (busy || cooldownActive) return;
     if (err) setErr(null);
     if (n === '⌫') {
       setCode((c) => c.slice(0, -1));
@@ -187,10 +222,16 @@ export function ParentGateDialog({
           ))}
         </div>
 
-        {err && (
-          <p className="text-center text-[12px] text-destructive -mt-2">
-            {err}
+        {cooldownActive ? (
+          <p className="text-center text-[12px] text-destructive -mt-2" role="alert">
+            Too many tries. Try again in {cooldownSeconds}s.
           </p>
+        ) : (
+          err && (
+            <p className="text-center text-[12px] text-destructive -mt-2">
+              {err}
+            </p>
+          )
         )}
 
         {/* Keypad */}
@@ -203,7 +244,7 @@ export function ParentGateDialog({
                 key={i}
                 type="button"
                 onClick={() => handleKey(k)}
-                disabled={busy}
+                disabled={busy || cooldownActive}
                 className={cn(
                   'h-14 rounded-xl bg-white/10 hover:bg-white/20 text-white active:scale-95',
                   'text-xl font-semibold transition-transform disabled:opacity-40',
