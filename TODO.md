@@ -25,7 +25,6 @@ Full per-task specs with file:line evidence and acceptance criteria: [docs/tepp-
 - **KUBO-163: Read-side gaps: post detail flash, comments, profiles, favorites** (medium)
 - **KUBO-164: Kind-3 must not brick on one unadmitted follow** (medium)
 - **KUBO-165: Reference extraction: case-insensitivity, e-tag author, bare-hex redactable** (medium)
-- **KUBO-166: `seedKidConstruct` must use `assocExpiry` (30d hardcode) + per-step timeouts + audit kind-3** (high)
 - **KUBO-167: Trust-request approval must publish TEPP** (high)
 - **KUBO-168: Default-ON migration account/device mismatch + re-flip + retry hot-loop** (high)
 - **KUBO-169: Reconcile against the construct, not localStorage** (high)
