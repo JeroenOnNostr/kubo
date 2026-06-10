@@ -659,15 +659,18 @@ function finalize(
     .map((v, i) => ({ v, i }))
     .filter((x) => x.v.outcome === 'deny')
 
-  const redactableIndices = denyIndices
+  // KUBO-162 deviation: a deny is only ever redactable on INCOMING. You cannot
+  // redact an event you are publishing, so on outgoing EVERY deny is hard — this
+  // closes the bypass where a kid draft quoting blocked content downgraded to
+  // permit-with-redactions and the write-gate let it through, and also the
+  // deep-nesting outgoing smuggling case.
+  const redactableIndices = (direction === 'incoming' ? denyIndices : [])
     .filter((x) => {
       // KUBO-161 deviation: a relay-hint allow-list miss is metadata, not
       // content — on incoming it is redactable (mask the hint, keep the note).
-      // On outgoing it stays a hard deny (you can't redact what you publish).
-      // A relay BLACKLIST deny is a deliberate parent block and stays hard in
-      // both directions.
+      // A relay BLACKLIST deny is a deliberate parent block and stays hard.
       if (x.v.refType === 'relay') {
-        return direction === 'incoming' && x.v.layer !== 'blacklist'
+        return x.v.layer !== 'blacklist'
       }
       return (
         (x.v.refType === 'event' || x.v.refType === 'hex-ambiguous') &&

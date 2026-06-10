@@ -272,3 +272,47 @@ describe('evaluateEvent — relay-hint over-deny (KUBO-161)', () => {
     expect(evaluateEvent(ev, construct, 'outgoing').result).toBe('deny')
   })
 })
+
+/**
+ * KUBO-162: outgoing denies are never redactable.
+ *
+ * Verified bypass repro: a kid draft quoting a blocked note (the blocked note
+ * present in cache) evaluated to `permit-with-redactions` and the write-gate
+ * (which blocks only on `'deny'`) let it through — but you cannot redact an
+ * event you are publishing. This turns the review's scratch repro into a
+ * permanent test: outgoing → hard deny; the same input incoming → still
+ * permit-with-redactions.
+ */
+describe('evaluateEvent — outgoing denies never redactable (KUBO-162)', () => {
+  const STRANGER = 'f'.repeat(64) // unadmitted author of the blocked note
+  const blockedId = '7'.repeat(64)
+
+  function quoteOf(author: string): Event {
+    // The kid's draft quote-posting the blocked note by its id.
+    return note(author, [['q', blockedId]])
+  }
+
+  it('outgoing: kid quote of denied cached content → deny', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_INTERACTION_NPUB_A, INTERACT_AUTHOR),
+    ])
+    const eventCache = new Map<string, Event>([
+      [blockedId, note(STRANGER)], // blocked: author not admitted
+    ])
+    const verdict = evaluateEvent(quoteOf(KID), construct, 'outgoing', { eventCache })
+    expect(verdict.result).toBe('deny')
+  })
+
+  it('incoming: the SAME quote of denied cached content → permit-with-redactions', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+    ])
+    const eventCache = new Map<string, Event>([
+      [blockedId, note(STRANGER)],
+    ])
+    // Authored by an admitted (view-only) author so the outer admits, only the
+    // nested quote denies → redactable on incoming.
+    const verdict = evaluateEvent(quoteOf(VIEW_AUTHOR), construct, 'incoming', { eventCache })
+    expect(verdict.result).toBe('permit-with-redactions')
+  })
+})
