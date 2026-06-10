@@ -11,6 +11,8 @@ import { KuboParentErrorFallback } from '@/components/KuboErrorFallbacks';
 import { ScopedTheme } from '@/components/ScopedTheme';
 import { ParentTour } from '@/components/tour/ParentTour';
 import { TourAnchorProvider } from '@/components/tour/TourAnchorProvider';
+import { useEnsureKidAssociation } from '@/hooks/useEnsureKidAssociation';
+import { useEnsureParentTrust } from '@/hooks/useEnsureParentTrust';
 import { EMPTY_FEED_SOURCES, useKuboFamily } from '@/hooks/useKuboFamily';
 import { useRelayDiscovery } from '@/hooks/useRelayDiscovery';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
@@ -28,10 +30,21 @@ import { builtinThemes } from '@/themes';
  * blue-gray palette regardless of the user's global (Ditto) theme choice.
  */
 export function KuboParentLayout() {
+  const selectedKid = useSelectedKid();
   useFeedSourcesPrime();
   // Warm the NIP-66 relay catalogue while the user browses other parent
   // pages, so Trust→Places and Feed→Relays open with results already loaded.
   useRelayDiscovery();
+  // Ensure the parent is in the selected kid's trust domain at `interact`
+  // (KUBO-147) — backfills pre-existing families and triggers the TEPP publish
+  // once featureTepp is on.
+  useEnsureParentTrust(selectedKid?.pubkey);
+  // KUBO-149: also renew/recover the selected kid's TEPP association from the
+  // parent shell (e.g. when the parent opens Trust → Diagnostics). The kid
+  // typically stays logged in alongside the parent, so `useKidSigner` can sign
+  // the association here too; the renewal hook shares a per-kid session guard
+  // with the kid-app mount, so this never double-publishes.
+  useEnsureKidAssociation(selectedKid?.pubkey);
 
   return (
     <ScopedTheme colors={builtinThemes.dark} className="min-h-dvh bg-background text-foreground">

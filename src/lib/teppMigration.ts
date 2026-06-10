@@ -14,6 +14,7 @@ import {
   KIND_PERMISSION_VIEW_RELAY,
 } from '@/lib/tepp/kinds';
 import { appendTeppAuditEntry } from '@/lib/tepp-adapters/teppAuditLog';
+import { assocExpirationAt } from '@/lib/tepp-adapters/assocExpiry';
 import type { KuboFamily, KuboTrustLevel } from '@/hooks/useKuboFamily';
 
 /**
@@ -68,14 +69,29 @@ export interface MigrationProgress {
  * **Q5 mitigation**: when a kid has zero npub-tier assignments AND a kind-3
  * follow list is available, those follows seed the `interact` (kind 8710)
  * list. Avoids an empty feed on first boot. Only applies once.
+ *
+ * **Default-pack seed (KUBO-148)**: members of the kid's seeded follow
+ * pack(s) — held in `feedSources[kid].packs` and resolved by the caller —
+ * are folded into the `view` (kind 8712) list so the TEPP construct admits
+ * them out-of-the-box. Without this, a fresh install's default pack lands in
+ * the feed-source list but never gets a permission event, so every pack
+ * profile reads "NOT ADMITTED" and the kid feed is empty. The manual
+ * Packs-page toggle (`useAddFeedPack`) grants the same `view` tier, so this
+ * keeps onboarding and the toggle behaving identically.
  */
 export function computeKidTemplates(opts: {
   family: KuboFamily;
   kidPubkey: string;
   parentPubkey: string;
   kindThreeFollows?: string[];
+  /**
+   * Pubkeys resolved from the kid's seeded follow pack(s). Merged into the
+   * `view` tier (deduped against explicit assignments; kid + parent excluded
+   * by the caller). Empty when no packs are seeded or resolution failed.
+   */
+  packMemberViewPubkeys?: string[];
 }): { kind: number; template: ReturnType<typeof buildPermissionTemplate> | ReturnType<typeof buildStateTemplate> | ReturnType<typeof buildAssociationTemplate>; order: number }[] {
-  const { family, kidPubkey, parentPubkey, kindThreeFollows = [] } = opts;
+  const { family, kidPubkey, parentPubkey, kindThreeFollows = [], packMemberViewPubkeys = [] } = opts;
   const trust = family.trustAssignments?.[kidPubkey] ?? {};
   const relayTrust = family.relayTrustAssignments?.[kidPubkey] ?? {};
 
@@ -90,17 +106,28 @@ export function computeKidTemplates(opts: {
       ? kindThreeFollows
       : undefined;
 
+  // Fold seeded pack members into the view tier, deduped against any tier the
+  // pubkey already holds (an explicit interact/extend assignment is stronger
+  // than view, so never downgrade it by also listing it under view).
+  const explicitlyAssigned = new Set(Object.keys(trust));
+  const viewPubkeys = Array.from(
+    new Set([
+      ...groupedNpub.view,
+      ...packMemberViewPubkeys.filter((pk) => !explicitlyAssigned.has(pk)),
+    ]),
+  );
+
   const out: ReturnType<typeof computeKidTemplates> = [];
 
   // 1. view-only npub list (8712)
-  if (groupedNpub.view.length > 0) {
+  if (viewPubkeys.length > 0) {
     out.push({
       kind: KIND_PERMISSION_VIEW_NPUB_A,
       template: buildPermissionTemplate({
         kind: KIND_PERMISSION_VIEW_NPUB_A,
         subject: kidPubkey,
         dIdentifier: `${kidPubkey}:view:npub`,
-        npubItems: groupedNpub.view.map((pubkey) => ({ pubkey })),
+        npubItems: viewPubkeys.map((pubkey) => ({ pubkey })),
       }),
       order: 1,
     });
@@ -179,7 +206,7 @@ export function computeKidTemplates(opts: {
     template: buildAssociationTemplate({
       subject: kidPubkey,
       guardians: [{ pubkey: parentPubkey }],
-      expirationSeconds: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+      expirationSeconds: assocExpirationAt(Math.floor(Date.now() / 1000)),
     }),
     order: 6,
   });

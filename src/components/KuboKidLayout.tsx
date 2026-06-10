@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useEnsureKidAssociation } from '@/hooks/useEnsureKidAssociation';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useScreenTime } from '@/hooks/useScreenTime';
 import { start, stopTracker } from '@/lib/screenTimeTracker';
@@ -49,6 +50,12 @@ export function KuboKidLayout() {
   const { family } = useKuboFamily();
   const { isLocked, isOutsideWindow, settings } = useScreenTime();
   const [gateOpen, setGateOpen] = useState(false);
+
+  // KUBO-149: keep the kid's TEPP association (kind 17700) alive. The kid is
+  // the active signer in the kid app, so this is the natural place to renew /
+  // recover it — republishes when missing/expired/near-expiry so the construct
+  // never silently dies after the association's NIP-40 expiration.
+  useEnsureKidAssociation(user?.pubkey);
 
   // KUBO-107: defer the time-window lockout while the first-run tour is still
   // pending. Otherwise a parent who installs Kubo and creates their first kid

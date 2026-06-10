@@ -22,14 +22,8 @@ import {
 } from '@/lib/tepp/kinds';
 import type { PermissionRef } from '@/lib/tepp/types';
 import { appendTeppAuditEntry } from '@/lib/tepp-adapters/teppAuditLog';
+import { assocExpirationAt } from '@/lib/tepp-adapters/assocExpiry';
 import { clearVerdictCache } from '@/lib/tepp-adapters/verdictCache';
-
-/** 30 days, in seconds — spec recommended NIP-40 expiration for kind 17700. */
-const ASSOC_EXPIRATION_SECONDS = 30 * 24 * 60 * 60;
-
-function nowPlus(seconds: number): number {
-  return Math.floor(Date.now() / 1000) + seconds;
-}
 
 async function publishEvent(
   nostr: { event: (e: NostrEvent, opts?: { signal?: AbortSignal }) => Promise<void> },
@@ -79,7 +73,7 @@ export function useKuboTeppPublishAssociation(
       const template = buildAssociationTemplate({
         subject: kidPubkey,
         guardians: [{ pubkey: parent.pubkey }],
-        expirationSeconds: nowPlus(ASSOC_EXPIRATION_SECONDS),
+        expirationSeconds: assocExpirationAt(Math.floor(Date.now() / 1000)),
       });
       const signed = await kid.signer.signEvent(template);
       const event = signed as unknown as NostrEvent;
