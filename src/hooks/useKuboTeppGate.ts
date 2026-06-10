@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { EventTemplate } from 'nostr-tools/pure';
-import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 
@@ -9,8 +8,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useParentSigner } from '@/hooks/useParentSigner';
 import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
 import { useTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
-import { evaluateEvent } from '@/lib/tepp/evaluate';
-import { prefetchReferenceClosure } from '@/lib/tepp-adapters/referenceClosure';
+import { evaluateOutboundDraft } from '@/lib/tepp-adapters/gatedSigner';
 import type { Construct, FullEventVerdict } from '@/lib/tepp/types';
 
 /**
@@ -36,8 +34,13 @@ import type { Construct, FullEventVerdict } from '@/lib/tepp/types';
  * the interaction threshold (`'outgoing'`). Genuine interactions (kind 1 replies,
  * 6/16 reposts, 7 reactions, 9734 zap requests) are NOT in this set and stay
  * gated at interaction level. (KUBO-147)
+ *
+ * KUBO-160: the authoritative copy of this set now lives in
+ * `gatedSigner.ts` (`evaluateOutboundDraft`), which both this hook gate and the
+ * signer-seam gate call. The set is documented here for the trust-model context;
+ * the delta machinery (`computeFollowListDelta` / `buildDeltaEventForRecordList`)
+ * stays exported from this module so existing importers and tests are unchanged.
  */
-const RECORD_LIST_KINDS = new Set<number>([3]);
 
 /**
  * KUBO-164: pure delta between the kid's previous published kind-3 follow list
@@ -216,52 +219,21 @@ export function useKuboTeppGate(): KuboTeppGate {
 
       const fullDraft = templateToEvent(template, activePubkey ?? '');
 
-      // KUBO-164: for record/list kinds (the kid's own kind-3 follow list),
-      // evaluate ONLY the delta versus the kid's previously-published list.
-      // Newly-added p-tags must clear the view threshold; pre-existing entries
-      // are carried regardless of current admission (they were admitted when
-      // added — a later parent trust-clear must not brick every follow/unfollow
-      // publish). Removals are always allowed (they shrink the evaluated set).
-      // No previous list on record → every entry is treated as new.
-      const isRecordList = RECORD_LIST_KINDS.has(fullDraft.kind);
-      const draft = isRecordList
-        ? buildDeltaEventForRecordList(
-            fullDraft,
-            activePubkey ? readCachedFollowPubkeys(queryClient, activePubkey) : null,
-          )
-        : fullDraft;
-
-      // Pre-fetch the draft's reference closure so a reply/quote resolves to a
-      // concrete admit/deny instead of `pending`. Failure to fetch fails open.
-      let eventCache: Map<string, NostrEvent> | undefined;
-      try {
-        const { cache } = await prefetchReferenceClosure([draft], nostr.query.bind(nostr));
-        eventCache = cache;
-      } catch {
-        eventCache = undefined;
-      }
-
-      // Record/list kinds (the kid's own follow list) only require each
-      // referenced pubkey to be admitted at view-or-better — the same
-      // threshold as an incoming event. Real interactions stay 'outgoing'
-      // (interaction-level required).
-      const direction = isRecordList ? 'incoming' : 'outgoing';
-
-      const verdict = evaluateEvent(
-        draft as unknown as Parameters<typeof evaluateEvent>[0],
-        activeConstruct as Construct,
-        direction,
-        eventCache
-          ? { eventCache: eventCache as unknown as Map<string, NostrToolsEvent> }
-          : {},
-      );
-      // Only block on a concrete deny. `pending` (unfetchable reference) fails
-      // open so relay gaps don't silently stop a kid from posting — this
-      // per-reference fail-open on a LOADED construct is intentional and stays
-      // exactly as-is (KUBO-154 only fail-closes the unloaded-construct case).
-      if (verdict.result === 'deny') {
-        throw new TeppDeniedError(verdict);
-      }
+      // KUBO-160: the outbound evaluation core is shared with the signer-seam
+      // gate (`gatedSigner.evaluateOutboundDraft`) so the decision logic is
+      // identical and never forks. It applies the KUBO-164 record/list delta
+      // (kind-3: only newly-added follows are evaluated; pre-existing carried),
+      // prefetches the reference closure (pending fails OPEN), evaluates at the
+      // right direction (incoming for record-lists, outgoing for interactions),
+      // and throws `TeppDeniedError` only on a concrete deny.
+      await evaluateOutboundDraft({
+        draft: fullDraft,
+        prevFollowPubkeys: activePubkey
+          ? readCachedFollowPubkeys(queryClient, activePubkey)
+          : null,
+        query: nostr.query.bind(nostr),
+        construct: activeConstruct as Construct,
+      });
     },
     [enforced, construct, loading, activePubkey, parent?.pubkey, queryClient, nostr],
   );
