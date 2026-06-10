@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useKidFeed } from '@/hooks/useKidFeed';
+import { useKuboTeppFeedFilter } from '@/hooks/useKuboTeppFeedFilter';
 import { getKidSettings } from '@/hooks/useKuboFamily';
 import { useMuteList } from '@/hooks/useMuteList';
 import { shouldHideFeedEvent } from '@/lib/feedUtils';
@@ -105,7 +106,10 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
   const isViewOnly = !!user?.pubkey
     && getKidSettings(user.pubkey).viewOnly === true;
 
-  const feedItems = useMemo<FeedItem[]>(() => {
+  // First pass: dedupe + Ditto mute/hide. This is the candidate set fed to the
+  // render-side TEPP filter (KUBO-159) so it can pre-fetch each item's
+  // reference closure before deciding visibility.
+  const candidateItems = useMemo<FeedItem[]>(() => {
     if (!data?.pages) return [];
     const seen = new Set<string>();
     const out: FeedItem[] = [];
@@ -123,6 +127,22 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
     }
     return out;
   }, [data?.pages, muteItems]);
+
+  // KUBO-159: render-side TEPP filter as defense-in-depth. The query-time
+  // author allowlist (useKidFeed) can't express event-list/relay-list
+  // permissions (allowedAuthors.ts:29-32); the per-event evaluator can. Pass
+  // the candidate events so the filter pre-fetches their reference closure; it
+  // fails open while that closure resolves and hides only on a concrete deny.
+  // No-op when TEPP isn't enforced for this kid (parent surfaces unchanged).
+  const candidateEvents = useMemo(
+    () => candidateItems.map((i) => i.event),
+    [candidateItems],
+  );
+  const teppFilter = useKuboTeppFeedFilter(candidateEvents);
+  const feedItems = useMemo<FeedItem[]>(() => {
+    if (!teppFilter.enabled) return candidateItems;
+    return candidateItems.filter((item) => teppFilter.shouldShow(item.event));
+  }, [candidateItems, teppFilter]);
 
   // Surface the current feed items so KidHomePage can prefetch the first few
   // video thumbnails (boot-splash gate) without re-running the feed query.

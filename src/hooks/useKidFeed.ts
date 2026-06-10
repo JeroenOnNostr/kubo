@@ -82,6 +82,27 @@ export function computeTeppHold(
   return 'construct-unavailable';
 }
 
+/**
+ * KUBO-159 — pure repost-author admission check (unit-testable).
+ *
+ * Reposts (kind 6/16) embed (or reference-by-id) an ORIGINAL event authored by
+ * someone OTHER than the reposter. The query-time author allowlist only scopes
+ * the reposter (the event's own `pubkey`), so an allowlisted account reposting a
+ * blacklisted/unadmitted author would smuggle that author's content onto the
+ * kid's screen. This closes the leak at the source.
+ *
+ * Returns true when the original author is allowed to be shown:
+ *  - `allowSet === null` → TEPP not active for this feed → always allowed.
+ *  - otherwise → only when the original author's lowercased pubkey is in the set.
+ */
+export function isRepostOriginalAllowed(
+  originalAuthorPubkey: string,
+  allowSet: Set<string> | null,
+): boolean {
+  if (!allowSet) return true;
+  return allowSet.has(originalAuthorPubkey.toLowerCase());
+}
+
 const PAGE_SIZE = 15;
 const OVER_FETCH_MULTIPLIER = 3;
 /**
@@ -329,6 +350,10 @@ export function useKidFeed() {
         if (isRepostKind(ev.kind)) {
           const embedded = parseRepostContent(ev);
           if (embedded && embedded.created_at <= now) {
+            // KUBO-159: the reposter is allowlisted (relay leg scoped to
+            // allowSet) but the ORIGINAL author is not — drop the smuggled-in
+            // content rather than render it on the kid's screen.
+            if (!isRepostOriginalAllowed(embedded.pubkey, allowSet)) continue;
             items.push({
               event: embedded,
               repostedBy: ev.pubkey,
@@ -355,6 +380,10 @@ export function useKidFeed() {
           for (const original of originals) {
             const repost = repostMap.get(original.id);
             if (repost && original.created_at <= now) {
+              // KUBO-159: originals are fetched by id with NO author
+              // constraint (the verified leak) — re-check the original author
+              // against the allowlist before showing it.
+              if (!isRepostOriginalAllowed(original.pubkey, allowSet)) continue;
               items.push({
                 event: original,
                 repostedBy: repost.pubkey,

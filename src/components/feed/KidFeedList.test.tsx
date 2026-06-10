@@ -55,6 +55,15 @@ vi.mock('@/hooks/useKidFeed', () => ({
   useKidFeed: () => mockFeed(),
 }));
 
+// KUBO-159: KidFeedList now runs items through the render-side TEPP filter as
+// defense-in-depth. Mock it so we can drive shouldShow from the test; the
+// default is PASS (filter disabled — parent surfaces / non-enforced kids).
+const mockTeppFilter = vi.fn();
+
+vi.mock('@/hooks/useKuboTeppFeedFilter', () => ({
+  useKuboTeppFeedFilter: () => mockTeppFilter(),
+}));
+
 function Wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -69,6 +78,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 
 describe('KidFeedList capAtIndex (KUBO-066)', () => {
   beforeEach(() => {
+    mockTeppFilter.mockReturnValue({ enabled: false, shouldShow: () => true });
     mockFeed.mockReturnValue({
       data: {
         pages: [
@@ -203,5 +213,75 @@ describe('KidFeedList capAtIndex (KUBO-066)', () => {
       </Wrapper>,
     );
     expect(screen.getByText('no posts')).toBeInTheDocument();
+  });
+});
+
+/**
+ * KUBO-159 — render-side TEPP filter wired into KidFeedList as
+ * defense-in-depth. When the filter is enabled (TEPP enforced for the active
+ * kid), items whose author/references the construct denies must be hidden, even
+ * though they passed the query-time author allowlist (e.g. event-list/relay-list
+ * permissions the allowlist can't express).
+ */
+describe('KidFeedList TEPP render-side filter (KUBO-159)', () => {
+  const eventWithPubkey = (i: number, pubkeyByte: string): NostrEvent => ({
+    ...makeEvent(i),
+    pubkey: `00000000000000000000000000000000000000000000000000000000000000${pubkeyByte}`,
+  });
+
+  beforeEach(() => {
+    mockFeed.mockReturnValue({
+      data: {
+        pages: [
+          {
+            items: [
+              { event: eventWithPubkey(0, 'aa') }, // allowed
+              { event: eventWithPubkey(1, 'bb') }, // denied author
+              { event: eventWithPubkey(2, 'aa') }, // allowed
+            ],
+          },
+        ],
+      },
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isPending: false,
+      isLoading: false,
+    });
+  });
+
+  it('hides items whose author the construct denies when the filter is enabled', () => {
+    const deniedPubkey =
+      '00000000000000000000000000000000000000000000000000000000000000bb';
+    mockTeppFilter.mockReturnValue({
+      enabled: true,
+      shouldShow: (event: NostrEvent) => event.pubkey !== deniedPubkey,
+    });
+
+    render(
+      <Wrapper>
+        <KidFeedList variant="kid" emptyMessage="empty" />
+      </Wrapper>,
+    );
+
+    // The denied-author item (index 1) is dropped; the two allowed items remain.
+    const items = document.querySelectorAll('[data-kid-feed-item]');
+    expect(items).toHaveLength(2);
+    // No NoteCard rendered for the denied author's note.
+    const notes = screen.getAllByTestId('note');
+    expect(notes).toHaveLength(2);
+  });
+
+  it('passes everything through when the filter is disabled (parent / non-enforced)', () => {
+    mockTeppFilter.mockReturnValue({ enabled: false, shouldShow: () => false });
+
+    render(
+      <Wrapper>
+        <KidFeedList variant="kid" emptyMessage="empty" />
+      </Wrapper>,
+    );
+
+    // shouldShow returns false but enabled:false means it is never consulted.
+    expect(document.querySelectorAll('[data-kid-feed-item]')).toHaveLength(3);
   });
 });
