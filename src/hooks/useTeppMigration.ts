@@ -382,6 +382,16 @@ async function signMigrationTemplate(args: SignArgs): Promise<NostrEvent | null>
 
   if (step.order === 5) {
     // State event — needs encrypted private section AND public permission refs.
+    //
+    // KUBO-171: this order-5 state publish KEEPS its own `readLatest()` and does
+    // NOT route through the serialized `useKuboTeppPublishState` chokepoint. It
+    // is BOOT-ONLY (the migration runner walks a per-kid plan during boot, one
+    // step at a time) and signs with the passed-in `parent.signer` rather than a
+    // React hook, so there is no concurrent manual-flow to race here: by the time
+    // the Trust/Relay pages can fire a manual state publish, migration has
+    // already completed (teppMigratedAt set). It still reads refs at sign time
+    // (below) so the invariant "state refs = latest recorded permission ids"
+    // holds identically to the serialized path.
     if (!parent.signer.nip44) {
       throw new Error('NIP-44 v2 required for TEPP state events');
     }

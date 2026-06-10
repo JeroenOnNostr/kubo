@@ -211,6 +211,12 @@ export async function seedKidConstruct(
   }
 
   // ── 5. State (34700) — parent signs, references BOTH permission events. ──
+  // KUBO-171: this onboarding seed publishes its state DIRECTLY (it does not
+  // route through the serialized `useKuboTeppPublishState` chokepoint). That is
+  // intentional and safe: seeding runs once during onboarding, BEFORE the kid
+  // exists in any concurrent trust/relay/reconcile flow, so there is nothing to
+  // interleave with — the refs are built inline from the two events we just
+  // published in this same function.
   const publicPermissions: PermissionRef[] = [
     { id: interactEvent.id, kind: KIND_PERMISSION_INTERACTION_NPUB_A },
   ];

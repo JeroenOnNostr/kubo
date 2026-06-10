@@ -16,7 +16,9 @@ import {
 import {
   EXTEND_TARGET_KINDS,
   KIND_PERMISSION_INTERACTION_NPUB_A,
+  KIND_PERMISSION_INTERACTION_RELAY,
   KIND_PERMISSION_VIEW_NPUB_A,
+  KIND_PERMISSION_VIEW_RELAY,
   KIND_STATE,
   PERMISSION_KINDS,
 } from '@/lib/tepp/kinds';
@@ -24,6 +26,7 @@ import type { PermissionRef } from '@/lib/tepp/types';
 import { appendTeppAuditEntry } from '@/lib/tepp-adapters/teppAuditLog';
 import { assocExpirationAt } from '@/lib/tepp-adapters/assocExpiry';
 import { clearVerdictCache } from '@/lib/tepp-adapters/verdictCache';
+import { readLatest, type KuboFamily } from '@/hooks/useKuboFamily';
 
 async function publishEvent(
   nostr: { event: (e: NostrEvent, opts?: { signal?: AbortSignal }) => Promise<void> },
@@ -100,73 +103,236 @@ export function useKuboTeppPublishAssociation(
 /* useKuboTeppPublishState                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** Input shape for `useKuboTeppPublishState`. */
+/**
+ * Input shape for `useKuboTeppPublishState`.
+ *
+ * KUBO-171: callers NO LONGER pass `publicPermissions`. The serialized publish
+ * core reads the current ref set from `teppLatestPermissionIds[kid]` via
+ * `readLatest()` at sign time, so two interleaved flows can't clobber each
+ * other's refs with a stale caller-supplied snapshot. Callers may still pass an
+ * (optional) private section.
+ */
 export interface PublishStateInput {
   /** Encrypted (private) section. Default empty: `{ permissions: [] }`. */
   privateSection?: StatePrivateSection;
-  /** Public permission refs listed on the state event (visible to relays). */
-  publicPermissions?: PermissionRef[];
+  /**
+   * KUBO-172: publish a TEARDOWN state — kind-34700 with EMPTY refs. This is
+   * the ONE place an empty-refs 34700 is correct (it tears the kid's construct
+   * down on guardian sign at removal). Every other publish self-sources its
+   * refs from `readLatest()`; setting this skips that read and emits zero refs.
+   * Do NOT set this from the trust/relay assignment flows — clobbering live
+   * refs to empty is the exact KUBO-148(d) regression we serialize to prevent.
+   */
+  teardownEmptyRefs?: boolean;
+}
+
+/* ── KUBO-171: per-kid serialization state (module-level) ────────────────────
+ * `stateChain[kid]` is a promise tail: every state publish for a kid appends
+ * to it via `.then(publish)`, so two flows that interleave their awaits (e.g.
+ * useEnsureParentTrust firing phase 1 and phase 2 in the same tick, or two
+ * tabs) run their sign-time `readLatest()` + publish strictly one after the
+ * other. Because each reads the ref set INSIDE its turn, the second sees the
+ * first's recorded permission ids → the final published state is the UNION,
+ * never the loser's stale snapshot.
+ *
+ * `lastStateCreatedAt[kid]` tracks the created_at we last published for that
+ * kid; a same-second replacement bumps to last+1 so replaceable ordering
+ * (newest created_at wins, ties broken by lowest id — nondeterministic) is
+ * strictly increasing and deterministic.
+ */
+const stateChain: Record<string, Promise<unknown>> = {};
+const lastStateCreatedAt: Record<string, number> = {};
+
+/**
+ * Build the public permission refs for a kid's state event from the recorded
+ * latest permission-event ids on the persisted family. Single source of truth
+ * for the ref shape — the trust-page and relay-page flows used to each keep
+ * their own copy (KUBO-171 consolidates them here, read at sign time).
+ */
+export function buildStatePublicRefs(
+  family: KuboFamily | null,
+  kidPubkey: string,
+): PermissionRef[] {
+  const ids = family?.teppLatestPermissionIds?.[kidPubkey];
+  if (!ids) return [];
+  const refs: PermissionRef[] = [];
+  if (ids.view) refs.push({ id: ids.view, kind: KIND_PERMISSION_VIEW_NPUB_A });
+  if (ids.interact) refs.push({ id: ids.interact, kind: KIND_PERMISSION_INTERACTION_NPUB_A });
+  if (ids.extend && ids.extend !== ids.interact) {
+    refs.push({ id: ids.extend, kind: KIND_PERMISSION_INTERACTION_NPUB_A });
+  }
+  if (ids.viewRelay) refs.push({ id: ids.viewRelay, kind: KIND_PERMISSION_VIEW_RELAY });
+  if (ids.interactRelay) refs.push({ id: ids.interactRelay, kind: KIND_PERMISSION_INTERACTION_RELAY });
+  return refs;
+}
+
+interface SerializedStatePublishArgs {
+  nostr: { event: (e: NostrEvent, opts?: { signal?: AbortSignal }) => Promise<void> };
+  parent: { pubkey: string; signer: { signEvent: (t: unknown) => Promise<unknown>; nip44?: { encrypt: (pubkey: string, plaintext: string) => Promise<string> } } };
+  kidPubkey: string;
+  privateSection: StatePrivateSection;
+  teardownEmptyRefs: boolean;
+}
+
+/**
+ * KUBO-171: the serialized state-publish CHOKEPOINT. Reads the ref set at sign
+ * time (`readLatest()`), bumps `created_at` past the kid's last publish, signs,
+ * and publishes. Every 34700 publisher routes through here via `runSerialized`
+ * so per-kid ordering is total. Exported for the removeKid teardown (KUBO-172)
+ * and unit tests.
+ */
+async function publishStateNow(args: SerializedStatePublishArgs): Promise<NostrEvent> {
+  const { nostr, parent, kidPubkey, privateSection, teardownEmptyRefs } = args;
+  const nip44 = parent.signer.nip44;
+  if (!nip44) throw new Error('NIP-44 v2 required for TEPP state events');
+
+  // KUBO-171: source refs HERE, at sign time, from the latest persisted family
+  // — not from a caller snapshot. teardownEmptyRefs (KUBO-172) is the sole
+  // exception: empty refs on purpose to dismantle a removed kid's construct.
+  const publicPermissions = teardownEmptyRefs
+    ? []
+    : buildStatePublicRefs(await readLatest(), kidPubkey);
+
+  const ciphertext = await nip44.encrypt(kidPubkey, JSON.stringify(privateSection));
+  const template = buildStateTemplate({
+    subject: kidPubkey,
+    publicAssocATag: buildAssocATag(kidPubkey),
+    publicPermissions,
+    encryptedContent: ciphertext,
+  });
+
+  // KUBO-171: deterministic replaceable ordering. If we'd emit at (or before)
+  // the same second as the previous publish for this kid, bump to last+1 so
+  // created_at strictly increases and the newest state always wins.
+  const last = lastStateCreatedAt[kidPubkey];
+  if (last !== undefined && template.created_at <= last) {
+    template.created_at = last + 1;
+  }
+  lastStateCreatedAt[kidPubkey] = template.created_at;
+
+  const signed = await parent.signer.signEvent(template);
+  const event = signed as unknown as NostrEvent;
+  await publishEvent(nostr, event);
+  appendTeppAuditEntry({
+    kind: event.kind,
+    signerPubkey: parent.pubkey,
+    subjectPubkey: kidPubkey,
+    eventId: event.id,
+    note: teardownEmptyRefs
+      ? 'TEPP state TEARDOWN (empty refs — kid removed)'
+      : `TEPP state (${publicPermissions.length} public refs)`,
+  });
+  return event;
+}
+
+/**
+ * KUBO-171: append a state publish for `kidPubkey` to that kid's serialization
+ * chain and return its result. The chain swallows prior rejections (a failed
+ * publish must not poison later ones) but each appended publish surfaces its
+ * own outcome to its own caller.
+ */
+function runSerialized(
+  kidPubkey: string,
+  publish: () => Promise<NostrEvent>,
+): Promise<NostrEvent> {
+  const prior = stateChain[kidPubkey] ?? Promise.resolve();
+  const next = prior.then(publish, publish);
+  // Keep the tail alive even if THIS publish rejects, so the next enqueue still
+  // serializes behind it (it just won't see a rejected predecessor).
+  stateChain[kidPubkey] = next.catch(() => {});
+  return next;
+}
+
+/**
+ * KUBO-171 chokepoint entry point: serialize a state publish for `kidPubkey`
+ * behind that kid's promise chain, sourcing refs at sign time. The hook, the
+ * removeKid teardown, and tests all funnel through here so per-kid ordering and
+ * the same-second created_at bump are guaranteed in one place. Exported for
+ * tests (and the teardown helper below).
+ */
+export function publishStateSerialized(args: {
+  nostr: SerializedStatePublishArgs['nostr'];
+  parent: SerializedStatePublishArgs['parent'];
+  kidPubkey: string;
+  privateSection?: StatePrivateSection;
+  teardownEmptyRefs?: boolean;
+}): Promise<NostrEvent> {
+  return runSerialized(args.kidPubkey, () =>
+    publishStateNow({
+      nostr: args.nostr,
+      parent: args.parent,
+      kidPubkey: args.kidPubkey,
+      privateSection: args.privateSection ?? { permissions: [] },
+      teardownEmptyRefs: !!args.teardownEmptyRefs,
+    }),
+  );
+}
+
+/**
+ * KUBO-172 teardown helper: publish a guardian-signed, EMPTY-refs kind-34700
+ * for `kidPubkey` through the serialized chokepoint. Used at kid removal so the
+ * teardown can't race a concurrent (already-removed) reconcile publish.
+ */
+export async function publishStateTeardown(
+  nostr: SerializedStatePublishArgs['nostr'],
+  parent: SerializedStatePublishArgs['parent'],
+  kidPubkey: string,
+): Promise<NostrEvent> {
+  return publishStateSerialized({
+    nostr,
+    parent,
+    kidPubkey,
+    privateSection: { permissions: [] },
+    teardownEmptyRefs: true,
+  });
+}
+
+/** @internal test seam — reset module-level serialization state. */
+export function __resetStatePublishSerialization(): void {
+  for (const k of Object.keys(stateChain)) delete stateChain[k];
+  for (const k of Object.keys(lastStateCreatedAt)) delete lastStateCreatedAt[k];
 }
 
 /**
  * Publish or replace the kid's TEPP state event (kind 34700). Signed by the
  * **parent** (guardian). The private section is encrypted to the kid pubkey
- * via NIP-44 v2 — uses the proven nested form `signer.nip44.encrypt(
- * recipient, plaintext)`, NOT the TEPP flat form (the adapter is only used
- * when invoking vendored TEPP code; here we own the publish path).
+ * via NIP-44 v2.
  *
- * Accepts both a private section AND public permission refs; the construct's
- * permission walk concatenates both. v1 default: `publicPermissions` is the
- * source of truth — `useTrustAssignments` re-publishes state with the full
- * set of currently-published permission event ids after every assignment
- * change so the construct picks up the new permission immediately.
+ * KUBO-171: the public permission refs are sourced INSIDE the mutation from
+ * `readLatest()` (the persisted `teppLatestPermissionIds[kid]`), and publishes
+ * are serialized per-kid behind a module-level promise chain so interleaved
+ * flows produce the UNION of their refs, not the last writer's stale snapshot.
+ * Callers therefore no longer pass `publicPermissions`.
  */
 export function useKuboTeppPublishState(
   kidPubkey: string | undefined,
-): UseMutationResult<NostrEvent, Error, PublishStateInput | StatePrivateSection> {
+): UseMutationResult<NostrEvent, Error, PublishStateInput | StatePrivateSection | void> {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { user: parent } = useParentSigner();
 
   return useMutation({
-    mutationFn: async (input: PublishStateInput | StatePrivateSection) => {
+    mutationFn: async (input?: PublishStateInput | StatePrivateSection) => {
       if (!kidPubkey) throw new Error('No kid pubkey provided.');
       if (!parent) throw new Error('Parent must be logged in to publish a state event.');
-      const nip44 = (parent.signer as unknown as {
-        nip44?: { encrypt: (pubkey: string, plaintext: string) => Promise<string> };
-      }).nip44;
-      if (!nip44) throw new Error('NIP-44 v2 required for TEPP state events');
 
-      // Back-compat: a bare StatePrivateSection (with `permissions` array)
-      // is treated as the private section.
-      const isBareSection = 'permissions' in input;
+      // Back-compat: a bare StatePrivateSection (with `permissions` array) is
+      // treated as the private section. (Callers no longer pass refs.)
+      const isBareSection = !!input && 'permissions' in input;
       const privateSection: StatePrivateSection = isBareSection
         ? (input as StatePrivateSection)
-        : ((input as PublishStateInput).privateSection ?? { permissions: [] });
-      const publicPermissions: PermissionRef[] = isBareSection
-        ? []
-        : ((input as PublishStateInput).publicPermissions ?? []);
+        : ((input as PublishStateInput | undefined)?.privateSection ?? { permissions: [] });
+      const teardownEmptyRefs = !isBareSection
+        && !!(input as PublishStateInput | undefined)?.teardownEmptyRefs;
 
-      const plaintext = JSON.stringify(privateSection);
-      const ciphertext = await nip44.encrypt(kidPubkey, plaintext);
-
-      const template = buildStateTemplate({
-        subject: kidPubkey,
-        publicAssocATag: buildAssocATag(kidPubkey),
-        publicPermissions,
-        encryptedContent: ciphertext,
+      const parentForPublish = parent as unknown as SerializedStatePublishArgs['parent'];
+      return publishStateSerialized({
+        nostr,
+        parent: parentForPublish,
+        kidPubkey,
+        privateSection,
+        teardownEmptyRefs,
       });
-      const signed = await parent.signer.signEvent(template);
-      const event = signed as unknown as NostrEvent;
-      await publishEvent(nostr, event);
-      appendTeppAuditEntry({
-        kind: event.kind,
-        signerPubkey: parent.pubkey,
-        subjectPubkey: kidPubkey,
-        eventId: event.id,
-        note: `TEPP state (${publicPermissions.length} public refs)`,
-      });
-      return event;
     },
     onSuccess: () => {
       // Construct fingerprint just changed — flush per-event verdicts so

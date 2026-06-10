@@ -7,12 +7,9 @@ import {
   useKuboTeppPublishState,
 } from '@/hooks/useKuboTeppPublish';
 import {
-  KIND_PERMISSION_INTERACTION_NPUB_A,
   KIND_PERMISSION_INTERACTION_RELAY,
-  KIND_PERMISSION_VIEW_NPUB_A,
   KIND_PERMISSION_VIEW_RELAY,
 } from '@/lib/tepp/kinds';
-import type { PermissionRef } from '@/lib/tepp/types';
 
 import {
   getFamilySnapshot,
@@ -22,24 +19,6 @@ import {
 } from './useKuboFamily';
 import type { KuboFamily } from './useKuboFamily';
 import { normalizeRelayUrl } from '@/lib/relayUrl';
-
-/** Mirror of the helper in useTrustAssignments — keep both in sync. */
-function buildPublicPermissionRefs(
-  family: KuboFamily | null,
-  kidPubkey: string,
-): PermissionRef[] {
-  const ids = family?.teppLatestPermissionIds?.[kidPubkey];
-  if (!ids) return [];
-  const refs: PermissionRef[] = [];
-  if (ids.view) refs.push({ id: ids.view, kind: KIND_PERMISSION_VIEW_NPUB_A });
-  if (ids.interact) refs.push({ id: ids.interact, kind: KIND_PERMISSION_INTERACTION_NPUB_A });
-  if (ids.extend && ids.extend !== ids.interact) {
-    refs.push({ id: ids.extend, kind: KIND_PERMISSION_INTERACTION_NPUB_A });
-  }
-  if (ids.viewRelay) refs.push({ id: ids.viewRelay, kind: KIND_PERMISSION_VIEW_RELAY });
-  if (ids.interactRelay) refs.push({ id: ids.interactRelay, kind: KIND_PERMISSION_INTERACTION_RELAY });
-  return refs;
-}
 
 // Delegates to the shared atomic mutator (reads latest + merges) so it
 // preserves the relayTrustAssignments entry setRelayTrustLevel just wrote
@@ -168,10 +147,9 @@ export function useRelayTrustAssignments(
           tier,
           permissionEvent.id,
         );
+        // KUBO-171: refs self-sourced inside the serialized state chokepoint.
         if (nextFamily) {
-          await publishState.mutateAsync({
-            publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
-          });
+          await publishState.mutateAsync();
         }
       } catch (err) {
         toast({
@@ -227,10 +205,9 @@ export function useRelayTrustAssignments(
           tier,
           permissionEvent.id,
         );
+        // KUBO-171: refs self-sourced inside the serialized state chokepoint.
         if (nextFamily) {
-          await publishState.mutateAsync({
-            publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
-          });
+          await publishState.mutateAsync();
         }
       } catch (err) {
         toast({
