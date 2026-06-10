@@ -133,8 +133,10 @@ export interface KuboFamily {
    *
    * Semantics: `true` → enforce; `false` → explicitly off; `undefined` → never
    * set on this device. On first run with KUBO-152 code, a family record whose
-   * `teppEnforced` is still `undefined` adopts the current parent-side
-   * `config.feedSettings.featureTepp` value once (see `adoptTeppEnforcedFromMirror`).
+   * `teppEnforced` is still `undefined` is initialized ONCE via
+   * `resolveInitialTeppEnforced` (KUBO-168): the KUBO-151 default-ON intent
+   * applies unless the user's synced settings event carries a deliberate
+   * post-release `featureTepp:false` (see `adoptTeppEnforcedFromMirror`).
    */
   teppEnforced?: boolean;
   /**
@@ -573,22 +575,28 @@ export async function setTeppEnforced(enforced: boolean): Promise<void> {
 }
 
 /**
- * KUBO-152 one-time migration: existing installs only carried the flag in
- * `feedSettings.featureTepp`. On first run with the new code, a family record
- * whose `teppEnforced` is still `undefined` adopts the current parent-side
- * mirror value exactly once, so enforcement doesn't silently flip when the
- * authoritative field moves into the family record.
+ * KUBO-152/168 one-time initialization: existing installs only carried the flag
+ * in `feedSettings.featureTepp`. On first run with the new code, a family record
+ * whose `teppEnforced` is still `undefined` adopts a single resolved value
+ * exactly once, so enforcement doesn't silently flip when the authoritative
+ * field moves into the family record.
+ *
+ * The `resolved` argument is the OUTPUT of `resolveInitialTeppEnforced`
+ * (`src/lib/tepp-adapters/useTeppEnforced.ts`), NOT the raw mirror — the caller
+ * applies the KUBO-151 default-ON intent and the post-release opt-out epoch rule
+ * before handing the answer here. This keeps a SINGLE coherent initialization
+ * path: this function only persists the already-decided value.
  *
  * Idempotent: once `teppEnforced` is defined (even `false`), this is a no-op.
  * Returns the (possibly unchanged) family.
  */
 export async function adoptTeppEnforcedFromMirror(
-  mirrorFeatureTepp: boolean,
+  resolved: boolean,
 ): Promise<KuboFamily | null> {
   const current = await readLatest();
   if (!current) return null;
-  if (current.teppEnforced !== undefined) return current; // already migrated
-  const next: KuboFamily = { ...current, teppEnforced: mirrorFeatureTepp };
+  if (current.teppEnforced !== undefined) return current; // already initialized
+  const next: KuboFamily = { ...current, teppEnforced: resolved };
   await writeAndNotify(next);
   return next;
 }

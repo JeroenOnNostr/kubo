@@ -5,10 +5,12 @@ import { useTeppDefaultOnMigration } from '@/hooks/useTeppDefaultOnMigration';
  * Mounted once inside the Nostr provider tree to drive TEPP migrations.
  * Renders nothing. Drives two one-shot, idempotent migrations:
  *
- *  - `useTeppDefaultOnMigration` (KUBO-150): turns `featureTepp` ON once for
- *    installs that predate TEPP-on-by-default, writing the flag into the
- *    user's synced settings so a Zapstore update can't have NostrSync re-apply
- *    a stale `false`.
+ *  - `useTeppDefaultOnMigration` (KUBO-151 default-ON; KUBO-152/168 reshape):
+ *    enforcement now lives in the family flag (`family.teppEnforced`, initialized
+ *    once by `useTeppEnforced`). This hook's only remaining job is to mirror
+ *    `featureTepp:true` into the PARENT's synced settings once, so the parent UI
+ *    and cross-device sync agree with the default-ON family flag — no per-account
+ *    flip loop and no within-boot retry hot-loop.
  *  - `useTeppMigration` (Phase 6): once `featureTepp` is on and a family with
  *    kids exists, converts on-device trust assignments into published TEPP
  *    events (association/state/permission), resumable across boots.

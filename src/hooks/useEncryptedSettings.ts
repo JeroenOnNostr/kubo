@@ -294,6 +294,17 @@ export function useEncryptedSettings() {
     initializeSettings,
     hasNip44Support: !!user?.signer.nip44,
     lastSync: settings.data?.lastSync,
+    /**
+     * `created_at` (Unix SECONDS) of the user's synced kind-30078 settings
+     * event, or `undefined` when no settings event exists yet. Distinct from
+     * `lastSync` (which lives in the decrypted content and is Unix MS): this is
+     * the wire timestamp of the event itself. KUBO-168 uses it to decide whether
+     * a synced `featureTepp:false` is a deliberate POST-KUBO-151 choice (newer
+     * than the release epoch → respected) or a stale pre-release legacy value
+     * (older → overridden by default-ON). Use `created_at` rather than `lastSync`
+     * because pre-KUBO-151 builds may not have written `lastSync` at all.
+     */
+    settingsEventCreatedAt: query.data?.created_at,
     /** True if a local write happened recently. NostrSync should skip applying. */
     recentlyWritten: () => Date.now() - lastWriteTs < 10_000,
   };

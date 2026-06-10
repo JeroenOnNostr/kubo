@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTeppEnforced } from './useTeppEnforced';
+import {
+  isTeppEnforced,
+  resolveInitialTeppEnforced,
+  KUBO_151_RELEASE_EPOCH_SECONDS,
+} from './useTeppEnforced';
 import type { KuboFamily } from '@/hooks/useKuboFamily';
 
 /**
@@ -72,5 +76,45 @@ describe('isTeppEnforced', () => {
   it('is not enforced when the target pubkey is missing', () => {
     expect(isTeppEnforced(family({ teppEnforced: true }), undefined)).toBe(false);
     expect(isTeppEnforced(family({ teppEnforced: true }), null)).toBe(false);
+  });
+});
+
+/**
+ * KUBO-168 — the ONE-TIME initialization decision for the family flag. The
+ * KUBO-151 default-ON intent must win for legacy users (whose synced
+ * `featureTepp:false` predates the release), while a deliberate post-release
+ * opt-out must be honoured.
+ */
+describe('resolveInitialTeppEnforced', () => {
+  const EPOCH = KUBO_151_RELEASE_EPOCH_SECONDS;
+  const PRE_EPOCH = EPOCH - 24 * 60 * 60; // a day before release
+  const POST_EPOCH = EPOCH + 24 * 60 * 60; // a day after release
+
+  it('exposes the KUBO-151 epoch as 2026-06-10T00:00:00Z in Unix seconds', () => {
+    expect(KUBO_151_RELEASE_EPOCH_SECONDS).toBe(
+      Math.floor(Date.parse('2026-06-10T00:00:00Z') / 1000),
+    );
+  });
+
+  it('mirror true → ON regardless of event age', () => {
+    expect(resolveInitialTeppEnforced(true, undefined, EPOCH)).toBe(true);
+    expect(resolveInitialTeppEnforced(true, PRE_EPOCH, EPOCH)).toBe(true);
+    expect(resolveInitialTeppEnforced(true, POST_EPOCH, EPOCH)).toBe(true);
+  });
+
+  it('mirror false + no synced event → ON (default-ON wins; no opt-out exists)', () => {
+    expect(resolveInitialTeppEnforced(false, undefined, EPOCH)).toBe(true);
+  });
+
+  it('legacy user: mirror false synced BEFORE the epoch → ON (KUBO-168 fix)', () => {
+    expect(resolveInitialTeppEnforced(false, PRE_EPOCH, EPOCH)).toBe(true);
+  });
+
+  it('deliberate post-release opt-out: mirror false synced AFTER the epoch → OFF', () => {
+    expect(resolveInitialTeppEnforced(false, POST_EPOCH, EPOCH)).toBe(false);
+  });
+
+  it('a false authored exactly AT the epoch counts as deliberate → OFF', () => {
+    expect(resolveInitialTeppEnforced(false, EPOCH, EPOCH)).toBe(false);
   });
 });
