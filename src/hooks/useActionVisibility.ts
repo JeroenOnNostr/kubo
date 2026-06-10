@@ -53,8 +53,10 @@ export function useActionVisibility(event?: NostrEvent) {
     showFavorite:      isKid,
     showZap:           interactGate && pick(kid?.showZapAction,      feedSettings.showZaps),
     showShare:         interactGate && pick(kid?.showShareAction,    feedSettings.showShareAction),
-    // `showMore` is intentionally NOT TEPP-gated: kids can always open the menu (mute/report).
-    showMore:          pick(kid?.showMoreAction,     feedSettings.showMoreAction),
+    // TEPP-gated like the other interaction buttons: a kid should not see the
+    // More menu (mute/report/copy/broadcast) on a view-only author's note —
+    // the parent controls trust centrally in Trust → People (KUBO-147).
+    showMore:          interactGate && pick(kid?.showMoreAction, feedSettings.showMoreAction),
     showNip05:         pick(kid?.showNip05,          feedSettings.showNip05),
     showPostTimestamp: pick(kid?.showPostTimestamp,  feedSettings.showPostTimestamp),
     showHashtags:      pick(kid?.showHashtags,       feedSettings.showHashtags),

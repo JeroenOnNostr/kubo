@@ -359,15 +359,25 @@ export const NoteCard = memo(function NoteCard({
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [replyOpen, setReplyOpen] = useState(false);
 
-  const av = useActionVisibility();
+  // Pass the event so the TEPP interaction gate (useActionVisibility) can hide
+  // reply/repost/react/zap on a view-only author's note for a kid. Without the
+  // event, the gate has nothing to evaluate and defaults all buttons visible —
+  // which is why view-only authors showed reaction buttons in the kid feed.
+  const av = useActionVisibility(event);
 
-  // Check if the current user can zap this event's author
-  const canZapAuthor = av.showZap && user && canZap(metadata);
+  // Zap button visibility is driven purely by the action gate (TEPP interact +
+  // settings toggle), NOT by whether the author has a lightning address — we
+  // want the button present on every interact-author note for consistency
+  // (KUBO-147). Whether it can actually send sats is a separate check:
+  // `authorCanReceiveZap`. When the button shows but the author has no LN
+  // address, tapping it surfaces a toast instead of a dead click.
+  const showZapButton = !!(av.showZap && user);
+  const authorCanReceiveZap = canZap(metadata);
 
   // Whether any action button (reply/repost/react/zap/share/more) renders below
   // the content. Drives the full-bleed video-card bottom treatment below.
   const anyButtonVisible =
-    av.showReply || av.showRepost || av.showReaction || canZapAuthor || av.showShare || av.showMore;
+    av.showReply || av.showRepost || av.showReaction || showZapButton || av.showShare || av.showMore;
 
   const { onClick: openPost, onAuxClick: auxOpenPost } = useOpenPost(
     `/${encodedId}`,
@@ -834,20 +844,39 @@ export const NoteCard = memo(function NoteCard({
         />
       )}
 
-      {canZapAuthor && (
-        <ZapDialog target={event}>
+      {showZapButton && (
+        authorCanReceiveZap ? (
+          <ZapDialog target={event}>
+            <button
+              className="flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors"
+              title="Zap"
+            >
+              <Zap className="size-5" />
+              {stats?.zapAmount ? (
+                <span className="text-sm tabular-nums">
+                  {formatNumber(stats.zapAmount)}
+                </span>
+              ) : null}
+            </button>
+          </ZapDialog>
+        ) : (
+          // Author has no lightning address — show the button for consistency
+          // but explain on tap rather than dead-click (ZapDialog would render
+          // nothing for a zap-less target).
           <button
             className="flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors"
             title="Zap"
+            onClick={(e) => {
+              e.stopPropagation();
+              toast({
+                title: "This creator can't receive zaps yet",
+                description: 'They have not added a Lightning address to their profile.',
+              });
+            }}
           >
             <Zap className="size-5" />
-            {stats?.zapAmount ? (
-              <span className="text-sm tabular-nums">
-                {formatNumber(stats.zapAmount)}
-              </span>
-            ) : null}
           </button>
-        </ZapDialog>
+        )
       )}
 
       {av.showShare && (
