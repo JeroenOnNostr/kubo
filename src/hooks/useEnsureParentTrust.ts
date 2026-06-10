@@ -8,11 +8,16 @@ import { getFamilySnapshot, useKuboFamily } from '@/hooks/useKuboFamily';
 import { MAX_PACK_AUTHORS } from '@/hooks/useKidFeed';
 import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
 import { useParentSigner } from '@/hooks/useParentSigner';
-import { useTrustAssignments } from '@/hooks/useTrustAssignments';
+import {
+  computeMissingGrants,
+  constructAdmitsAtTier,
+  useTrustAssignments,
+} from '@/hooks/useTrustAssignments';
 import {
   KIND_PERMISSION_INTERACTION_NPUB_A,
   KIND_PERMISSION_INTERACTION_NPUB_B,
 } from '@/lib/tepp/kinds';
+import type { KuboTrustLevel } from '@/hooks/useKuboFamily';
 import type { Construct } from '@/lib/tepp/types';
 
 /**
@@ -21,12 +26,19 @@ import type { Construct } from '@/lib/tepp/types';
  * (construct not loaded, parent logged out) can retry independently while a
  * completed phase isn't redone.
  */
-const reconciledKids = new Map<string, { parent: boolean; packs: boolean }>();
+interface ReconcileGuard {
+  parent: boolean;
+  packs: boolean;
+  /** KUBO-169: construct-vs-localStorage divergence reconcile (phase 3). */
+  divergence: boolean;
+}
 
-function guardFor(kid: string): { parent: boolean; packs: boolean } {
+const reconciledKids = new Map<string, ReconcileGuard>();
+
+function guardFor(kid: string): ReconcileGuard {
   let g = reconciledKids.get(kid);
   if (!g) {
-    g = { parent: false, packs: false };
+    g = { parent: false, packs: false, divergence: false };
     reconciledKids.set(kid, g);
   }
   return g;
@@ -35,6 +47,24 @@ function guardFor(kid: string): { parent: boolean; packs: boolean } {
 /** Test-only: reset the once-per-session reconcile guard. */
 export function __resetEnsureParentTrustGuard(): void {
   reconciledKids.clear();
+}
+
+/**
+ * KUBO-169 pure decision for a single pending revocation in phase 3. The
+ * construct is the oracle: if it STILL admits the target, the original
+ * revocation publish never landed → `retry`. If it no longer admits the target,
+ * the wire is already correct (a later session, a manual re-clear, or a
+ * superseding publish fixed it) → just `clear-marker`. Extracted so the branch
+ * is unit-testable without `renderHook` (repo idiom).
+ */
+export function decideRevocationAction(
+  construct: Construct,
+  targetPubkey: string,
+  previousLevel: KuboTrustLevel,
+): 'retry' | 'clear-marker' {
+  return constructAdmitsAtTier(construct, targetPubkey, previousLevel)
+    ? 'retry'
+    : 'clear-marker';
 }
 
 /** True if `pubkey` appears in any interaction npub-permission entry of the construct. */
@@ -162,6 +192,24 @@ export function useEnsureParentTrust(kidPubkey: string | undefined): void {
               // already-assigned and no-ops when nothing is new).
               await trust.setLevelsBatch(memberList, 'view');
 
+              // KUBO-169: setLevelsBatch early-returns when localStorage didn't
+              // change — so pack members assigned WHILE TEPP WAS OFF (localStorage
+              // written, never published), or whose earlier batch publish failed,
+              // are on disk but absent from the construct forever. Diff this pack's
+              // members against the CONSTRUCT (the trustworthy oracle) and publish
+              // exactly the ones it doesn't yet admit at view — bypassing the
+              // localStorage-changed check. No-ops (and publishes nothing) when the
+              // construct already matches. Only runs with a definitely-loaded
+              // construct; otherwise phase 3 below converges later.
+              if (featureTepp && construct) {
+                const memberSet: Record<string, KuboTrustLevel> = {};
+                for (const pk of memberList) memberSet[pk] = 'view';
+                const missing = computeMissingGrants(memberSet, construct, 'view');
+                if (missing.length > 0) {
+                  await trust.publishMissingGrants(missing, 'view');
+                }
+              }
+
               if (firstTimeMembers.length > 0) await followMany(firstTimeMembers);
             } catch (err) {
               guard.packs = false; // allow retry next session
@@ -169,6 +217,64 @@ export function useEnsureParentTrust(kidPubkey: string | undefined): void {
             }
           })();
         }
+      }
+    }
+
+    // ── Phase 3: full construct-vs-localStorage divergence reconcile (KUBO-169) ─
+    //
+    // Covers the divergence paths the pack phase can't: individual profiles
+    // added via useAddFeedProfile whose grant publish failed, the parent grant
+    // if phase 1's setLevel publish failed, and failed REVOCATIONS (a clear
+    // whose permission publish failed — localStorage entry gone, wire still
+    // admits).
+    //
+    // The CONSTRUCT is the oracle. We diff ALL of trustAssignments[kid] against
+    // it per tier and re-publish only the missing grants (no churn when they
+    // match), then retry every pendingRevocation until the construct drops it.
+    // Requires a definitely-loaded construct + the parent signer; defers (guard
+    // stays false) otherwise so a later session converges.
+    if (!guard.divergence) {
+      if (!featureTepp) {
+        guard.divergence = true; // nothing on the wire to reconcile against
+      } else if (!parentUser || constructLoading || !construct) {
+        // leave guard.divergence = false → retry on a later render/session
+      } else {
+        guard.divergence = true; // optimistic; reset on failure below
+        const loadedConstruct = construct;
+        void (async () => {
+          try {
+            const snapshot = getFamilySnapshot();
+            const assignments = snapshot?.trustAssignments?.[kidPubkey];
+
+            // Re-publish grants the construct is missing, per tier. ONE batch
+            // publish per tier (publishMissingGrants), not per-member.
+            // computeMissingGrants keys on the recorded tier, so interact/view/
+            // extend are reconciled separately and never cross-clobber.
+            for (const tier of ['interact', 'view', 'extend'] as KuboTrustLevel[]) {
+              const missing = computeMissingGrants(assignments, loadedConstruct, tier);
+              if (missing.length > 0) {
+                await trust.publishMissingGrants(missing, tier);
+              }
+            }
+
+            // Retry failed revocations until the construct no longer admits the
+            // target. retryRevocation re-publishes the shrunken list + state and
+            // clears the marker on success; a target the construct already
+            // dropped just gets its stale marker cleared.
+            const pending = snapshot?.pendingRevocations?.[kidPubkey] ?? {};
+            for (const [target, previousLevel] of Object.entries(pending)) {
+              const action = decideRevocationAction(loadedConstruct, target, previousLevel);
+              if (action === 'retry') {
+                await trust.retryRevocation(target, previousLevel);
+              } else {
+                await trust.clearPendingRevocationMarker(target);
+              }
+            }
+          } catch (err) {
+            guard.divergence = false; // allow retry next session
+            console.warn('reconcile: divergence reconcile failed', err);
+          }
+        })();
       }
     }
   }, [

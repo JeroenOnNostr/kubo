@@ -45,6 +45,14 @@ export function useAddFeedProfile(
       // must not block the follow — setLevelIfUnassigned keeps the localStorage
       // write, and the kind-3 gate now treats follow lists at the view
       // threshold (KUBO-147), so the follow succeeds regardless.
+      //
+      // KUBO-169: previously, a FAILED grant publish left localStorage written
+      // but the construct missing this pubkey FOREVER — setLevelIfUnassigned
+      // returns false on every later attempt (no-downgrade), so nothing retried.
+      // That permanent divergence is now self-healing: useEnsureParentTrust
+      // phase 3 diffs ALL of trustAssignments[kid] against the construct and
+      // re-publishes anyone it doesn't yet admit, so a transiently-failed grant
+      // here converges on the next parent session.
       if (kidPubkey) {
         try {
           await trust.setLevelIfUnassigned(pubkey, 'view');
