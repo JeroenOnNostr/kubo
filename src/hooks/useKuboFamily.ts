@@ -316,9 +316,42 @@ export async function addKid(kid: KuboKid): Promise<void> {
   await writeAndNotify({ ...current, kids, feedSources, trustAssignments });
 }
 
-export async function removeKid(pubkey: string): Promise<void> {
+/**
+ * KUBO-172: remove a kid from the family, fully tearing down their TEPP state.
+ *
+ * `teardownPublish` (optional) is the guardian-signed TEPP teardown — a
+ * kind-34700 state event with EMPTY refs for this kid, routed through the
+ * KUBO-171 serialized chokepoint. It runs BEFORE store removal so the wire is
+ * dismantled while the family record (relays/signer context) is still intact.
+ *
+ * Teardown failure MUST NOT block removal: a removed kid with a lingering
+ * construct is the status quo ante (the prior behaviour published NO teardown
+ * at all), not a regression — so we swallow the error here and let the caller
+ * surface it (toast/log). The caller passes a callback that already captured
+ * the signer/nostr context (this module-level fn can't use React hooks).
+ *
+ * The store write removes EVERY per-kid slice, including the two the prior
+ * version leaked: `relayTrustAssignments[kid]` and `teppLatestPermissionIds[kid]`.
+ */
+export async function removeKid(
+  pubkey: string,
+  teardownPublish?: () => Promise<void>,
+): Promise<void> {
   const current = await readLatest();
   if (!current) return;
+
+  // Publish the teardown BEFORE store removal (the family record still has the
+  // kid + its relays/context). Non-blocking: removal proceeds regardless.
+  if (teardownPublish) {
+    try {
+      await teardownPublish();
+    } catch (err) {
+      // A removed kid with a lingering construct is the status quo ante — never
+      // a reason to leave the kid in the family. Surface, don't block.
+      console.warn('removeKid: TEPP teardown publish failed (removing anyway)', err);
+    }
+  }
+
   const next: KuboFamily = {
     ...current,
     kids: current.kids.filter((k) => k.pubkey !== pubkey),
@@ -326,6 +359,11 @@ export async function removeKid(pubkey: string): Promise<void> {
   if (current.trustAssignments && pubkey in current.trustAssignments) {
     const { [pubkey]: _removedTrust, ...restTrust } = current.trustAssignments;
     next.trustAssignments = restTrust;
+  }
+  if (current.relayTrustAssignments && pubkey in current.relayTrustAssignments) {
+    // KUBO-172: this slice was leaked by the prior removeKid — clean it.
+    const { [pubkey]: _removedRelayTrust, ...restRelayTrust } = current.relayTrustAssignments;
+    next.relayTrustAssignments = restRelayTrust;
   }
   if (current.trustRequests && pubkey in current.trustRequests) {
     const { [pubkey]: _removedReq, ...restReq } = current.trustRequests;
@@ -342,6 +380,11 @@ export async function removeKid(pubkey: string): Promise<void> {
   if (current.pendingRevocations && pubkey in current.pendingRevocations) {
     const { [pubkey]: _removedPr, ...restPr } = current.pendingRevocations;
     next.pendingRevocations = restPr;
+  }
+  if (current.teppLatestPermissionIds && pubkey in current.teppLatestPermissionIds) {
+    // KUBO-172: this slice was leaked by the prior removeKid — clean it.
+    const { [pubkey]: _removedIds, ...restIds } = current.teppLatestPermissionIds;
+    next.teppLatestPermissionIds = restIds;
   }
   await writeAndNotify(next);
 }

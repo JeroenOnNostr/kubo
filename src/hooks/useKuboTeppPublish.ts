@@ -26,7 +26,8 @@ import type { PermissionRef } from '@/lib/tepp/types';
 import { appendTeppAuditEntry } from '@/lib/tepp-adapters/teppAuditLog';
 import { assocExpirationAt } from '@/lib/tepp-adapters/assocExpiry';
 import { clearVerdictCache } from '@/lib/tepp-adapters/verdictCache';
-import { readLatest, type KuboFamily } from '@/hooks/useKuboFamily';
+import { readLatest, removeKid, useKuboFamily, type KuboFamily } from '@/hooks/useKuboFamily';
+import { isTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 
 async function publishEvent(
   nostr: { event: (e: NostrEvent, opts?: { signal?: AbortSignal }) => Promise<void> },
@@ -285,6 +286,61 @@ export async function publishStateTeardown(
     privateSection: { permissions: [] },
     teardownEmptyRefs: true,
   });
+}
+
+/**
+ * KUBO-172: remove a kid AND tear down their live TEPP construct.
+ *
+ * Returns a callback that, when the family flag is ON for this kid, publishes a
+ * guardian-signed EMPTY-refs kind-34700 (via the KUBO-171 serialized chokepoint)
+ * BEFORE removing the kid from the family store. Because the teardown is
+ * guardian-signed it works WITHOUT the kid logged in. Teardown failure does not
+ * block removal — `removeKid` swallows the publish error (the removed kid's
+ * leftover construct is the status quo ante) and the removal still completes.
+ *
+ * Removal happens AFTER the teardown enqueues but the store write is what flips
+ * `family.kids`, so any subsequent reconcile pass no longer iterates this kid
+ * (reconcile hooks iterate `family.kids`) — they can't resurrect a grant for it.
+ *
+ * Returns a boolean: `true` if the teardown publish succeeded (or wasn't needed
+ * because TEPP is off for this kid), `false` if it failed (removal still done).
+ */
+export function useRemoveKidWithTeardown(): (kidPubkey: string) => Promise<boolean> {
+  const { nostr } = useNostr();
+  const { family } = useKuboFamily();
+  const { user: parent } = useParentSigner();
+
+  return async (kidPubkey: string): Promise<boolean> => {
+    const enforced = isTeppEnforced(family, kidPubkey);
+    let teardownOk = true;
+
+    if (enforced && parent) {
+      const parentForPublish = parent as unknown as SerializedStatePublishArgs['parent'];
+      await removeKid(kidPubkey, async () => {
+        try {
+          await publishStateTeardown(nostr, parentForPublish, kidPubkey);
+        } catch (err) {
+          teardownOk = false;
+          throw err; // removeKid logs + proceeds; we just record the outcome.
+        }
+      });
+    } else {
+      // TEPP off for this kid (or no guardian to sign) → no wire teardown, just
+      // remove. The slices (relayTrustAssignments/teppLatestPermissionIds) are
+      // still cleaned by removeKid itself.
+      await removeKid(kidPubkey);
+    }
+
+    // KUBO-172: an OPTIONAL short-expiry association (17700) rotation when the
+    // kid IS logged in is deliberately SKIPPED. It would pull in the kid-signer
+    // path (useKuboTeppPublishAssociation needs the kid's signer present + a
+    // distinct mutation, signed by the kid not the guardian) — non-trivial, and
+    // it only narrows the window on an already-best-effort teardown. The
+    // guardian-signed empty-refs 34700 above already collapses the construct to
+    // nothing on the next refetch, which is the load-bearing teardown.
+
+    return teardownOk;
+  };
 }
 
 /** @internal test seam — reset module-level serialization state. */
