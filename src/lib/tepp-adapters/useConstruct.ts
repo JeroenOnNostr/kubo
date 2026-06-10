@@ -186,6 +186,251 @@ export function pickAssociationForFamily(
   return picked;
 }
 
+/** Settled result of one construct-assembly pass (the query's data shape). */
+export interface ConstructAssemblyResult {
+  construct: Construct | null;
+  fingerprint: string | null;
+  reason?: UseKuboTeppConstructResult['reason'];
+  errorMessage?: string;
+}
+
+/** Minimal relay-query surface the assembly pipeline needs (matches `nostr.query`). */
+export type ConstructQueryFn = (
+  filters: NostrFilter[],
+  opts?: { signal?: AbortSignal },
+) => Promise<NostrEvent[]>;
+
+/**
+ * KUBO-156: the relay-fetch + assemble pipeline, extracted as a pure,
+ * React-free async function so the subject-pinning and fail-closed deny-list
+ * branches are directly unit-testable (mock `query`). The hook below is a thin
+ * TanStack wrapper around this.
+ *
+ * Enforces, in order:
+ *  - association: KUBO-157 family pinning (`pickAssociationForFamily`) PLUS
+ *    KUBO-156 subject/author pin to this kid;
+ *  - state: guardian+sig (vendored picker) PLUS KUBO-156 subject pin;
+ *  - permissions: KUBO-156 subject pin per entry (missing ones stay
+ *    fail-closed-per-entry — skipped, assembly continues);
+ *  - blacklist/global: fail-CLOSED — a referenced-but-missing / wrong-kind /
+ *    bad-sig / non-guardian / wrong-subject deny-list withholds the whole
+ *    construct as a transient `fetch-failed` (never assembling a deny-list-less
+ *    view, never entering the last-known-good cache).
+ */
+export async function assembleConstructFromRelay(params: {
+  kidPubkey: string;
+  parentPubkey: string;
+  query: ConstructQueryFn;
+  nip44Decrypt?: (pubkey: string, ciphertext: string) => Promise<string>;
+  signal?: AbortSignal;
+  now?: number;
+}): Promise<ConstructAssemblyResult> {
+  const { kidPubkey, parentPubkey, query, nip44Decrypt, signal } = params;
+  const kidLower = kidPubkey.toLowerCase();
+  const querySignal = (timeoutMs: number) =>
+    signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+      : AbortSignal.timeout(timeoutMs);
+
+  // 1. Association — kid-signed kind 17700 with subject = kidPubkey.
+  let assocEvents: NostrEvent[];
+  try {
+    assocEvents = await query(
+      [{ kinds: [KIND_ASSOCIATION], authors: [kidPubkey], limit: 10 }],
+      { signal: querySignal(5000) },
+    );
+  } catch (err) {
+    return {
+      construct: null,
+      fingerprint: null,
+      reason: 'fetch-failed',
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
+  }
+  // KUBO-157: future-dating clamp, structural rejection, guardian pinning.
+  const assoc = pickAssociationForFamily(assocEvents, parentPubkey, params.now);
+  if (!assoc) {
+    return { construct: null, fingerprint: null, reason: 'no-association' };
+  }
+  // KUBO-156: subject/author pinning. Do not trust the relay's `authors`
+  // filter compliance — a tag-filter-sloppy (or hostile) relay can hand kid A
+  // an association whose subject is kid B. `pickAssociationForFamily` already
+  // pins the guardian to the real parent and (via the vendored parser's
+  // subject==pubkey rule) requires subject to equal the event author; the only
+  // remaining gap is asserting that pinned subject is *this* kid.
+  if (assoc.subject !== kidLower || assoc.raw.pubkey.toLowerCase() !== kidLower) {
+    return { construct: null, fingerprint: null, reason: 'no-association' };
+  }
+
+  // 2. State — parent-signed kind 34700 with d=kidPubkey, authored by a guardian.
+  const guardianPubkeys = assoc.guardians.map((g) => g.pubkey);
+  let stateEvents: NostrEvent[];
+  try {
+    stateEvents = await query(
+      [{
+        kinds: [KIND_STATE],
+        authors: guardianPubkeys,
+        '#d': [kidLower],
+        limit: 50,
+      }],
+      { signal: querySignal(5000) },
+    );
+  } catch (err) {
+    return {
+      construct: null,
+      fingerprint: null,
+      reason: 'fetch-failed',
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
+  }
+  if (stateEvents.length === 0) {
+    return { construct: null, fingerprint: null, reason: 'no-state-event' };
+  }
+  const guardianSet = new Set(guardianPubkeys.map((p) => p.toLowerCase()));
+  const picked = pickCurrentState(stateEvents.map((e) => e), guardianSet);
+  if (!picked) {
+    return { construct: null, fingerprint: null, reason: 'no-state-event' };
+  }
+  const state: ParsedState = picked.current;
+  // KUBO-156: pin the state's subject to this kid. The `#d` filter constrains
+  // the d-tag, but the parser derives `subject` from the `subject` tag (falling
+  // back to `d`), so a state event with a matching d-tag but a mismatched
+  // subject tag — or one slipped past a sloppy relay filter — must not govern
+  // this kid. Treat a subject mismatch as if no state event exists.
+  if (state.subject !== kidLower) {
+    return { construct: null, fingerprint: null, reason: 'no-state-event' };
+  }
+
+  // 3. Decrypt the private section (NIP-44 v2).
+  let decryptedPermissions: PermissionRef[] = [];
+  let decryptedBlacklistRef: string | undefined;
+  let decryptedGlobalRef: string | undefined;
+  if (state.raw.content && nip44Decrypt) {
+    try {
+      // The private section is encrypted by the parent *to the kid* (subject);
+      // NIP-44 v2 conversation keys are symmetric, so the parent decrypts by
+      // passing the kid pubkey as the other party.
+      const plaintext = await nip44Decrypt(kidPubkey, state.raw.content);
+      const parsed = JSON.parse(plaintext) as {
+        blacklist?: string;
+        global?: string;
+        permissions?: Array<{ id: string; kind: number }>;
+      };
+      decryptedBlacklistRef = parsed.blacklist;
+      decryptedGlobalRef = parsed.global;
+      decryptedPermissions = (parsed.permissions ?? []).map((p) => ({
+        id: p.id,
+        kind: p.kind,
+      }));
+    } catch (err) {
+      return {
+        construct: null,
+        fingerprint: null,
+        reason: 'decrypt-failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  // 4. Combine public + private refs; private overrides public for deny-lists.
+  const refs: PermissionRef[] = [...state.publicPermissions, ...decryptedPermissions];
+  const seen = new Set<string>();
+  const uniqRefs = refs.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+  const blacklistId = decryptedBlacklistRef ?? state.publicBlacklistRef;
+  const globalId = decryptedGlobalRef ?? state.publicGlobalRef;
+
+  // 5. Fetch referenced events.
+  const allRefIds = [
+    ...uniqRefs.map((r) => r.id),
+    ...(blacklistId ? [blacklistId] : []),
+    ...(globalId ? [globalId] : []),
+  ];
+
+  let fetched: NostrEvent[] = [];
+  if (allRefIds.length > 0) {
+    try {
+      const filter: NostrFilter = { ids: allRefIds };
+      fetched = await query([filter], { signal: querySignal(5000) });
+    } catch (err) {
+      return {
+        construct: null,
+        fingerprint: null,
+        reason: 'fetch-failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  const fetchedById = new Map(fetched.map((e) => [e.id, e]));
+  const permissions: ParsedPermission[] = [];
+  for (const ref of uniqRefs) {
+    const ev = fetchedById.get(ref.id);
+    // Missing *permission* events stay fail-closed-per-entry (skip, keep
+    // assembling) — a withheld grant only ever narrows what the kid may do.
+    if (!ev) continue;
+    if (!(PERMISSION_KINDS as readonly number[]).includes(ev.kind)) continue;
+    const parsed = parsePermission(ev);
+    // KUBO-156: pin each permission's subject to this kid before inclusion.
+    // construct.ts only filters guardian + sig, so without this a sloppy/hostile
+    // relay could hand kid A a permission whose `subject` names kid B.
+    if (parsed.subject !== kidLower) continue;
+    permissions.push(parsed);
+  }
+
+  // KUBO-156: deny-lists are fail-CLOSED. If the state references a
+  // blacklist/global id but the fetched event is missing, the wrong kind, badly
+  // signed, non-guardian, or names a different subject, withhold the WHOLE
+  // construct as a transient `fetch-failed`. This keeps the poll alive and —
+  // because only successfully-assembled constructs enter the KUBO-155
+  // last-known-good cache (in the hook body) — a flaky/malicious relay can't
+  // poison the fallback with a deny-list-less view.
+  let blacklist: ParsedBlacklist | undefined;
+  if (blacklistId) {
+    const ev = fetchedById.get(blacklistId);
+    if (!ev || ev.kind !== KIND_BLACKLIST) {
+      return { construct: null, fingerprint: null, reason: 'fetch-failed' };
+    }
+    const parsed = parseBlacklist(ev);
+    if (
+      !parsed.signatureValid ||
+      !guardianSet.has(parsed.guardian) ||
+      (parsed.subject !== undefined && parsed.subject !== kidLower)
+    ) {
+      return { construct: null, fingerprint: null, reason: 'fetch-failed' };
+    }
+    blacklist = parsed;
+  }
+
+  let globalEvt: ParsedGlobal | undefined;
+  if (globalId) {
+    const ev = fetchedById.get(globalId);
+    if (!ev || ev.kind !== KIND_GLOBAL_RESTRICTION) {
+      return { construct: null, fingerprint: null, reason: 'fetch-failed' };
+    }
+    const parsed = parseGlobal(ev);
+    if (
+      !parsed.signatureValid ||
+      !guardianSet.has(parsed.guardian) ||
+      (parsed.subject !== undefined && parsed.subject !== kidLower)
+    ) {
+      return { construct: null, fingerprint: null, reason: 'fetch-failed' };
+    }
+    globalEvt = parsed;
+  }
+
+  // 6. Assemble.
+  const construct = assembleConstruct({
+    assoc,
+    state,
+    permissions,
+    blacklist,
+    global: globalEvt,
+  });
+
+  const fingerprint = constructFingerprintSync(construct, assoc.raw.id);
+  return { construct, fingerprint };
+}
+
 /**
  * Kubo-owned reimplementation of TEPP's `useConstruct`, rebuilt on TanStack
  * Query so it shares cache invariants with the rest of the app. The query key
@@ -279,168 +524,16 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
       if (!kidPubkey || !parent) {
         return { construct: null, fingerprint: null, reason: 'no-kid' as const };
       }
-
-      // 1. Association — kid-signed kind 17700 with subject = kidPubkey.
-      // KUBO-175: a relay/query failure here must become reason 'fetch-failed'
-      // (transient, keeps polling) rather than a reason-less thrown error.
-      let assocEvents: NostrEvent[];
-      try {
-        assocEvents = await nostr.query(
-          [{ kinds: [KIND_ASSOCIATION], authors: [kidPubkey], limit: 10 }],
-          { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
-        );
-      } catch (err) {
-        return {
-          construct: null,
-          fingerprint: null,
-          reason: 'fetch-failed' as const,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        };
-      }
-      // KUBO-157: future-dating clamp, structural rejection, and guardian
-      // pinning against the family's known parent (parent.pubkey). A winning
-      // association that does not name the real parent as a guardian is treated
-      // as no-association (a kid cannot self-govern by naming their own key).
-      const assoc = pickAssociationForFamily(assocEvents, parent.pubkey);
-      if (!assoc) {
-        return { construct: null, fingerprint: null, reason: 'no-association' as const };
-      }
-
-      // 2. State — parent-signed kind 34700 with d=kidPubkey, authored by a guardian.
-      // KUBO-175: same fetch-failed mapping as the association query above.
-      const guardianPubkeys = assoc.guardians.map((g) => g.pubkey);
-      let stateEvents: NostrEvent[];
-      try {
-        stateEvents = await nostr.query(
-          [{
-            kinds: [KIND_STATE],
-            authors: guardianPubkeys,
-            '#d': [kidPubkey.toLowerCase()],
-            limit: 50,
-          }],
-          { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
-        );
-      } catch (err) {
-        return {
-          construct: null,
-          fingerprint: null,
-          reason: 'fetch-failed' as const,
-          errorMessage: err instanceof Error ? err.message : String(err),
-        };
-      }
-      if (stateEvents.length === 0) {
-        return { construct: null, fingerprint: null, reason: 'no-state-event' as const };
-      }
-      const guardianSet = new Set(guardianPubkeys.map((p) => p.toLowerCase()));
-      const picked = pickCurrentState(stateEvents.map((e) => e), guardianSet);
-      if (!picked) {
-        return { construct: null, fingerprint: null, reason: 'no-state-event' as const };
-      }
-      const state: ParsedState = picked.current;
-
-      // 3. Decrypt the private section (NIP-44 v2).
-      let decryptedPermissions: PermissionRef[] = [];
-      let decryptedBlacklistRef: string | undefined;
-      let decryptedGlobalRef: string | undefined;
       const nip44 = (parent.signer as unknown as {
         nip44?: { decrypt: (pubkey: string, ciphertext: string) => Promise<string> };
       }).nip44;
-      if (state.raw.content && nip44) {
-        try {
-          // The state event's private section is encrypted by the parent
-          // *to the kid* (subject) per `useKuboTeppPublishState`. NIP-44 v2
-          // conversation keys are symmetric, so the parent decrypts the
-          // same content by passing the kid pubkey as the other party.
-          // Earlier this passed `state.guardian` (= parent's own pubkey),
-          // which produced "invalid MAC" because the conversation key
-          // was self↔self instead of parent↔kid.
-          const plaintext = await nip44.decrypt(kidPubkey, state.raw.content);
-          const parsed = JSON.parse(plaintext) as {
-            blacklist?: string;
-            global?: string;
-            permissions?: Array<{ id: string; kind: number }>;
-          };
-          decryptedBlacklistRef = parsed.blacklist;
-          decryptedGlobalRef = parsed.global;
-          decryptedPermissions = (parsed.permissions ?? []).map((p) => ({
-            id: p.id,
-            kind: p.kind,
-          }));
-        } catch (err) {
-          return {
-            construct: null,
-            fingerprint: null,
-            reason: 'decrypt-failed' as const,
-            errorMessage: err instanceof Error ? err.message : String(err),
-          };
-        }
-      }
-
-      // 4. Combine public + private refs; private overrides public for blacklist + global.
-      const refs: PermissionRef[] = [...state.publicPermissions, ...decryptedPermissions];
-      const seen = new Set<string>();
-      const uniqRefs = refs.filter((r) =>
-        seen.has(r.id) ? false : (seen.add(r.id), true),
-      );
-      const blacklistId = decryptedBlacklistRef ?? state.publicBlacklistRef;
-      const globalId = decryptedGlobalRef ?? state.publicGlobalRef;
-
-      // 5. Fetch referenced events.
-      const allRefIds = [
-        ...uniqRefs.map((r) => r.id),
-        ...(blacklistId ? [blacklistId] : []),
-        ...(globalId ? [globalId] : []),
-      ];
-
-      let fetched: NostrEvent[] = [];
-      if (allRefIds.length > 0) {
-        try {
-          const filter: NostrFilter = { ids: allRefIds };
-          fetched = await nostr.query([filter], {
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-          });
-        } catch (err) {
-          return {
-            construct: null,
-            fingerprint: null,
-            reason: 'fetch-failed' as const,
-            errorMessage: err instanceof Error ? err.message : String(err),
-          };
-        }
-      }
-
-      const fetchedById = new Map(fetched.map((e) => [e.id, e]));
-      const permissions: ParsedPermission[] = [];
-      for (const ref of uniqRefs) {
-        const ev = fetchedById.get(ref.id);
-        if (!ev) continue;
-        if (!(PERMISSION_KINDS as readonly number[]).includes(ev.kind)) continue;
-        permissions.push(parsePermission(ev));
-      }
-
-      let blacklist: ParsedBlacklist | undefined;
-      if (blacklistId) {
-        const ev = fetchedById.get(blacklistId);
-        if (ev && ev.kind === KIND_BLACKLIST) blacklist = parseBlacklist(ev);
-      }
-
-      let globalEvt: ParsedGlobal | undefined;
-      if (globalId) {
-        const ev = fetchedById.get(globalId);
-        if (ev && ev.kind === KIND_GLOBAL_RESTRICTION) globalEvt = parseGlobal(ev);
-      }
-
-      // 6. Assemble.
-      const construct = assembleConstruct({
-        assoc,
-        state,
-        permissions,
-        blacklist,
-        global: globalEvt,
+      return assembleConstructFromRelay({
+        kidPubkey,
+        parentPubkey: parent.pubkey,
+        query: (filters, opts) => nostr.query(filters, opts),
+        nip44Decrypt: nip44 ? (pk, ct) => nip44.decrypt(pk, ct) : undefined,
+        signal,
       });
-
-      const fingerprint = constructFingerprintSync(construct, assoc.raw.id);
-      return { construct, fingerprint };
     },
   });
 
