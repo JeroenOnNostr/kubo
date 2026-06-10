@@ -12,10 +12,6 @@ Completed work lives in [DONE.md](DONE.md).
 
 Full per-task specs with file:line evidence and acceptance criteria: [docs/tepp-hardening-plan.md](docs/tepp-hardening-plan.md). Execute in the plan's wave order. Threat model confirmed 2026-06-10: young kids + untrusted relays/content (no devtools-capable-kid scope, no NIP-46 bunker work).
 
-- **KUBO-160: Gate at the kid signer seam (covers 18 direct-publish paths)** (high)
-- **KUBO-167: Trust-request approval must publish TEPP** (high)
-- **KUBO-169: Reconcile against the construct, not localStorage** (high)
-- **KUBO-170: Relay `extend` tier shrink-clobber + clear revocation** (medium)
 - **KUBO-171: Serialize kind-34700 publishes per kid; self-source refs** (medium)
 - **KUBO-172: `removeKid` TEPP teardown** (medium)
 - **KUBO-173: TEPP events to private family relay only (privacy); upstream issue for content encryption** (high privacy)
