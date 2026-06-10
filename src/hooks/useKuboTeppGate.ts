@@ -25,6 +25,18 @@ import type { Construct, FullEventVerdict } from '@/lib/tepp/types';
  *
  * When inactive (flag off, no kid, no construct), `gate()` is a no-op.
  */
+/**
+ * Event kinds that are RECORDS, not interactions, when authored by the kid.
+ * A kind-3 follow list merely records who the kid follows — publishing it does
+ * not interact with those people (no reply, reaction, repost, or zap reaches
+ * them). Per the trust model, a kid may follow anyone admitted at view-or-better,
+ * so these kinds are evaluated at the VIEW threshold (`'incoming'`) rather than
+ * the interaction threshold (`'outgoing'`). Genuine interactions (kind 1 replies,
+ * 6/16 reposts, 7 reactions, 9734 zap requests) are NOT in this set and stay
+ * gated at interaction level. (KUBO-147)
+ */
+const RECORD_LIST_KINDS = new Set<number>([3]);
+
 export class TeppDeniedError extends Error {
   verdict: FullEventVerdict;
   layer?: string;
@@ -79,10 +91,16 @@ export function useKuboTeppGate(): KuboTeppGate {
         eventCache = undefined;
       }
 
+      // Record/list kinds (the kid's own follow list) only require each
+      // referenced pubkey to be admitted at view-or-better — the same
+      // threshold as an incoming event. Real interactions stay 'outgoing'
+      // (interaction-level required).
+      const direction = RECORD_LIST_KINDS.has(draft.kind) ? 'incoming' : 'outgoing';
+
       const verdict = evaluateEvent(
         draft as unknown as Parameters<typeof evaluateEvent>[0],
         construct as Construct,
-        'outgoing',
+        direction,
         eventCache
           ? { eventCache: eventCache as unknown as Map<string, NostrToolsEvent> }
           : {},

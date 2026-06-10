@@ -68,7 +68,7 @@
     "showArchive": false,
     "showWikipedia": false,
     "showBluesky": false,
-    "featureTepp": false
+    "featureTepp": true
   },
   "magicMouse": false
 }

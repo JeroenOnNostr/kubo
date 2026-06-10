@@ -190,6 +190,13 @@ export function AddKidPage() {
                   packs: [KUBO_DEFAULT_KID_PACK_ATAG],
                 },
               },
+              // Seed the parent into the kid's trust domain at `interact`
+              // (KUBO-147). Mirrors addKid()'s seeding for later kids. It's a
+              // normal, removable entry; useEnsureParentTrust backfills it for
+              // pre-existing families that predate this seed.
+              trustAssignments: {
+                [identity.pubkey]: { [parentPubkey]: 'interact' },
+              },
             });
           } else {
             await addKid({ pubkey: identity.pubkey, displayName: trimmed });

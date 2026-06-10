@@ -46,7 +46,12 @@ export type { FeedItem };
 
 const PAGE_SIZE = 15;
 const OVER_FETCH_MULTIPLIER = 3;
-const MAX_PACK_AUTHORS = 500;
+/**
+ * Cap on how many pack members we expand. Shared with the feed-source
+ * auto-trust grant (useAddFeedPack, KUBO-147) so a pack never grants trust to
+ * more members than it actually contributes to the feed.
+ */
+export const MAX_PACK_AUTHORS = 500;
 
 interface FeedPage {
   items: FeedItem[];

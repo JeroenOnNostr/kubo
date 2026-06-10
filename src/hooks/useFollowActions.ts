@@ -88,6 +88,42 @@ export interface UseFollowActionsReturn {
   follow: (pubkey: string) => Promise<void>;
   /** Unfollow a pubkey. Fetches the freshest kind 3 first, then publishes. */
   unfollow: (pubkey: string) => Promise<void>;
+  /**
+   * Follow many pubkeys in a SINGLE kind-3 publish (one relay write, not N).
+   * Used by the feed-source flows (KUBO-147): adding a follow pack follows all
+   * its members at once. Dedups against the existing list; no-ops if every
+   * pubkey is already followed.
+   */
+  followMany: (pubkeys: string[]) => Promise<void>;
+  /** Unfollow many pubkeys in a single kind-3 publish. */
+  unfollowMany: (pubkeys: string[]) => Promise<void>;
+}
+
+/**
+ * Pure helper: given the existing `p` tags and a set of targets, compute the
+ * new `p` tags for a follow/unfollow batch. Returns `null` when nothing would
+ * change (so the caller can skip the publish). Exported for unit testing.
+ */
+export function computeFollowListPTags(
+  existingPTags: string[][],
+  targets: string[],
+  action: 'follow' | 'unfollow',
+): string[][] | null {
+  const targetSet = new Set(targets.filter(Boolean));
+  if (targetSet.size === 0) return null;
+
+  if (action === 'follow') {
+    const followed = new Set(existingPTags.map(([, pk]) => pk));
+    const additions = [...targetSet]
+      .filter((pk) => !followed.has(pk))
+      .map((pk) => ['p', pk]);
+    if (additions.length === 0) return null;
+    return [...existingPTags, ...additions];
+  }
+
+  const remaining = existingPTags.filter(([, pk]) => !targetSet.has(pk));
+  if (remaining.length === existingPTags.length) return null;
+  return remaining;
 }
 
 /**
@@ -108,8 +144,10 @@ export function useFollowActions(): UseFollowActionsReturn {
   const [isPending, setIsPending] = useState(false);
 
   const mutateFollowList = useCallback(
-    async (targetPubkey: string, action: 'follow' | 'unfollow') => {
+    async (targets: string[], action: 'follow' | 'unfollow') => {
       if (!user) throw new Error('Not logged in');
+      const targetSet = new Set(targets.filter(Boolean));
+      if (targetSet.size === 0) return;
       setIsPending(true);
 
       try {
@@ -121,16 +159,9 @@ export function useFollowActions(): UseFollowActionsReturn {
         const pTags = existingTags.filter(([name]) => name === 'p');
         const nonPTags = existingTags.filter(([name]) => name !== 'p');
 
-        // ③ Compute the new set of `p` tags
-        let newPTags: string[][];
-        if (action === 'follow') {
-          // Add only if not already present (dedup)
-          const alreadyFollowed = pTags.some(([, pk]) => pk === targetPubkey);
-          newPTags = alreadyFollowed ? pTags : [...pTags, ['p', targetPubkey]];
-        } else {
-          // Remove the target pubkey
-          newPTags = pTags.filter(([, pk]) => pk !== targetPubkey);
-        }
+        // ③ Compute the new set of `p` tags (null = no change → skip publish)
+        const newPTags = computeFollowListPTags(pTags, [...targetSet], action);
+        if (newPTags === null) return;
 
         // ④ Rebuild the full tag array: non-p tags first, then p tags
         const newTags = [...nonPTags, ...newPTags];
@@ -155,14 +186,24 @@ export function useFollowActions(): UseFollowActionsReturn {
   );
 
   const follow = useCallback(
-    (pubkey: string) => mutateFollowList(pubkey, 'follow'),
+    (pubkey: string) => mutateFollowList([pubkey], 'follow'),
     [mutateFollowList],
   );
 
   const unfollow = useCallback(
-    (pubkey: string) => mutateFollowList(pubkey, 'unfollow'),
+    (pubkey: string) => mutateFollowList([pubkey], 'unfollow'),
     [mutateFollowList],
   );
 
-  return { isPending, follow, unfollow };
+  const followMany = useCallback(
+    (pubkeys: string[]) => mutateFollowList(pubkeys, 'follow'),
+    [mutateFollowList],
+  );
+
+  const unfollowMany = useCallback(
+    (pubkeys: string[]) => mutateFollowList(pubkeys, 'unfollow'),
+    [mutateFollowList],
+  );
+
+  return { isPending, follow, unfollow, followMany, unfollowMany };
 }

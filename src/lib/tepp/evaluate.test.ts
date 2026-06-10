@@ -124,3 +124,66 @@ describe('evaluateEvent — write-gate draft (kid replying)', () => {
     expect(verdict.result).toBe('deny')
   })
 })
+
+/**
+ * KUBO-147: a kid's kind-3 follow list is a RECORD, not an interaction.
+ * The gate (useKuboTeppGate) evaluates kind 3 at the VIEW threshold
+ * (`'incoming'`), so the kid may follow anyone admitted at view-or-better.
+ * Genuine interactions (kind 1/6/7) stay at the interaction threshold.
+ *
+ * These tests assert the evaluator behaviour the gate relies on; the gate's
+ * kind→direction mapping is exercised separately.
+ */
+function followList(author: string, follows: string[]): Event {
+  return {
+    id: '0'.repeat(64),
+    sig: '0'.repeat(128),
+    pubkey: author,
+    kind: 3,
+    content: '',
+    tags: follows.map((pk) => ['p', pk]),
+    created_at: 1_700_000_000,
+  } as unknown as Event
+}
+
+describe('evaluateEvent — kid follow list at view threshold (KUBO-147)', () => {
+  it("incoming: kid's follow list p-tagging a view-only person is permitted", () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+    ])
+    const verdict = evaluateEvent(followList(KID, [VIEW_AUTHOR]), construct, 'incoming')
+    expect(verdict.result).not.toBe('deny')
+  })
+
+  it('incoming: a follow list mixing view + interact people is permitted', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+      npubEntry(KIND_PERMISSION_INTERACTION_NPUB_A, INTERACT_AUTHOR),
+    ])
+    const verdict = evaluateEvent(
+      followList(KID, [VIEW_AUTHOR, INTERACT_AUTHOR]),
+      construct,
+      'incoming',
+    )
+    expect(verdict.result).not.toBe('deny')
+  })
+
+  it('incoming: following an entirely UNTRUSTED person is still denied', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+    ])
+    const stranger = 'f'.repeat(64)
+    const verdict = evaluateEvent(followList(KID, [stranger]), construct, 'incoming')
+    expect(verdict.result).toBe('deny')
+  })
+
+  it("safety: the SAME view-only p-tag is denied for a kind-1 reply (outgoing)", () => {
+    // Proves only the threshold differs — a real interaction with a view-only
+    // person stays blocked even though the follow-list reference is allowed.
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+    ])
+    const reply = note(KID, [['p', VIEW_AUTHOR]])
+    expect(evaluateEvent(reply, construct, 'outgoing').result).toBe('deny')
+  })
+})

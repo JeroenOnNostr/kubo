@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Search, UsersRound } from 'lucide-react';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { BrowseSectionShell } from '@/components/feed/BrowseSectionShell';
 import { ExpandableSourceRow } from '@/components/feed/ExpandableSourceRow';
 import { NoKidSelected } from '@/components/NoKidSelected';
+import { useAddFeedPack } from '@/hooks/useAddFeedPack';
 import {
   usePacks,
   usePacksByAtags,
@@ -27,7 +29,9 @@ import { FeedSourceHeader } from './_FeedSourceHeader';
 export function PacksSourcePage() {
   const kid = useSelectedKid();
   const [query, setQuery] = useState('');
-  const { sources, togglePack } = useKidFeedSources(kid?.pubkey ?? null);
+  const { sources } = useKidFeedSources(kid?.pubkey ?? null);
+  // togglePack here also auto-grants view-only trust to pack members (KUBO-147).
+  const { togglePack } = useAddFeedPack(kid?.pubkey);
 
   const { packs: browsePacks, isFetching: browseFetching } = usePacks(query);
   const { data: enabledByAtag } = usePacksByAtags(sources.packs);
@@ -68,7 +72,7 @@ export function PacksSourcePage() {
           <EnabledSection
             atags={sources.packs}
             byAtag={enabledByAtag}
-            onToggle={(atag) => togglePack(atag)}
+            onToggle={(atag, event) => togglePack(atag, event)}
           />
         )}
 
@@ -76,7 +80,7 @@ export function PacksSourcePage() {
           results={browseResults}
           isFetching={browseFetching}
           query={query.trim()}
-          onToggle={(atag) => togglePack(atag)}
+          onToggle={(atag, event) => togglePack(atag, event)}
         />
       </div>
     </main>
@@ -90,7 +94,7 @@ function EnabledSection({
 }: {
   atags: string[];
   byAtag?: Map<string, PackByAtag>;
-  onToggle: (atag: string) => void;
+  onToggle: (atag: string, event?: NostrEvent) => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -106,7 +110,7 @@ function EnabledSection({
               atag={atag}
               pack={pack}
               enabled
-              onToggle={() => onToggle(atag)}
+              onToggle={() => onToggle(atag, pack?.event)}
             />
           );
         })}
@@ -124,7 +128,7 @@ function BrowseSection({
   results: PackByAtag[];
   isFetching: boolean;
   query: string;
-  onToggle: (atag: string) => void;
+  onToggle: (atag: string, event?: NostrEvent) => void;
 }) {
   return (
     <BrowseSectionShell count={results.length} forceOpen={query.length > 0}>
@@ -142,7 +146,7 @@ function BrowseSection({
               atag={pack.atag}
               pack={pack}
               enabled={false}
-              onToggle={() => onToggle(pack.atag)}
+              onToggle={() => onToggle(pack.atag, pack.event)}
             />
           ))}
         </div>

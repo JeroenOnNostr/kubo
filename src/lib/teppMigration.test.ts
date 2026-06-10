@@ -92,6 +92,79 @@ describe('computeKidTemplates', () => {
     expect(templates.map((t) => t.order).sort()).toEqual([5, 6]);
   });
 
+  it('admits seeded follow-pack members at the view tier (KUBO-148)', () => {
+    // A fresh kid: only the parent is seeded at interact. The default pack's
+    // members arrive via packMemberViewPubkeys and must produce a view (8712)
+    // template so the construct admits them out-of-the-box.
+    const family = makeFamily({
+      trustAssignments: { [KID_A]: { [PARENT]: 'interact' } },
+    });
+
+    const templates = computeKidTemplates({
+      family,
+      kidPubkey: KID_A,
+      parentPubkey: PARENT,
+      packMemberViewPubkeys: [TARGET_1, TARGET_2],
+    });
+
+    const viewTpl = templates.find((t) => t.order === 1);
+    expect(viewTpl).toBeDefined();
+    expect(viewTpl!.kind).toBe(8712);
+    const viewPs = viewTpl!.template.tags.filter((tg) => tg[0] === 'p').map((tg) => tg[1]);
+    expect(viewPs.sort()).toEqual([TARGET_1, TARGET_2].sort());
+
+    // The parent's interact assignment is untouched.
+    const interactTpl = templates.find((t) => t.order === 2)!;
+    expect(interactTpl.kind).toBe(8710);
+    expect(interactTpl.template.tags.find((tg) => tg[0] === 'p')?.[1]).toBe(PARENT);
+  });
+
+  it('does not downgrade a pack member who already holds an explicit interact assignment', () => {
+    // TARGET_1 is explicitly interact AND appears in the pack. It must stay in
+    // the interact list only — never re-listed under view (which would be a
+    // silent downgrade once both events load).
+    const family = makeFamily({
+      trustAssignments: { [KID_A]: { [TARGET_1]: 'interact' } },
+    });
+
+    const templates = computeKidTemplates({
+      family,
+      kidPubkey: KID_A,
+      parentPubkey: PARENT,
+      packMemberViewPubkeys: [TARGET_1, TARGET_2],
+    });
+
+    const viewTpl = templates.find((t) => t.order === 1)!;
+    const viewPs = viewTpl.template.tags.filter((tg) => tg[0] === 'p').map((tg) => tg[1]);
+    expect(viewPs).toEqual([TARGET_2]); // TARGET_1 excluded — kept at interact
+
+    const interactPs = templates
+      .find((t) => t.order === 2)!
+      .template.tags.filter((tg) => tg[0] === 'p')
+      .map((tg) => tg[1]);
+    expect(interactPs).toContain(TARGET_1);
+  });
+
+  it('dedupes a pack member that is also an explicit view assignment', () => {
+    const family = makeFamily({
+      trustAssignments: { [KID_A]: { [TARGET_1]: 'view' } },
+    });
+
+    const templates = computeKidTemplates({
+      family,
+      kidPubkey: KID_A,
+      parentPubkey: PARENT,
+      packMemberViewPubkeys: [TARGET_1, TARGET_2],
+    });
+
+    const viewPs = templates
+      .find((t) => t.order === 1)!
+      .template.tags.filter((tg) => tg[0] === 'p')
+      .map((tg) => tg[1]);
+    // TARGET_1 appears once, not twice.
+    expect(viewPs.sort()).toEqual([TARGET_1, TARGET_2].sort());
+  });
+
   it("emits an extend pair on the interact template when the kid has 'extend'-tier assignments", () => {
     const family = makeFamily({
       trustAssignments: {

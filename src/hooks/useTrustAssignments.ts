@@ -18,6 +18,7 @@ import type { PermissionRef } from '@/lib/tepp/types';
 import {
   getFamilySnapshot,
   recordTeppPermissionId,
+  setTrustLevelsBatch,
   useKuboFamily,
   type KuboTrustLevel,
 } from './useKuboFamily';
@@ -49,6 +50,21 @@ function buildPublicPermissionRefs(
 export interface TrustAssignmentsApi {
   get: (targetPubkey: string) => KuboTrustLevel | undefined;
   setLevel: (targetPubkey: string, level: KuboTrustLevel) => Promise<void>;
+  /**
+   * Assign `level` to `targetPubkey` ONLY if it currently has no assignment.
+   * Returns true if it wrote, false if the target was already assigned (so we
+   * never downgrade an existing interact/extend — the no-downgrade invariant).
+   * Used by the feed-source auto-grant flows (KUBO-147).
+   */
+  setLevelIfUnassigned: (targetPubkey: string, level: KuboTrustLevel) => Promise<boolean>;
+  /**
+   * Batch-assign `level` to many targets in ONE localStorage write and, when
+   * `featureTepp` is on, ONE permission publish + ONE state publish — instead
+   * of N of each. Targets already assigned are skipped (no-downgrade). Used by
+   * the follow-pack auto-grant flow (KUBO-147). Only `view`/`interact` tiers
+   * are batched; `extend` falls back to per-target `setLevel`.
+   */
+  setLevelsBatch: (targetPubkeys: string[], level: KuboTrustLevel) => Promise<void>;
   clear: (targetPubkey: string) => Promise<void>;
 }
 
@@ -166,6 +182,79 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
     [kidPubkey, setTrustLevel, featureTepp, family, publishPermission, publishState, toast],
   );
 
+  const setLevelIfUnassigned = useCallback(
+    async (targetPubkey: string, level: KuboTrustLevel): Promise<boolean> => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      // No-downgrade: read the latest snapshot (not the closure-captured
+      // render view, which can be stale within a session) and skip if the
+      // target already carries any assignment.
+      const existing = getFamilySnapshot()?.trustAssignments?.[kidPubkey]?.[targetPubkey];
+      if (existing !== undefined) return false;
+      await setLevel(targetPubkey, level);
+      return true;
+    },
+    [kidPubkey, setLevel],
+  );
+
+  const setLevelsBatch = useCallback(
+    async (targetPubkeys: string[], level: KuboTrustLevel): Promise<void> => {
+      if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
+      // `extend` carries per-target semantics (the kid-target guard + extend
+      // pairs); batching it isn't meaningful, so fall back to the single path.
+      if (level === 'extend') {
+        for (const pk of targetPubkeys) {
+          await setLevelIfUnassigned(pk, level);
+        }
+        return;
+      }
+
+      // ONE localStorage write for all newly-assigned targets. Returns exactly
+      // the pubkeys that were unassigned before (never downgrades existing
+      // interact/extend), so an empty result means there is nothing to publish.
+      const newlyAssigned = await setTrustLevelsBatch(kidPubkey, targetPubkeys, level);
+      if (newlyAssigned.length === 0) return;
+
+      if (!featureTepp) return;
+
+      // ONE permission publish carrying the FULL same-tier list (prior entries
+      // ∪ the batch we just wrote), then ONE state publish. The permission
+      // event is replaceable by its d-tag (`${kid}:${tier}:npub`), so the
+      // single publish supersedes any prior one — no amplification, no shrink.
+      try {
+        const fresh = getFamilySnapshot()?.trustAssignments?.[kidPubkey] ?? {};
+        const fullTierList = Object.entries(fresh)
+          .filter(([, tier]) => tier === level)
+          .map(([pubkey]) => pubkey);
+        // fullTierList is non-empty (it contains newlyAssigned), so [0] is safe.
+        const input = makeTrustTierUpsert({
+          kidPubkey,
+          targetPubkey: fullTierList[0],
+          tier: level,
+          existingNpubs: fullTierList,
+        });
+        const permissionEvent = await publishPermission.mutateAsync(input);
+        const nextFamily = await recordTeppPermissionId(
+          kidPubkey,
+          level,
+          permissionEvent.id,
+        );
+        if (nextFamily) {
+          await publishState.mutateAsync({
+            publicPermissions: buildPublicPermissionRefs(nextFamily, kidPubkey),
+          });
+        }
+      } catch (err) {
+        toast({
+          title: 'TEPP publish failed',
+          description: err instanceof Error ? err.message : String(err),
+          variant: 'destructive',
+        });
+        // Keep the localStorage writes — the parent can re-toggle to retry.
+      }
+    },
+    [kidPubkey, featureTepp, setLevelIfUnassigned, publishPermission, publishState, toast],
+  );
+
   const clear = useCallback(
     async (targetPubkey: string) => {
       if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
@@ -226,5 +315,5 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
     [kidPubkey, clearTrustLevel, featureTepp, publishPermission, publishState, toast],
   );
 
-  return { get, setLevel, clear };
+  return { get, setLevel, setLevelIfUnassigned, setLevelsBatch, clear };
 }

@@ -8,8 +8,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
+import { useAddFeedProfile } from '@/hooks/useAddFeedProfile';
 import { useAuthor } from '@/hooks/useAuthor';
-import { useFollowActions, useFollowList } from '@/hooks/useFollowActions';
+import { useFollowList } from '@/hooks/useFollowActions';
 import type { SearchProfile } from '@/hooks/useSearchProfiles';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { genUserName } from '@/lib/genUserName';
@@ -31,7 +32,7 @@ export function ProfilesSourcePage() {
   const nav = useNavigate();
   const kid = useSelectedKid();
   const { data: followData } = useFollowList();
-  const { follow, unfollow, isPending } = useFollowActions();
+  const { addProfile, removeProfile, isPending } = useAddFeedProfile(kid?.pubkey);
   const queryClient = useQueryClient();
 
   const followedPubkeys = useMemo(() => followData?.pubkeys ?? [], [followData?.pubkeys]);
@@ -39,20 +40,21 @@ export function ProfilesSourcePage() {
 
   const handlePick = useCallback((profile: SearchProfile) => {
     if (!followedSet.has(profile.pubkey)) {
-      follow(profile.pubkey);
+      // addProfile follows the kid's kind-3 AND grants view-only trust (KUBO-147).
+      addProfile(profile.pubkey);
       queryClient.invalidateQueries({ queryKey: ['kid-feed'] });
       queryClient.invalidateQueries({ queryKey: ['feed', 'follows'] });
     }
-  }, [followedSet, follow, queryClient]);
+  }, [followedSet, addProfile, queryClient]);
 
   if (!kid) return <NoKidSelected title="Profiles" />;
 
   const handleToggle = async (pubkey: string) => {
     const wasFollowed = followedSet.has(pubkey);
     if (wasFollowed) {
-      await unfollow(pubkey);
+      await removeProfile(pubkey);
     } else {
-      await follow(pubkey);
+      await addProfile(pubkey);
     }
     // useFollowActions invalidates ['follow-list'], but useKidFeed and
     // useFeed('follows') both deliberately exclude the follow list from

@@ -4,7 +4,15 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useKuboFamily, setFamily } from '@/hooks/useKuboFamily';
+import {
+  useKuboFamily,
+  setFamily,
+  recordTeppPermissionId,
+  readLatest,
+  type TeppPermissionTier,
+} from '@/hooks/useKuboFamily';
+import { fetchPacksByAtags } from '@/hooks/useFollowPacks';
+import { MAX_PACK_AUTHORS } from '@/hooks/useKidFeed';
 import { useParentSigner } from '@/hooks/useParentSigner';
 import {
   buildAssociationTemplate,
@@ -28,6 +36,7 @@ import {
   type TeppMigrationStep,
 } from '@/lib/teppMigration';
 import type { KuboFamily, KuboTrustLevel } from '@/hooks/useKuboFamily';
+import type { PermissionRef } from '@/lib/tepp/types';
 
 /**
  * One-shot, idempotent, resumable TEPP migration. Triggers when:
@@ -108,7 +117,84 @@ interface RunArgs {
   family: KuboFamily;
   parent: { pubkey: string; signer: { signEvent: (t: unknown) => Promise<unknown>; nip44?: { encrypt: (pk: string, pt: string) => Promise<string> } } };
   kidUsers: Map<string, { pubkey: string; signer: { signEvent: (t: unknown) => Promise<unknown> } }>;
-  nostr: { event: (e: NostrEvent, opts?: { signal?: AbortSignal }) => Promise<void> };
+  nostr: {
+    event: (e: NostrEvent, opts?: { signal?: AbortSignal }) => Promise<void>;
+    query: (filters: unknown[], opts?: { signal?: AbortSignal }) => Promise<NostrEvent[]>;
+  };
+}
+
+/** Dedup, capped list of member pubkeys (`p` tags) from a follow-pack event. */
+function packMembersOf(event: NostrEvent): string[] {
+  const out = new Set<string>();
+  for (const [name, value] of event.tags) {
+    if (name === 'p' && value) {
+      out.add(value);
+      if (out.size >= MAX_PACK_AUTHORS) break;
+    }
+  }
+  return Array.from(out);
+}
+
+/**
+ * Resolve the kid's seeded follow pack(s) to their member pubkeys, excluding
+ * the kid and parent. Returns [] on any indexing gap / timeout — the migration
+ * still publishes the rest, and a later boot (or a manual re-toggle) backfills.
+ */
+async function resolvePackMembers(opts: {
+  family: KuboFamily;
+  kidPubkey: string;
+  parentPubkey: string;
+  nostr: RunArgs['nostr'];
+}): Promise<string[]> {
+  const { family, kidPubkey, parentPubkey, nostr } = opts;
+  const atags = family.feedSources?.[kidPubkey]?.packs ?? [];
+  if (atags.length === 0) return [];
+  try {
+    const map = await fetchPacksByAtags(
+      nostr as unknown as Parameters<typeof fetchPacksByAtags>[0],
+      atags,
+      AbortSignal.timeout(6000),
+    );
+    const members = new Set<string>();
+    for (const { event } of map.values()) {
+      for (const pk of packMembersOf(event)) {
+        if (pk !== kidPubkey && pk !== parentPubkey) members.add(pk);
+      }
+    }
+    return Array.from(members);
+  } catch {
+    return [];
+  }
+}
+
+/** Tier under which a published permission event's id is recorded. Orders 5
+ * (state) and 6 (assoc) are not permission events and return null. */
+function tierForOrder(order: number): TeppPermissionTier | null {
+  switch (order) {
+    case 1:
+      return 'view';
+    case 2:
+      return 'interact';
+    case 3:
+      return 'viewRelay';
+    case 4:
+      return 'interactRelay';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Persist the migration plan by merging it onto the LATEST persisted family,
+ * not a stale closure snapshot. `recordTeppPermissionId` writes
+ * `teppLatestPermissionIds` between plan writes; spreading the run's captured
+ * `family` here would clobber those ids straight back to empty (the
+ * KUBO-134/135 hazard). Reading latest keeps both fields intact.
+ */
+async function persistPlan(plan: TeppMigrationPlan): Promise<void> {
+  const latest = await readLatest();
+  if (!latest) return;
+  await setFamily({ ...latest, teppMigrationPlan: plan });
 }
 
 async function runMigration({ family, parent, kidUsers, nostr }: RunArgs): Promise<void> {
@@ -116,7 +202,7 @@ async function runMigration({ family, parent, kidUsers, nostr }: RunArgs): Promi
 
   // Persist the freshly-built plan so any crash gives us something to resume from.
   if (!family.teppMigrationPlan) {
-    await setFamily({ ...family, teppMigrationPlan: plan });
+    await persistPlan(plan);
   }
 
   for (const kid of family.kids) {
@@ -126,31 +212,37 @@ async function runMigration({ family, parent, kidUsers, nostr }: RunArgs): Promi
     let kindThreeFollows: string[] = [];
     if (Object.keys(trust).length === 0) {
       try {
-        const events = (await nostr.event) /* placeholder */ as unknown;
-        // Use the nostr.query path we exposed elsewhere — but the typed
-        // signature here only has `event`. Fetch via dynamic require.
-        const events2 = await (nostr as unknown as {
-          query: (filters: unknown[]) => Promise<NostrEvent[]>;
-        }).query([{ kinds: [3], authors: [kid.pubkey], limit: 1 }]);
+        const events = await nostr.query(
+          [{ kinds: [3], authors: [kid.pubkey], limit: 1 }],
+          { signal: AbortSignal.timeout(6000) },
+        );
         // pick the most recent
-        const latest = events2.sort((a, b) => b.created_at - a.created_at)[0];
+        const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
         if (latest) {
           kindThreeFollows = latest.tags
             .filter((t) => t[0] === 'p' && /^[0-9a-f]{64}$/i.test(t[1] ?? ''))
             .map((t) => t[1]);
         }
-        // suppress unused warning on the placeholder
-        void events;
       } catch {
         kindThreeFollows = [];
       }
     }
+
+    // Resolve seeded follow-pack members so they get admitted at the `view`
+    // tier out-of-the-box (KUBO-148). Independent of the Q5 kind-3 seed above.
+    const packMemberViewPubkeys = await resolvePackMembers({
+      family,
+      kidPubkey: kid.pubkey,
+      parentPubkey: parent.pubkey,
+      nostr,
+    });
 
     const templates = computeKidTemplates({
       family,
       kidPubkey: kid.pubkey,
       parentPubkey: parent.pubkey,
       kindThreeFollows,
+      packMemberViewPubkeys,
     });
 
     // Auto-ack plan slots that have no template to publish for this kid
@@ -166,7 +258,7 @@ async function runMigration({ family, parent, kidUsers, nostr }: RunArgs): Promi
       const step = plan.steps.find((s) => s.id === stepId);
       if (!step || step.acked) continue;
       plan = markAcked(plan, stepId);
-      await setFamily({ ...family, teppMigrationPlan: plan });
+      await persistPlan(plan);
       auditMigrationStep({
         kidPubkey: kid.pubkey,
         parentPubkey: parent.pubkey,
@@ -203,8 +295,21 @@ async function runMigration({ family, parent, kidUsers, nostr }: RunArgs): Promi
           continue;
         }
         await nostr.event(event, { signal: AbortSignal.timeout(8000) });
+
+        // Record permission-event ids (orders 1–4) under teppLatestPermissionIds
+        // so the order-5 state event can reference them — and so the manual
+        // Trust-page path (useTrustAssignments) republishes the state with the
+        // full set later. recordTeppPermissionId reads the latest persisted
+        // family and merges, so it's safe across resume/interruption: if a prior
+        // run already acked orders 1–4 and we resume straight into order 5, the
+        // ids are still on disk and buildStatePermissionRefs picks them up.
+        const tier = tierForOrder(tpl.order);
+        if (tier) {
+          await recordTeppPermissionId(kid.pubkey, tier, event.id);
+        }
+
         plan = markAcked(plan, stepId);
-        await setFamily({ ...family, teppMigrationPlan: plan });
+        await persistPlan(plan);
         auditMigrationStep({
           kidPubkey: kid.pubkey,
           parentPubkey: parent.pubkey,
@@ -227,8 +332,12 @@ async function runMigration({ family, parent, kidUsers, nostr }: RunArgs): Promi
   }
 
   if (planFullyAcked(plan)) {
+    // Merge onto latest (not the stale closure `family`) so the
+    // teppLatestPermissionIds recorded during this run survive the completion
+    // write. (KUBO-134/135 clobber hazard.)
+    const latest = (await readLatest()) ?? family;
     await setFamily({
-      ...family,
+      ...latest,
       teppMigratedAt: Date.now(),
       teppMigrationPlan: undefined,
     });
@@ -259,23 +368,30 @@ async function signMigrationTemplate(args: SignArgs): Promise<NostrEvent | null>
   }
 
   if (step.order === 5) {
-    // State event — needs encrypted private section.
+    // State event — needs encrypted private section AND public permission refs.
     if (!parent.signer.nip44) {
       throw new Error('NIP-44 v2 required for TEPP state events');
     }
-    // Compute the private section: list every permission event we just
-    // published for this kid by recomputing the templates and reading
-    // their identifiers. For the migration's first publish, the parent
-    // hasn't yet seen relay confirmations of the permission events (we
-    // *just* signed them above), but their event-ids are known after
-    // signing — we re-derive by walking earlier acked steps in the plan.
-    // Simpler approach: leave private section empty; the public refs are
-    // sufficient for the v0.1 PoC, and the construct still assembles.
+    // The construct loads permission events by reading the state event's
+    // `['permission', id, kind]` tags (publicPermissions) ∪ the decrypted
+    // private section (useConstruct.ts). Orders 1–4 published earlier this run
+    // recorded their event-ids under family.teppLatestPermissionIds via
+    // recordTeppPermissionId; read the LATEST persisted family here (orders run
+    // before order 5, and recordTeppPermissionId merges onto disk) and surface
+    // every recorded id as a public ref. Without this the state event would
+    // carry zero refs and clobber the construct to empty — exactly the bug
+    // where seeded follow-pack members show "NOT ADMITTED" (KUBO-148).
+    const latest = await readLatest();
+    const publicPermissions = buildStatePermissionRefs(latest, kidPubkey);
+    // Private section stays empty: the v0.1 construct assembles entirely from
+    // the public refs, and mirroring the manual path (useTrustAssignments also
+    // publishes empty private + public refs) keeps a single behaviour.
     const privateSection = JSON.stringify({ permissions: [] });
     const ciphertext = await parent.signer.nip44.encrypt(kidPubkey, privateSection);
     const stateTpl = buildStateTemplate({
       subject: kidPubkey,
       publicAssocATag: buildAssocATag(kidPubkey),
+      publicPermissions,
       encryptedContent: ciphertext,
     });
     const signed = (await parent.signer.signEvent(stateTpl)) as NostrEvent;
@@ -291,6 +407,30 @@ async function signMigrationTemplate(args: SignArgs): Promise<NostrEvent | null>
   // generated template above — but we already have it.
   const signed = (await parent.signer.signEvent(args.template)) as NostrEvent;
   return signed;
+}
+
+/**
+ * Build the public permission refs for a kid's state event from the recorded
+ * latest permission-event ids. Mirrors `buildPublicPermissionRefs` in
+ * useTrustAssignments so the migration's state event and the manual Trust-page
+ * state event reference the same shape of refs. Returns [] when nothing has
+ * been recorded yet (state event then carries no permission tags).
+ */
+function buildStatePermissionRefs(
+  family: KuboFamily | null,
+  kidPubkey: string,
+): PermissionRef[] {
+  const ids = family?.teppLatestPermissionIds?.[kidPubkey];
+  if (!ids) return [];
+  const refs: PermissionRef[] = [];
+  if (ids.view) refs.push({ id: ids.view, kind: KIND_PERMISSION_VIEW_NPUB_A });
+  if (ids.interact) refs.push({ id: ids.interact, kind: KIND_PERMISSION_INTERACTION_NPUB_A });
+  if (ids.extend && ids.extend !== ids.interact) {
+    refs.push({ id: ids.extend, kind: KIND_PERMISSION_INTERACTION_NPUB_A });
+  }
+  if (ids.viewRelay) refs.push({ id: ids.viewRelay, kind: KIND_PERMISSION_VIEW_RELAY });
+  if (ids.interactRelay) refs.push({ id: ids.interactRelay, kind: KIND_PERMISSION_INTERACTION_RELAY });
+  return refs;
 }
 
 function planSampleKindForOrder(order: number): number {

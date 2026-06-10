@@ -223,7 +223,7 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-async function readLatest(): Promise<KuboFamily | null> {
+export async function readLatest(): Promise<KuboFamily | null> {
   const raw = await secureStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
@@ -263,7 +263,21 @@ export async function addKid(kid: KuboKid): Promise<void> {
       [kid.pubkey]: { relays: [], communities: [], packs: [KUBO_DEFAULT_KID_PACK_ATAG] },
     };
   }
-  await writeAndNotify({ ...current, kids, feedSources });
+  // KUBO-147: the parent always belongs in the kid's trust domain at
+  // `interact`. Seed it on genuinely new kids alongside the default feed
+  // pack. It's a normal (removable) entry — the parent can later downgrade
+  // or remove themselves; useEnsureParentTrust only backfills when missing.
+  let trustAssignments = current.trustAssignments;
+  if (!existing && current.parentPubkey && !trustAssignments?.[kid.pubkey]?.[current.parentPubkey]) {
+    trustAssignments = {
+      ...current.trustAssignments,
+      [kid.pubkey]: {
+        ...(current.trustAssignments?.[kid.pubkey] ?? {}),
+        [current.parentPubkey]: 'interact',
+      },
+    };
+  }
+  await writeAndNotify({ ...current, kids, feedSources, trustAssignments });
 }
 
 export async function removeKid(pubkey: string): Promise<void> {
@@ -332,6 +346,47 @@ export async function clearTrustLevel(
     ...current,
     trustAssignments: { ...assignments, [kidPubkey]: rest },
   });
+}
+
+/**
+ * Batch-assign many targets to one trust level in a SINGLE writeAndNotify.
+ *
+ * Used by the feed-source auto-grant flows (KUBO-147): enabling a follow pack
+ * grants every member `view`-only trust. Doing that with N `setTrustLevel`
+ * calls would be N disk writes (and, in useTrustAssignments, N relay
+ * publishes). This collapses the localStorage side to one write.
+ *
+ * No-downgrade invariant: targets that ALREADY have any assignment are skipped
+ * (we never reduce an existing `interact`/`extend` — or the parent — to a
+ * lower tier). Returns the list of pubkeys that were genuinely newly assigned,
+ * so the caller knows exactly which to fold into the published permission
+ * event (and can skip the publish entirely when nothing changed).
+ */
+export async function setTrustLevelsBatch(
+  kidPubkey: string,
+  targetPubkeys: string[],
+  level: KuboTrustLevel,
+): Promise<string[]> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot set trust levels: no family record exists yet.');
+  }
+  const assignments = current.trustAssignments ?? {};
+  const kidAssignments = assignments[kidPubkey] ?? {};
+  // Only assign targets with no existing entry, deduped.
+  const newlyAssigned = [
+    ...new Set(targetPubkeys.filter((pk) => pk && !(pk in kidAssignments))),
+  ];
+  if (newlyAssigned.length === 0) return [];
+  const nextKidAssignments = { ...kidAssignments };
+  for (const pk of newlyAssigned) {
+    nextKidAssignments[pk] = level;
+  }
+  await writeAndNotify({
+    ...current,
+    trustAssignments: { ...assignments, [kidPubkey]: nextKidAssignments },
+  });
+  return newlyAssigned;
 }
 
 /** Permission-id tiers tracked under `family.teppLatestPermissionIds[kid]`. */
@@ -643,6 +698,7 @@ export function useKuboFamily() {
   const removeKidCb = useCallback(removeKid, []);
   const clearFamilyCb = useCallback(clearFamily, []);
   const setTrustLevelCb = useCallback(setTrustLevel, []);
+  const setTrustLevelsBatchCb = useCallback(setTrustLevelsBatch, []);
   const clearTrustLevelCb = useCallback(clearTrustLevel, []);
   const setRelayTrustLevelCb = useCallback(setRelayTrustLevel, []);
   const clearRelayTrustLevelCb = useCallback(clearRelayTrustLevel, []);
@@ -660,6 +716,7 @@ export function useKuboFamily() {
     removeKid: removeKidCb,
     clearFamily: clearFamilyCb,
     setTrustLevel: setTrustLevelCb,
+    setTrustLevelsBatch: setTrustLevelsBatchCb,
     clearTrustLevel: clearTrustLevelCb,
     setRelayTrustLevel: setRelayTrustLevelCb,
     clearRelayTrustLevel: clearRelayTrustLevelCb,
