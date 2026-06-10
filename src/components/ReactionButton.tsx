@@ -181,10 +181,19 @@ export function ReactionButton({
                   // KUBO-175: TEPP denial gets a kid-friendly message, not a
                   // silent rollback.
                   if (err instanceof TeppDeniedError) {
-                    toast({
-                      title: 'Ask a grown-up first',
-                      description: 'You need permission before you can react to this.',
-                    });
+                    // KUBO-154: transient fail-closed vs real deny.
+                    toast(
+                      err.reason === 'construct-unavailable'
+                        ? {
+                            title: 'Still checking…',
+                            description:
+                              "Hold on, still checking with your grown-up — try again in a moment.",
+                          }
+                        : {
+                            title: 'Ask a grown-up first',
+                            description: 'You need permission before you can react to this.',
+                          },
+                    );
                   }
                   queryClient.setQueryData(['user-reaction', eventId], null);
                   if (prevStats) {

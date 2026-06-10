@@ -146,10 +146,19 @@ export function QuickReactMenu({
         onError: (err) => {
           // KUBO-175: surface TEPP denial with a kid-friendly message.
           if (err instanceof TeppDeniedError) {
-            toast({
-              title: 'Ask a grown-up first',
-              description: 'You need permission before you can react to this.',
-            });
+            // KUBO-154: transient fail-closed vs real deny.
+            toast(
+              err.reason === 'construct-unavailable'
+                ? {
+                    title: 'Still checking…',
+                    description:
+                      "Hold on, still checking with your grown-up — try again in a moment.",
+                  }
+                : {
+                    title: 'Ask a grown-up first',
+                    description: 'You need permission before you can react to this.',
+                  },
+            );
           }
           setSelectedEmoji(null);
           if (prevStats) {

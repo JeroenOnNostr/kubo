@@ -92,10 +92,21 @@ export function RepostMenu({ event, children }: RepostMenuProps) {
           // of a generic "Failed to repost" — the action wasn't broken, it's
           // just not allowed without a grown-up's permission.
           if (err instanceof TeppDeniedError) {
-            toast({
-              title: 'Ask a grown-up first',
-              description: 'You need permission before you can repost this.',
-            });
+            // KUBO-154: distinguish the fail-closed "construct not loaded yet"
+            // case from a real deny — it's a transient "try again" state, not a
+            // permission refusal.
+            toast(
+              err.reason === 'construct-unavailable'
+                ? {
+                    title: 'Still checking…',
+                    description:
+                      "Hold on, still checking with your grown-up — try again in a moment.",
+                  }
+                : {
+                    title: 'Ask a grown-up first',
+                    description: 'You need permission before you can repost this.',
+                  },
+            );
           } else {
             toast({ title: 'Failed to repost', variant: 'destructive' });
           }
