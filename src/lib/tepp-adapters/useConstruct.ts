@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
-import { useAppContext } from '@/hooks/useAppContext';
+import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useParentSigner } from '@/hooks/useParentSigner';
+import { isTeppEnforced } from './useTeppEnforced';
 import { parseAssociation, pickCurrentAssociation } from '@/lib/tepp/parse';
 import { pickCurrentState } from '@/lib/tepp/parseState';
 import { parsePermission } from '@/lib/tepp/parsePermission';
@@ -143,17 +144,27 @@ export function pickAssociationForFamily(
  * `refetchInterval` poll, and the resulting construct fingerprint (which DOES
  * fold in `assoc.raw.id`) re-keys every downstream verdict cache.
  *
- * When `featureTepp` is false OR no kidPubkey is provided, returns
+ * When TEPP is NOT enforced for this kid (KUBO-152: the parent-controlled
+ * family flag `family.teppEnforced` is off, or the target isn't a kid in the
+ * family) OR no kidPubkey is provided, returns
  * `{construct: null, fingerprint: null, loading: false, reason: 'flag-off'|'no-kid'}`
  * early without any relay traffic.
+ *
+ * KUBO-152: enforcement is derived from the parent-controlled family flag via
+ * `isTeppEnforced`, NOT from `config.feedSettings.featureTepp` (which is a
+ * kid-writable synced setting and must never be able to disable a kid's own
+ * protection).
  */
 export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTeppConstructResult {
   const { nostr } = useNostr();
-  const { config } = useAppContext();
+  const { family } = useKuboFamily();
   const { user: parent, reason: parentReason } = useParentSigner();
 
+  // KUBO-152: enforcement comes from the family flag, not feedSettings.
+  const enforced = isTeppEnforced(family, kidPubkey);
+
   const enabled = Boolean(
-    config.feedSettings.featureTepp && kidPubkey && parent,
+    enforced && kidPubkey && parent,
   );
 
   const query = useQuery<{
@@ -376,7 +387,7 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
     },
   });
 
-  if (!config.feedSettings.featureTepp) {
+  if (!enforced) {
     return { construct: null, fingerprint: null, loading: false, reason: 'flag-off' };
   }
   if (!kidPubkey) {

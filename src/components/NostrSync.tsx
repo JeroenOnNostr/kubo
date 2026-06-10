@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useKuboFamily } from "@/hooks/useKuboFamily";
 import { useEncryptedSettings, setLocalSettingsSync } from "@/hooks/useEncryptedSettings";
 import { isSyncDone } from "@/hooks/useInitialSync";
 import { parseBlossomServerList } from "@/lib/appBlossom";
@@ -25,6 +26,7 @@ import type { ThemeConfig } from "@/themes";
 export function NostrSync() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { family } = useKuboFamily();
   const { config, updateConfig } = useAppContext();
   const queryClient = useQueryClient();
   const {
@@ -336,14 +338,31 @@ export function NostrSync() {
       if (encryptedSettings.feedSettings) {
         const currentFeed = current.feedSettings;
         const remoteFeed = encryptedSettings.feedSettings;
-        // Check if any feed setting actually differs
+        // KUBO-152: `featureTepp` is now a parent-UI mirror only — the
+        // authoritative enforcement flag lives in the family record
+        // (`family.teppEnforced`, see useTeppEnforced). When a KID is the active
+        // account, their own synced kind-30078 must NOT write the mirror: a kid
+        // toggling `featureTepp:false` in their account state used to flip the
+        // master switch for their own protection. Skip `featureTepp` in the
+        // diff/merge so a kid's synced value can never override the parent's
+        // family flag (and can't confuse the parent UI on a shared device).
+        // Enforcement no longer reads this mirror, so this is safety hygiene.
+        const activeIsKid =
+          !!user?.pubkey && !!family?.kids.some((k) => k.pubkey === user.pubkey);
+        const skipKeys = activeIsKid ? new Set<string>(['featureTepp']) : new Set<string>();
+        // Check if any (non-skipped) feed setting actually differs
         const feedChanged = Object.keys(remoteFeed).some(
           (key) =>
+            !skipKeys.has(key) &&
             remoteFeed[key as keyof typeof remoteFeed] !==
-            currentFeed?.[key as keyof typeof currentFeed],
+              currentFeed?.[key as keyof typeof currentFeed],
         );
         if (feedChanged) {
-          updates.feedSettings = { ...currentFeed, ...remoteFeed };
+          const merged = { ...currentFeed, ...remoteFeed };
+          // Preserve the parent's mirror value for skipped keys (don't let the
+          // kid's synced value bleed into config even cosmetically).
+          if (activeIsKid) merged.featureTepp = currentFeed?.featureTepp ?? false;
+          updates.feedSettings = merged;
           changed = true;
         }
       }
@@ -443,6 +462,7 @@ export function NostrSync() {
     }
   }, [
     user,
+    family,
     encryptedSettings,
     settingsLoading,
     updateConfig,

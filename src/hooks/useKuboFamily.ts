@@ -118,6 +118,26 @@ export interface KuboFamily {
    */
   coachmarksCompletedAt?: number;
   /**
+   * KUBO-152: the AUTHORITATIVE, parent-controlled TEPP enforcement flag.
+   *
+   * This is the single source of truth for "is TEPP enforced for the kids in
+   * this family". It lives in the family record (device-local secureStorage,
+   * only the parent can edit it via the EditKidSettingsPage toggle) precisely
+   * BECAUSE it must NOT be authorable by a kid: `feedSettings.featureTepp` is
+   * synced as the *active user's own* encrypted kind-30078, so when a kid is
+   * the active account the kid's own key authors that flag — making the kid's
+   * account state the master switch for its own protection (the KUBO-152
+   * fail-open). `feedSettings.featureTepp` is now only a parent-UI-visible
+   * MIRROR kept for sync/migration compatibility; enforcement reads THIS field
+   * via `useTeppEnforced` (`src/lib/tepp-adapters/useTeppEnforced.ts`).
+   *
+   * Semantics: `true` → enforce; `false` → explicitly off; `undefined` → never
+   * set on this device. On first run with KUBO-152 code, a family record whose
+   * `teppEnforced` is still `undefined` adopts the current parent-side
+   * `config.feedSettings.featureTepp` value once (see `adoptTeppEnforcedFromMirror`).
+   */
+  teppEnforced?: boolean;
+  /**
    * TEPP integration (feedSettings.featureTepp). Unix-ms timestamp of when
    * the migration completed for this family. Unset = migration has not
    * finished yet (will run on next boot when featureTepp is on).
@@ -535,6 +555,44 @@ export async function approveTrustRequest(
   });
 }
 
+// ─── TEPP enforcement flag (KUBO-152) ────────────────────────────────────────
+
+/**
+ * Set the authoritative, parent-controlled TEPP enforcement flag on the family
+ * record. Written by the EditKidSettingsPage toggle. This is the single source
+ * of truth consumed by `useTeppEnforced`; `feedSettings.featureTepp` is only a
+ * mirror for parent-UI/sync compatibility.
+ */
+export async function setTeppEnforced(enforced: boolean): Promise<void> {
+  const current = await readLatest();
+  if (!current) {
+    throw new Error('Cannot set TEPP enforcement: no family record exists yet.');
+  }
+  if (current.teppEnforced === enforced) return; // no-op write
+  await writeAndNotify({ ...current, teppEnforced: enforced });
+}
+
+/**
+ * KUBO-152 one-time migration: existing installs only carried the flag in
+ * `feedSettings.featureTepp`. On first run with the new code, a family record
+ * whose `teppEnforced` is still `undefined` adopts the current parent-side
+ * mirror value exactly once, so enforcement doesn't silently flip when the
+ * authoritative field moves into the family record.
+ *
+ * Idempotent: once `teppEnforced` is defined (even `false`), this is a no-op.
+ * Returns the (possibly unchanged) family.
+ */
+export async function adoptTeppEnforcedFromMirror(
+  mirrorFeatureTepp: boolean,
+): Promise<KuboFamily | null> {
+  const current = await readLatest();
+  if (!current) return null;
+  if (current.teppEnforced !== undefined) return current; // already migrated
+  const next: KuboFamily = { ...current, teppEnforced: mirrorFeatureTepp };
+  await writeAndNotify(next);
+  return next;
+}
+
 // ─── Coachmark tour completion ───────────────────────────────────────────────
 
 export async function markCoachmarksComplete(): Promise<void> {
@@ -706,6 +764,7 @@ export function useKuboFamily() {
   const clearTrustRequestCb = useCallback(clearTrustRequest, []);
   const approveTrustRequestCb = useCallback(approveTrustRequest, []);
   const setKidSettingsCb = useCallback(setKidSettings, []);
+  const setTeppEnforcedCb = useCallback(setTeppEnforced, []);
   const markCoachmarksCompleteCb = useCallback(markCoachmarksComplete, []);
 
   return {
@@ -724,6 +783,7 @@ export function useKuboFamily() {
     clearTrustRequest: clearTrustRequestCb,
     approveTrustRequest: approveTrustRequestCb,
     setKidSettings: setKidSettingsCb,
+    setTeppEnforced: setTeppEnforcedCb,
     markCoachmarksComplete: markCoachmarksCompleteCb,
   };
 }

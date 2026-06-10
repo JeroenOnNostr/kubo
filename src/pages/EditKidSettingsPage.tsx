@@ -18,7 +18,7 @@ import { useAuthor, parseAuthorEvent } from '@/hooks/useAuthor';
 import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
-import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
+import { getKidSettings, setKidSettings, setTeppEnforced, useKuboFamily } from '@/hooks/useKuboFamily';
 import type { KidSettings } from '@/hooks/useKuboFamily';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -38,6 +38,7 @@ export function EditKidSettingsPage() {
   const { feedSettings, updateFeedSettings } = useFeedSettings();
   const { updateSettings: updateEncryptedSettings } = useEncryptedSettings();
   const { user } = useCurrentUser();
+  const { family } = useKuboFamily();
 
   const [age, setAge]             = useState(6);
   const [dailyLimit, setDaily]    = useState(45); // minutes
@@ -375,8 +376,22 @@ export function EditKidSettingsPage() {
           </p>
         </div>
         <Switch
-          checked={!!feedSettings.featureTepp}
+          // KUBO-152: reflect the AUTHORITATIVE family flag when set; fall back
+          // to the feedSettings mirror for installs that predate the field.
+          checked={family?.teppEnforced ?? !!feedSettings.featureTepp}
           onCheckedChange={async (v) => {
+            // KUBO-152: write the authoritative, parent-controlled family flag
+            // FIRST — this is what enforcement (useTeppEnforced) actually reads.
+            await setTeppEnforced(v).catch((err) => {
+              console.error('Failed to set TEPP enforcement flag:', err);
+              toast({
+                title: 'Could not change TEPP setting',
+                description: err instanceof Error ? err.message : 'Please try again.',
+                variant: 'destructive',
+              });
+            });
+            // Keep the feedSettings mirror in sync for parent-UI/migration
+            // compatibility (it no longer drives enforcement).
             updateFeedSettings({ featureTepp: v });
             if (user) {
               await updateEncryptedSettings.mutateAsync({
