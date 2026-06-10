@@ -12,6 +12,10 @@ import { useNip85UserStats } from '@/hooks/useNip85Stats';
 import { useProfileMedia } from '@/hooks/useProfileMedia';
 import { useToast } from '@/hooks/useToast';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { useKuboTeppEvaluateAuthor } from '@/hooks/useKuboTeppEvaluateAuthor';
+import { useTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
+import { BlockedContent } from '@/components/kid/BlockedContent';
+import { isAuthorBlocked } from '@/components/kid/blockedContentGate';
 import { FollowButton } from '@/components/FollowButton';
 import { RequestInteractButton } from '@/components/trust/RequestInteractButton';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
@@ -56,6 +60,18 @@ export function KidProfileViewPage() {
     && getKidSettings(user.pubkey).viewOnly === true;
   const showBlobbiTab = !!(user && family?.kidSettings?.[user.pubkey]?.showBlobbiTab);
 
+  // KUBO-163: gate the whole profile on the kid's construct. A blacklisted /
+  // globally-restricted / unadmitted author must show a blocked card, never
+  // their profile + media grid. Author-level check (no closure fetch).
+  // Pass-through when TEPP isn't enforced for the active user (parent surfaces
+  // unchanged) and fail open while the verdict is unsettled.
+  const teppEnforced = useTeppEnforced(user?.pubkey);
+  const profileVerdict = useKuboTeppEvaluateAuthor(
+    teppEnforced ? pubkey : undefined,
+    teppEnforced ? user?.pubkey : undefined,
+  );
+  const profileBlocked = isAuthorBlocked(teppEnforced, profileVerdict.visible);
+
   const displayName = metadata?.display_name
     || metadata?.name
     || (pubkey ? genUserName(pubkey) : '');
@@ -93,6 +109,27 @@ export function KidProfileViewPage() {
         >
           Go back
         </button>
+        <KuboKidBottomNav showBlobbi={showBlobbiTab} />
+      </div>
+    );
+  }
+
+  // KUBO-163: denied profile → kid-friendly blocked card, never the profile +
+  // media grid. Keep the back affordance so the kid isn't stuck.
+  if (profileBlocked) {
+    return (
+      <div className="min-h-dvh pb-24 flex flex-col gap-4 pt-2">
+        <div className="px-4">
+          <button
+            type="button"
+            aria-label="Back"
+            onClick={() => nav(-1)}
+            className="size-10 rounded-full bg-white/15 hover:bg-white/20 text-white flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+        </div>
+        <BlockedContent message="Your grown-up has this person set aside, so their profile isn't here right now." />
         <KuboKidBottomNav showBlobbi={showBlobbiTab} />
       </div>
     );

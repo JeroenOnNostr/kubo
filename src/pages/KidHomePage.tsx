@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { Settings, Play, Inbox, Star } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { getKidSettings, useKuboFamily } from '@/hooks/useKuboFamily';
 import { useKidFavorites } from '@/hooks/useKidFavorites';
+import { useKuboTeppFeedFilter } from '@/hooks/useKuboTeppFeedFilter';
 import { useKidLayoutOptions } from '@/contexts/KuboKidLayoutContext';
 import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
@@ -258,8 +259,19 @@ function KidFavoritesView({
   useKidLayoutOptions({ scrollAware: true });
 
   const { user } = useCurrentUser();
-  const { events, isLoading, isLoadingEvents, favoritedIds } = useKidFavorites();
+  const { events: allEvents, isLoading, isLoadingEvents, favoritedIds } = useKidFavorites();
   const isViewOnly = !!user?.pubkey && getKidSettings(user.pubkey).viewOnly === true;
+
+  // KUBO-163: re-check saved favorites against the kid's CURRENT construct. A
+  // favorite saved while an author was trusted must disappear once the parent
+  // revokes/blacklists that author. The render-side TEPP filter does the same
+  // author/reference evaluation the feed uses; no-op for parents / non-enforced
+  // kids, and fails open while the reference closure resolves.
+  const teppFilter = useKuboTeppFeedFilter(allEvents);
+  const events = useMemo(
+    () => (teppFilter.enabled ? allEvents.filter((e) => teppFilter.shouldShow(e)) : allEvents),
+    [allEvents, teppFilter],
+  );
 
   // Three render states. The list-but-refetching case keeps showing cached
   // events instead of flashing skeletons over them, so we only show the

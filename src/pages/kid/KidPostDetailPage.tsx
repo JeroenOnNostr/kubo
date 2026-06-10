@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
@@ -10,6 +10,10 @@ import { useComments } from '@/hooks/useComments';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useKuboTeppEvaluateEvent } from '@/hooks/useKuboTeppEvaluateEvent';
+import { useKuboTeppEvaluateAuthor } from '@/hooks/useKuboTeppEvaluateAuthor';
+import { useTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
+import { BlockedContent } from '@/components/kid/BlockedContent';
+import { isAuthorBlocked, resolvePostDetailGate } from '@/components/kid/blockedContentGate';
 import { useKidLayoutOptions } from '@/contexts/KuboKidLayoutContext';
 import { useProfileMedia } from '@/hooks/useProfileMedia';
 import { parseImetaMap, type ImetaEntry } from '@/lib/imeta';
@@ -71,21 +75,27 @@ export function KidPostDetailPage() {
   const isLoading =
     decoded?.kind === 'addr' ? addrQuery.isLoading : eventQuery.isLoading;
 
-  // TEPP deep-link guard: if the active user is a kid AND the construct denies
-  // visibility for this event (blacklisted author, no admit, etc.), bounce out
-  // before rendering. The feed filter normally hides this — this catches the
-  // case where the kid has a direct link to a denied post.
+  // TEPP deep-link RENDER-GATE (KUBO-163): a direct link to a denied post must
+  // NEVER paint the content — not even for the fetch/evaluation duration (the
+  // old useEffect + nav(-1) bounced AFTER a full render, flashing blacklisted
+  // content). Instead we gate at render time: verdict unsettled → skeleton;
+  // concrete deny → <BlockedContent/>; only a settled-visible verdict paints.
   const activePubkey = user?.pubkey;
-  const activeIsKid = !!activePubkey && !!family?.kids.some((k) => k.pubkey === activePubkey);
+  // KUBO-152: enforcement is the parent-controlled family flag, not membership
+  // alone — parent surfaces (viewing the same page) stay ungated.
+  const teppEnforced = useTeppEnforced(activePubkey);
   const teppVerdict = useKuboTeppEvaluateEvent(
     event ?? undefined,
-    activeIsKid ? activePubkey : undefined,
+    teppEnforced ? activePubkey : undefined,
   );
-  useEffect(() => {
-    if (!event) return;
-    if (!activeIsKid) return;
-    if (teppVerdict.raw && !teppVerdict.visible) nav(-1);
-  }, [event, activeIsKid, teppVerdict, nav]);
+  // The verdict is "settled" once the evaluator produced a concrete verdict
+  // (`raw` present). While enforced + unsettled (construct/closure loading, or
+  // construct-unavailable per KUBO-154), we show the skeleton — never content.
+  const teppGate = resolvePostDetailGate(
+    teppEnforced,
+    !!teppVerdict.raw,
+    teppVerdict.visible,
+  );
 
   const author = useAuthor(event?.pubkey);
   const meta = author.data?.metadata;
@@ -116,6 +126,12 @@ export function KidPostDetailPage() {
         <PostSkeleton />
       ) : !event ? (
         <CenteredMessage>Couldn't find this post.</CenteredMessage>
+      ) : teppGate === 'skeleton' ? (
+        // Enforced + verdict not yet settled: skeleton, never the content.
+        <PostSkeleton />
+      ) : teppGate === 'blocked' ? (
+        // Enforced + concrete deny: kid-friendly blocked card, never content.
+        <BlockedContent />
       ) : (
         <>
           <KidPostHero event={event} authorName={authorName} />
@@ -150,7 +166,10 @@ export function KidPostDetailPage() {
             currentEventId={event.id}
           />
 
-          <KidComments event={event} />
+          <KidComments
+            event={event}
+            kidPubkey={teppEnforced ? activePubkey : undefined}
+          />
         </>
       )}
 
@@ -313,7 +332,14 @@ function RailTile({ event, onOpen }: { event: NostrEvent; onOpen: () => void }) 
 // Comments (read-only, top-level NIP-22 only)
 // ---------------------------------------------------------------------------
 
-function KidComments({ event }: { event: NostrEvent }) {
+export function KidComments({
+  event,
+  kidPubkey,
+}: {
+  event: NostrEvent;
+  /** Active enforced kid (undefined when TEPP isn't enforced → no filtering). */
+  kidPubkey?: string;
+}) {
   const { data, isLoading } = useComments(event, 200);
 
   // Read-only kid surface: no reply composer, no nesting, no zaps. Just the
@@ -357,14 +383,29 @@ function KidComments({ event }: { event: NostrEvent }) {
       </h2>
       <div className="flex flex-col gap-2 px-4">
         {comments.map((c) => (
-          <KidCommentRow key={c.id} comment={c} />
+          <KidCommentRow key={c.id} comment={c} kidPubkey={kidPubkey} />
         ))}
       </div>
     </section>
   );
 }
 
-function KidCommentRow({ comment }: { comment: NostrEvent }) {
+function KidCommentRow({
+  comment,
+  kidPubkey,
+}: {
+  comment: NostrEvent;
+  /** Active enforced kid (undefined → no TEPP author check). */
+  kidPubkey?: string;
+}) {
+  // KUBO-163: hide comments whose author the kid's construct denies
+  // (blacklisted / globally restricted / unadmitted). Author-level check — no
+  // reference-closure fetch needed. Pass-through when kidPubkey is undefined
+  // (TEPP not enforced). Fail open while the verdict is unsettled.
+  const authorVerdict = useKuboTeppEvaluateAuthor(
+    kidPubkey ? comment.pubkey : undefined,
+    kidPubkey,
+  );
   const author = useAuthor(comment.pubkey);
   const meta = author.data?.metadata;
   const name = meta?.display_name || meta?.name || genUserName(comment.pubkey);
@@ -376,6 +417,11 @@ function KidCommentRow({ comment }: { comment: NostrEvent }) {
       return '';
     }
   }, [comment.created_at]);
+
+  // Concrete deny → drop this comment entirely (no placeholder — a kid
+  // shouldn't see that a hidden comment exists). `kidPubkey` is set only when
+  // TEPP is enforced, so its presence is the enforced flag here.
+  if (isAuthorBlocked(!!kidPubkey, authorVerdict.visible)) return null;
 
   return (
     <div className="flex gap-3 p-3 rounded-xl bg-white/10">
