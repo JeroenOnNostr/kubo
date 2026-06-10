@@ -12,6 +12,7 @@ import { useDeleteEvent } from '@/hooks/useDeleteEvent';
 import { useRepostStatus } from '@/hooks/useRepostStatus';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
+import { TeppDeniedError } from '@/hooks/useKuboTeppGate';
 import { getRepostKind } from '@/lib/feedUtils';
 import { DITTO_RELAY } from '@/lib/appRelays';
 import type { EventStats } from '@/hooks/useTrending';
@@ -86,8 +87,18 @@ export function RepostMenu({ event, children }: RepostMenuProps) {
             queryClient.invalidateQueries({ queryKey: ['user-repost', event.id] });
           }, 3000);
         },
-        onError: () => {
-          toast({ title: 'Failed to repost', variant: 'destructive' });
+        onError: (err) => {
+          // KUBO-175: surface a TEPP denial with a kid-friendly message instead
+          // of a generic "Failed to repost" — the action wasn't broken, it's
+          // just not allowed without a grown-up's permission.
+          if (err instanceof TeppDeniedError) {
+            toast({
+              title: 'Ask a grown-up first',
+              description: 'You need permission before you can repost this.',
+            });
+          } else {
+            toast({ title: 'Failed to repost', variant: 'destructive' });
+          }
           // Revert optimistic updates
           if (prevStats) {
             queryClient.setQueryData<EventStats>(['event-stats', event.id], prevStats);

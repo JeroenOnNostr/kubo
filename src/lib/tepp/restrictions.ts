@@ -35,7 +35,13 @@ export function tryParseRestrictionTag(tag: string[]): RestrictionTag | null {
 function parseKindList(s: string): number[] | 'any' {
   if (s === '*') return 'any'
   const parts = s.split(',').map((p) => p.trim()).filter(Boolean)
-  const nums = parts.map((p) => Number(p)).filter((n) => Number.isFinite(n))
+  // KUBO-175 deviation: a kind is a non-negative integer. The previous
+  // `Number(p)` + `Number.isFinite` accepted floats, negatives, hex ("0x1f"),
+  // and exponents — none of which are valid Nostr kinds and any of which could
+  // smuggle a malformed restriction past the parser. Require base-10 integers.
+  const nums = parts
+    .filter((p) => /^\d+$/.test(p))
+    .map((p) => Number(p))
   if (nums.length === 0) throw new Error(`empty kind-list: ${s}`)
   return nums
 }
@@ -77,13 +83,18 @@ export function restrictionMatches(
   if (tag.weekdays !== 'any') {
     if (!tag.weekdays.includes(ctx.weekday)) return false
   }
-  // Time range
+  // Time range.
+  // KUBO-175: the window is HALF-OPEN, `[startMinutes, endMinutes)` — the start
+  // minute is inside the window, the end minute is NOT. So a "09:00-17:00" range
+  // matches 09:00 through 16:59 but excludes 17:00 (adjacent windows like
+  // "09:00-12:00" and "12:00-17:00" tile the day without overlapping at 12:00).
   if (tag.timeRange !== 'any') {
     const { startMinutes, endMinutes } = tag.timeRange
     if (startMinutes <= endMinutes) {
+      // same-day window: start (inclusive) .. end (exclusive)
       if (ctx.minutesOfDay < startMinutes || ctx.minutesOfDay >= endMinutes) return false
     } else {
-      // overnight wrap: in window if BEFORE end OR AT-OR-AFTER start
+      // overnight wrap: in window if BEFORE end (exclusive) OR AT-OR-AFTER start
       if (ctx.minutesOfDay >= endMinutes && ctx.minutesOfDay < startMinutes) return false
     }
   }

@@ -62,7 +62,9 @@ function persist(entries: TeppAuditEntry[]): void {
 
 export function appendTeppAuditEntry(entry: Omit<TeppAuditEntry, 'ts'> & { ts?: number }): void {
   const entries = load();
-  const full: TeppAuditEntry = { ts: entry.ts ?? Date.now(), ...entry };
+  // Spread first, then default `ts` — otherwise a spread `entry` with an
+  // undefined `ts` field clobbers the computed default back to undefined.
+  const full: TeppAuditEntry = { ...entry, ts: entry.ts ?? Date.now() };
   entries.push(full);
   if (entries.length > CAP) entries.splice(0, entries.length - CAP);
   cache = entries;

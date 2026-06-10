@@ -14,6 +14,9 @@ dist-ssr
 yarn.lock
 deploy.sh
 
+# TypeScript incremental build cache (KUBO-175)
+*.tsbuildinfo
+
 # Editor directories and files
 .idea
 .DS_Store

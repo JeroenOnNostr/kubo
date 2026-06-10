@@ -52,6 +52,36 @@ export interface UseKuboTeppConstructResult {
 /** 10-minute clock-skew allowance for association `created_at` (KUBO-157). */
 export const ASSOC_CREATED_AT_SKEW_SECONDS = 600;
 
+/** Base interval for the transient construct poll, in ms (KUBO-175). */
+export const TRANSIENT_POLL_BASE_MS = 1_500;
+/** Upper bound for the exponential transient-poll backoff, in ms (KUBO-175). */
+export const TRANSIENT_POLL_MAX_MS = 30_000;
+/**
+ * After this many consecutive `decrypt-failed` results we stop polling: a
+ * decrypt failure is almost always a stable key/format mismatch, not a relay
+ * propagation race, so endless retries just burn battery (KUBO-175).
+ */
+export const DECRYPT_FAILED_MAX_RETRIES = 5;
+
+/**
+ * Exponential backoff for the transient construct poll (KUBO-175). Starts at
+ * `TRANSIENT_POLL_BASE_MS` and doubles per consecutive failure, capped at
+ * `TRANSIENT_POLL_MAX_MS`. `failureCount` is 0 on the first poll.
+ */
+export function transientPollDelayMs(failureCount: number): number {
+  const n = Math.max(0, failureCount);
+  const delay = TRANSIENT_POLL_BASE_MS * 2 ** n;
+  return Math.min(delay, TRANSIENT_POLL_MAX_MS);
+}
+
+/**
+ * Per-query consecutive `decrypt-failed` counter. Keyed by `kid:parent`.
+ * Reset whenever a construct loads or a non-decrypt reason is reached. Lives at
+ * module scope because the count must survive React re-renders / query refetches
+ * (the TanStack query data itself can't track "how many times in a row").
+ */
+const decryptFailureCounts = new Map<string, number>();
+
 /**
  * KUBO-157: pick the current valid association for a specific family, applying
  * Kubo-side integrity checks the vendored picker can't (it has no knowledge of
@@ -106,9 +136,12 @@ export function pickAssociationForFamily(
 
 /**
  * Kubo-owned reimplementation of TEPP's `useConstruct`, rebuilt on TanStack
- * Query so it shares cache invariants with the rest of the app. The query
- * key includes the latest association event id — rotating the assoc
- * atomically invalidates the construct.
+ * Query so it shares cache invariants with the rest of the app. The query key
+ * is `['kubo-tepp-construct', kidPubkey, parentPubkey]` — it does NOT include
+ * the association event id (the assoc is fetched inside the query fn). A
+ * rotated association is picked up by the short `staleTime` / transient
+ * `refetchInterval` poll, and the resulting construct fingerprint (which DOES
+ * fold in `assoc.raw.id`) re-keys every downstream verdict cache.
  *
  * When `featureTepp` is false OR no kidPubkey is provided, returns
  * `{construct: null, fingerprint: null, loading: false, reason: 'flag-off'|'no-kid'}`
@@ -145,14 +178,33 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
     // (flag-off / no-kid / parent-logged-out) is reached.
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (!data) return 1_500; // first fetch in flight / errored — keep trying
-      if (data.construct) return false; // loaded — stop polling
+      const countKey = `${kidPubkey ?? ''}:${parent?.pubkey ?? ''}`;
+      // `fetchFailureCount` counts thrown queryFn rejections (now only truly
+      // unexpected errors, since assoc/state/fetch throws are mapped to data
+      // reasons below). Use it to back off the first-fetch retry too.
+      const failureCount = query.state.fetchFailureCount;
+      if (!data) {
+        // first fetch in flight / threw — keep trying with backoff
+        return transientPollDelayMs(failureCount);
+      }
+      if (data.construct) {
+        decryptFailureCounts.delete(countKey); // loaded — reset + stop polling
+        return false;
+      }
+      // Cap consecutive decrypt failures: a decrypt failure is a stable
+      // key/format problem, not a propagation race — stop hammering.
+      if (data.reason === 'decrypt-failed') {
+        const next = (decryptFailureCounts.get(countKey) ?? 0) + 1;
+        decryptFailureCounts.set(countKey, next);
+        if (next >= DECRYPT_FAILED_MAX_RETRIES) return false;
+        return transientPollDelayMs(next - 1);
+      }
+      decryptFailureCounts.delete(countKey);
       const transient =
         data.reason === 'no-association' ||
         data.reason === 'no-state-event' ||
-        data.reason === 'fetch-failed' ||
-        data.reason === 'decrypt-failed';
-      return transient ? 1_500 : false;
+        data.reason === 'fetch-failed';
+      return transient ? transientPollDelayMs(failureCount) : false;
     },
     queryFn: async ({ signal }) => {
       // Re-check guards inside the query (TS narrowing + safety):
@@ -161,10 +213,22 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
       }
 
       // 1. Association — kid-signed kind 17700 with subject = kidPubkey.
-      const assocEvents: NostrEvent[] = await nostr.query(
-        [{ kinds: [KIND_ASSOCIATION], authors: [kidPubkey], limit: 10 }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
-      );
+      // KUBO-175: a relay/query failure here must become reason 'fetch-failed'
+      // (transient, keeps polling) rather than a reason-less thrown error.
+      let assocEvents: NostrEvent[];
+      try {
+        assocEvents = await nostr.query(
+          [{ kinds: [KIND_ASSOCIATION], authors: [kidPubkey], limit: 10 }],
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
+        );
+      } catch (err) {
+        return {
+          construct: null,
+          fingerprint: null,
+          reason: 'fetch-failed' as const,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        };
+      }
       // KUBO-157: future-dating clamp, structural rejection, and guardian
       // pinning against the family's known parent (parent.pubkey). A winning
       // association that does not name the real parent as a guardian is treated
@@ -175,16 +239,27 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
       }
 
       // 2. State — parent-signed kind 34700 with d=kidPubkey, authored by a guardian.
+      // KUBO-175: same fetch-failed mapping as the association query above.
       const guardianPubkeys = assoc.guardians.map((g) => g.pubkey);
-      const stateEvents: NostrEvent[] = await nostr.query(
-        [{
-          kinds: [KIND_STATE],
-          authors: guardianPubkeys,
-          '#d': [kidPubkey.toLowerCase()],
-          limit: 50,
-        }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
-      );
+      let stateEvents: NostrEvent[];
+      try {
+        stateEvents = await nostr.query(
+          [{
+            kinds: [KIND_STATE],
+            authors: guardianPubkeys,
+            '#d': [kidPubkey.toLowerCase()],
+            limit: 50,
+          }],
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
+        );
+      } catch (err) {
+        return {
+          construct: null,
+          fingerprint: null,
+          reason: 'fetch-failed' as const,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        };
+      }
       if (stateEvents.length === 0) {
         return { construct: null, fingerprint: null, reason: 'no-state-event' as const };
       }

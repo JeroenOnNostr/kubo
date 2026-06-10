@@ -6,6 +6,8 @@ import { CustomEmojiImg } from '@/components/CustomEmoji';
 import { EmojiPicker, type EmojiSelection } from '@/components/EmojiPicker';
 import { isCustomEmoji } from '@/lib/customEmoji';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useToast } from '@/hooks/useToast';
+import { TeppDeniedError } from '@/hooks/useKuboTeppGate';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEmojiUsage } from '@/hooks/useEmojiUsage';
 import { useCustomEmojis } from '@/hooks/useCustomEmojis';
@@ -47,6 +49,7 @@ export function QuickReactMenu({
 }: QuickReactMenuProps) {
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { trackEmojiUsage, getTopEmojis } = useEmojiUsage();
   const { feedSettings } = useFeedSettings();
@@ -140,7 +143,14 @@ export function QuickReactMenu({
             queryClient.invalidateQueries({ queryKey: ['event-interactions', eventId] });
           }, 3000);
         },
-        onError: () => {
+        onError: (err) => {
+          // KUBO-175: surface TEPP denial with a kid-friendly message.
+          if (err instanceof TeppDeniedError) {
+            toast({
+              title: 'Ask a grown-up first',
+              description: 'You need permission before you can react to this.',
+            });
+          }
           setSelectedEmoji(null);
           if (prevStats) {
             queryClient.setQueryData<EventStats>(['event-stats', eventId], prevStats);
@@ -149,7 +159,7 @@ export function QuickReactMenu({
         },
       },
     );
-  }, [user, eventId, eventPubkey, eventKind, onReact, publishEvent, queryClient, trackEmojiUsage, onClose]);
+  }, [user, eventId, eventPubkey, eventKind, onReact, publishEvent, queryClient, trackEmojiUsage, onClose, toast]);
 
   /** Handle selection from the quick buttons (native or custom emoji). */
   const handleQuickSelect = useCallback((emoji: string) => {

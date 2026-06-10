@@ -140,11 +140,29 @@ export function useEnsureParentTrust(kidPubkey: string | undefined): void {
               if (members.size === 0) return;
               const memberList = [...members];
 
+              // KUBO-175: only FOLLOW members we are granting trust to for the
+              // FIRST time — i.e. those with no existing trust assignment. The
+              // old code re-followed every pack member every session, which
+              // silently re-added anyone the parent had manually unfollowed
+              // (the kid's kind-3 carries that manual removal). A member who was
+              // already trust-granted earlier is intentionally NOT re-followed.
+              //
+              // Snapshot the assignments BEFORE the batch grant below (which
+              // would otherwise mark every member "assigned" and leave nothing
+              // first-time).
+              //
+              // Limitation: there is no dedicated "previously removed" signal,
+              // so "already trust-assigned" is the proxy for "we've already
+              // followed this member once." A brand-new member added to an
+              // enabled pack is still followed on the next reconcile.
+              const existing = getFamilySnapshot()?.trustAssignments?.[kidPubkey] ?? {};
+              const firstTimeMembers = memberList.filter((pk) => existing[pk] == null);
+
               // Grant view to untrusted members (setLevelsBatch skips
-              // already-assigned and no-ops when nothing is new), then follow
-              // them into the kid's kind-3 (followMany dedups + single publish).
+              // already-assigned and no-ops when nothing is new).
               await trust.setLevelsBatch(memberList, 'view');
-              await followMany(memberList);
+
+              if (firstTimeMembers.length > 0) await followMany(firstTimeMembers);
             } catch (err) {
               guard.packs = false; // allow retry next session
               console.warn('reconcile: pack reconcile failed', err);

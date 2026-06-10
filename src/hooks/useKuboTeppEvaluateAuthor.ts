@@ -5,7 +5,11 @@ import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { evaluateEvent } from '@/lib/tepp/evaluate';
 import type { Construct, FullEventVerdict, ReferenceLayer } from '@/lib/tepp/types';
-import { getCachedVerdict, setCachedVerdict } from '@/lib/tepp-adapters/verdictCache';
+import {
+  getCachedVerdict,
+  setCachedVerdict,
+  timeBucketedFingerprint,
+} from '@/lib/tepp-adapters/verdictCache';
 
 /**
  * Per-author TEPP verdict for the active kid's construct. Sibling to
@@ -51,7 +55,9 @@ function evaluateAuthorWithCache(
 ): KuboTeppAuthorVerdict {
   // Synthetic id keeps this distinct from real-event verdict cache entries.
   const cacheKey = `author:${pubkey.toLowerCase()}`;
-  let inbound = getCachedVerdict<FullEventVerdict>(fingerprint, cacheKey, 'incoming');
+  // KUBO-175: a timed global restriction can flip an author verdict over time.
+  const cacheFp = timeBucketedFingerprint(fingerprint, construct);
+  let inbound = getCachedVerdict<FullEventVerdict>(cacheFp, cacheKey, 'incoming');
   if (!inbound) {
     const draft = synthesizeAuthorEvent(pubkey);
     inbound = evaluateEvent(
@@ -59,7 +65,12 @@ function evaluateAuthorWithCache(
       construct,
       'incoming',
     );
-    setCachedVerdict(fingerprint, cacheKey, 'incoming', inbound);
+    // KUBO-175: never cache a `pending` verdict — a pending result is an
+    // unresolved reference, not a decision; caching it would pin a transient
+    // state. Mirrors the guard in useKuboTeppEvaluateEvent.
+    if (inbound.result !== 'pending') {
+      setCachedVerdict(cacheFp, cacheKey, 'incoming', inbound);
+    }
   }
 
   const visible =

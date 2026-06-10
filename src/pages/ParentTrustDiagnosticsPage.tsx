@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNostrLogin } from '@nostrify/react/login';
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
+import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 import { useNostr } from '@nostrify/react';
 
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
 import { useParentSigner } from '@/hooks/useParentSigner';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { useKidSigner } from '@/lib/tepp-adapters/useKidSigner';
+import { prefetchReferenceClosure } from '@/lib/tepp-adapters/referenceClosure';
 import {
   clearVerdictCache,
   verdictCacheSize,
@@ -54,7 +56,16 @@ export function ParentTrustDiagnosticsPage() {
   const featureTepp = !!config.feedSettings.featureTepp;
 
   const construct = useKuboTeppConstruct(kid?.pubkey);
-  const auditLog = useMemo(() => readTeppAuditLog().slice(-50).reverse(), []);
+  // KUBO-175: the audit log is an append-only module singleton that grows as
+  // TEPP events get signed/published. The old `[]` deps pinned this to the
+  // first render, so newly-logged entries never showed. Re-read whenever the
+  // construct changes (every publish that mutates the construct also appends an
+  // audit entry) and whenever the selected kid changes.
+  const auditLog = useMemo(
+    () => readTeppAuditLog().slice(-50).reverse(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kid?.pubkey, construct.fingerprint, construct.loading],
+  );
 
   if (!kid) {
     return <NoKidSelected title="Trust · Diagnostics" />;
@@ -418,10 +429,19 @@ function TestEventPanel({ construct }: { construct: Construct | null }) {
         setBusy(false);
         return;
       }
+      // KUBO-175: prefetch the event's reference closure (reply parents, quoted
+      // notes, …) so the evaluator can resolve references instead of returning
+      // `pending` — without this, any reply/quote always read `pending` here.
+      const { cache } = await prefetchReferenceClosure(
+        [event],
+        (filters, opts) => nostr.query(filters, opts),
+        { signal: AbortSignal.timeout(5000) },
+      );
       const incoming = evaluateEvent(
         event as unknown as Parameters<typeof evaluateEvent>[0],
         construct,
         'incoming',
+        { eventCache: cache as unknown as Map<string, NostrToolsEvent> },
       );
       setVerdict({ direction: 'incoming', result: incoming });
     } catch (err) {

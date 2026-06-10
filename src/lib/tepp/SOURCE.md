@@ -35,6 +35,8 @@ re-apply (or upstream) each of these.
 | File | Task | Change |
 |---|---|---|
 | `parse.ts` | KUBO-157 | Guard `expiration` against non-finite / out-of-range values before building the `expiresAtIso` Date (a forged 17700 with `expiration` ≈ `1e20` previously threw a `RangeError` inside `pickCurrentAssociation`, crashing the construct query). A present-but-invalid expiration is now treated as `expired: true` (fail-closed) instead of never-expires. `pickCurrentAssociation` wraps each candidate parse in try/catch so a throwing candidate is skipped, not fatal. |
+| `evaluate.ts` | KUBO-175 | In `isHexKnownAsPubkey`, replace the magic literal `8713` with the named constant `KIND_PERMISSION_VIEW_NPUB_B` and correct the comment that wrongly claimed that kind was "intentionally omitted" (it was actually being matched). No behaviour change. |
+| `restrictions.ts` | KUBO-175 | `parseKindList` now requires base-10 integer tokens (`/^\d+$/`) instead of `Number()`+`isFinite`, rejecting floats / negatives / hex / exponent forms that are not valid Nostr kinds. Plus a doc comment documenting the half-open `[start, end)` time-window boundary in `restrictionMatches`. |
 
 ## How to update from upstream
 

@@ -36,6 +36,7 @@ import {
   type TeppMigrationStep,
 } from '@/lib/teppMigration';
 import type { KuboFamily, KuboTrustLevel } from '@/hooks/useKuboFamily';
+import { resolveKidSigner } from '@/lib/tepp-adapters/useKidSigner';
 import type { PermissionRef } from '@/lib/tepp/types';
 
 /**
@@ -360,9 +361,21 @@ async function signMigrationTemplate(args: SignArgs): Promise<NostrEvent | null>
   const { step, template, kidPubkey, parent, kidUsers, family } = args;
 
   if (step.order === 6) {
-    // Association — kid must be logged in.
-    const kid = kidUsers.get(kidPubkey);
-    if (!kid) return null;
+    // Association — kid must be logged in. KUBO-175: resolve through the shared
+    // `resolveKidSigner` helper so this path uses the same typed reason taxonomy
+    // (no-family / not-a-kid / kid-not-logged-in) as `useKidSigner`, rather than
+    // an untyped `Map.get(...) ?? null`.
+    const { user: kid, reason } = resolveKidSigner(
+      [...kidUsers.values()],
+      family,
+      kidPubkey,
+    );
+    if (!kid) {
+      // Same outcome as before (defer this step), but the reason is now explicit
+      // and consistent with the rest of the kid-signer call sites.
+      void reason;
+      return null;
+    }
     const signed = (await kid.signer.signEvent(template)) as NostrEvent;
     return signed;
   }

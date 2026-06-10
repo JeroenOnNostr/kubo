@@ -554,8 +554,11 @@ function isHexKnownAsPubkey(hex: string, construct: Construct): boolean {
       e.kind === KIND_PERMISSION_INTERACTION_NPUB_A ||
       e.kind === KIND_PERMISSION_INTERACTION_NPUB_B ||
       e.kind === KIND_PERMISSION_VIEW_NPUB_A ||
-      // KIND_PERMISSION_VIEW_NPUB_B intentionally omitted as we use only A/B variants for now
-      e.kind === 8713
+      // KUBO-175 deviation: was the magic literal `8713` with a comment claiming
+      // KIND_PERMISSION_VIEW_NPUB_B was "intentionally omitted" — but 8713 *is*
+      // that kind, so it was actually included. Use the named constant; all four
+      // npub-list kinds (interaction/view × mode A/B) carry pubkey items.
+      e.kind === KIND_PERMISSION_VIEW_NPUB_B
     ) {
       const items = e.items as { pubkey: string }[]
       if (Array.isArray(items) && items.some((i) => i.pubkey === lower)) return true

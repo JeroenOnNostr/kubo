@@ -83,7 +83,21 @@ export function useAddFeedPack(
         } else {
           // Removal: drop members from the kid's kind-3 follow list, but leave
           // their trust entries in place (additive-only removal).
-          await unfollowMany(members);
+          // KUBO-175: only unfollow members that are NOT also in another
+          // still-enabled pack — otherwise removing one pack would unfollow a
+          // creator the kid still gets via a different enabled pack. Compute the
+          // union of the OTHER enabled packs' members first and subtract it.
+          const otherAtags = sources.packs.filter((a) => a !== atag);
+          const keep = new Set<string>();
+          if (otherAtags.length > 0) {
+            const otherPacks = await fetchPacksByAtags(nostr, otherAtags);
+            for (const a of otherAtags) {
+              const ev = otherPacks.get(a)?.event;
+              if (ev) for (const pk of packMembers(ev)) keep.add(pk);
+            }
+          }
+          const toUnfollow = members.filter((pk) => !keep.has(pk));
+          if (toUnfollow.length > 0) await unfollowMany(toUnfollow);
         }
       } catch (err) {
         // The feed-source toggle already succeeded; a failed trust/follow sync

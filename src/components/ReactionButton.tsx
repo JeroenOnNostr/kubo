@@ -9,6 +9,8 @@ import { RenderResolvedEmoji } from '@/components/CustomEmoji';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useUserReaction } from '@/hooks/useUserReaction';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useToast } from '@/hooks/useToast';
+import { TeppDeniedError } from '@/hooks/useKuboTeppGate';
 import { formatNumber } from '@/lib/formatNumber';
 import { impactLight } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
@@ -40,6 +42,7 @@ export function ReactionButton({
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutate: publishEvent } = useNostrPublish();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -174,7 +177,15 @@ export function ReactionButton({
                     queryClient.invalidateQueries({ queryKey: ['user-reaction', eventId] });
                   }, 3000);
                 },
-                onError: () => {
+                onError: (err) => {
+                  // KUBO-175: TEPP denial gets a kid-friendly message, not a
+                  // silent rollback.
+                  if (err instanceof TeppDeniedError) {
+                    toast({
+                      title: 'Ask a grown-up first',
+                      description: 'You need permission before you can react to this.',
+                    });
+                  }
                   queryClient.setQueryData(['user-reaction', eventId], null);
                   if (prevStats) {
                     queryClient.setQueryData<EventStats>(['event-stats', eventId], prevStats);

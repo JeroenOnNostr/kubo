@@ -7,7 +7,11 @@ import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
 import { useTeppReferenceCache } from '@/hooks/useTeppReferenceCache';
 import { evaluateEvent } from '@/lib/tepp/evaluate';
-import { getCachedVerdict, setCachedVerdict } from '@/lib/tepp-adapters/verdictCache';
+import {
+  getCachedVerdict,
+  setCachedVerdict,
+  timeBucketedFingerprint,
+} from '@/lib/tepp-adapters/verdictCache';
 import type { Construct, FullEventVerdict } from '@/lib/tepp/types';
 
 /** The vendored evaluator keys its cache by nostr-tools `Event`; our events
@@ -75,7 +79,9 @@ function isVisible(
   // an allowed post just because its referenced events haven't arrived yet.
   if (isResolving) return true;
 
-  let cached = getCachedVerdict<FullEventVerdict>(fingerprint, event.id, 'incoming');
+  // KUBO-175: time-bucket the cache key for constructs with timed restrictions.
+  const cacheFp = timeBucketedFingerprint(fingerprint, construct);
+  let cached = getCachedVerdict<FullEventVerdict>(cacheFp, event.id, 'incoming');
   if (!cached) {
     cached = evaluateEvent(
       event as unknown as Parameters<typeof evaluateEvent>[0],
@@ -87,7 +93,7 @@ function isVisible(
     // still unresolved on this pass; don't memoize it, or a later closure
     // fetch wouldn't be reflected.
     if (cached.result !== 'pending') {
-      setCachedVerdict(fingerprint, event.id, 'incoming', cached);
+      setCachedVerdict(cacheFp, event.id, 'incoming', cached);
     }
   }
   // Show on any permit, and fail open on `pending` (reference unavailable —

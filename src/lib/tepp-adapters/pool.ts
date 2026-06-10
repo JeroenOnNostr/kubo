@@ -14,6 +14,13 @@ import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
  * routes through the parent's NIP-65 read relays plus user-configured
  * defaults. If TEPP requests a specific relay set we don't yet honor it
  * per-call; future work can plumb relay routing through `nostr.req()`.
+ *
+ * @internal Upstream-seam shim with ZERO production call sites in Kubo
+ * (`useKuboTeppConstruct` queries Nostrify's NPool directly). It exists only to
+ * keep the vendored TEPP pool shape adaptable. The argument-order contract
+ * here — `query(relays, filter, maxWaitMs)` to mirror the upstream SimplePool —
+ * must NOT be "fixed" to Nostrify's `(filters, opts)` order; that mismatch is
+ * exactly what this seam exists to absorb.
  */
 export interface TeppPool {
   query: (relays: string[], filter: Filter, maxWaitMs?: number) => Promise<NostrToolsEvent[]>;

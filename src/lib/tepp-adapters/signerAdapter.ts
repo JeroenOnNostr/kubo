@@ -12,6 +12,13 @@ import type { Signer, SignerKind } from './signerTypes';
  * adapter is the single seam where that translation lives.
  *
  * See [docs/tepp-integration.md](../../../docs/tepp-integration.md#the-signer-adapter-arg-order-gotcha).
+ *
+ * @internal Upstream-seam shim with ZERO production call sites in Kubo (Kubo
+ * signs through `useKidSigner` / `useParentSigner` directly). It exists only to
+ * keep the vendored TEPP `Signer` shape adaptable. The deliberately *swapped*
+ * argument order (`nip44Encrypt(plaintext, recipient)` → `nip44.encrypt(
+ * recipient, plaintext)`) is the whole point of this seam — DO NOT "fix" it to
+ * match the nested API's order or you invert every encryption.
  */
 export function teppSignerFromNUser(user: NUser, kind: SignerKind): Signer {
   const nip44 = (user.signer as unknown as {

@@ -6,7 +6,11 @@ import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
 import { useTeppReferenceCache } from '@/hooks/useTeppReferenceCache';
 import { evaluateEvent } from '@/lib/tepp/evaluate';
 import type { Construct, FullEventVerdict, ReferenceLayer } from '@/lib/tepp/types';
-import { getCachedVerdict, setCachedVerdict } from '@/lib/tepp-adapters/verdictCache';
+import {
+  getCachedVerdict,
+  setCachedVerdict,
+  timeBucketedFingerprint,
+} from '@/lib/tepp-adapters/verdictCache';
 
 /**
  * Convenience verdict shape consumed by the action bar and feed filter.
@@ -77,8 +81,12 @@ function evaluateWithCache(
   const evalOpts = {
     eventCache: eventCache as unknown as Map<string, NostrToolsEvent>,
   };
+  // KUBO-175: when the construct has timed restrictions, fold a 15-min time
+  // bucket into the cache key so a verdict computed inside one time window
+  // stops being served once the clock crosses into the next bucket.
+  const cacheFp = timeBucketedFingerprint(fingerprint, construct);
   // We need both directions to compute `visible` and `canInteract` — cache them separately.
-  let inbound = getCachedVerdict<FullEventVerdict>(fingerprint, event.id, 'incoming');
+  let inbound = getCachedVerdict<FullEventVerdict>(cacheFp, event.id, 'incoming');
   if (!inbound) {
     inbound = evaluateEvent(
       event as unknown as Parameters<typeof evaluateEvent>[0],
@@ -87,10 +95,10 @@ function evaluateWithCache(
       evalOpts,
     );
     if (inbound.result !== 'pending') {
-      setCachedVerdict(fingerprint, event.id, 'incoming', inbound);
+      setCachedVerdict(cacheFp, event.id, 'incoming', inbound);
     }
   }
-  let outbound = getCachedVerdict<FullEventVerdict>(fingerprint, event.id, 'outgoing');
+  let outbound = getCachedVerdict<FullEventVerdict>(cacheFp, event.id, 'outgoing');
   if (!outbound) {
     outbound = evaluateEvent(
       event as unknown as Parameters<typeof evaluateEvent>[0],
@@ -99,7 +107,7 @@ function evaluateWithCache(
       evalOpts,
     );
     if (outbound.result !== 'pending') {
-      setCachedVerdict(fingerprint, event.id, 'outgoing', outbound);
+      setCachedVerdict(cacheFp, event.id, 'outgoing', outbound);
     }
   }
 
@@ -117,12 +125,17 @@ function evaluateWithCache(
       ? outbound.message
       : undefined;
 
+  // Surface the raw verdict from whichever direction actually decided the
+  // outcome (KUBO-175): the visibility (inbound) verdict when hidden, otherwise
+  // the interaction (outbound) verdict — not unconditionally inbound.
+  const deciding = !visible ? inbound : outbound;
+
   return {
     visible,
     canInteract,
     reason,
-    layer: deriveLayer(!visible ? inbound : outbound),
-    raw: inbound,
+    layer: deriveLayer(deciding),
+    raw: deciding,
   };
 }
 
