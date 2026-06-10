@@ -316,3 +316,43 @@ describe('evaluateEvent — outgoing denies never redactable (KUBO-162)', () => 
     expect(verdict.result).toBe('permit-with-redactions')
   })
 })
+
+/**
+ * KUBO-165: reference-extraction hardening at the evaluator boundary.
+ *  - a random 64-hex (txid/commit hash) in a normal note must not hide the
+ *    whole note → redactable on incoming.
+ *  - an outgoing reply e-tagging an unadmitted author via index 4 is denied
+ *    WITHOUT needing the parent event fetched.
+ */
+describe('evaluateEvent — extraction hardening (KUBO-165)', () => {
+  it('incoming: a note with a random 64-hex txid stays visible (redactions allowed)', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_VIEW_NPUB_A, VIEW_AUTHOR),
+    ])
+    const txid = '3'.repeat(64) // not a known pubkey or event id
+    const ev = note(VIEW_AUTHOR, [], `built from commit ${txid}`)
+    const verdict = evaluateEvent(ev, construct, 'incoming')
+    expect(verdict.result).toBe('permit-with-redactions')
+  })
+
+  it('outgoing: a note with a random 64-hex txid still hard-denies', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_INTERACTION_NPUB_A, INTERACT_AUTHOR),
+    ])
+    const txid = '3'.repeat(64)
+    const ev = note(KID, [], `commit ${txid}`)
+    expect(evaluateEvent(ev, construct, 'outgoing').result).toBe('deny')
+  })
+
+  it('outgoing: kid reply e-tagging an unadmitted author at index 4 → deny WITHOUT parent fetched', () => {
+    const construct = makeConstruct([
+      npubEntry(KIND_PERMISSION_INTERACTION_NPUB_A, INTERACT_AUTHOR),
+    ])
+    const stranger = 'f'.repeat(64) // unadmitted
+    const parentId = 'e'.repeat(64)
+    // No p-tag, parent NOT in cache — only the index-4 author guards this.
+    const draft = note(KID, [['e', parentId, 'wss://relay.example', 'root', stranger]])
+    const verdict = evaluateEvent(draft, construct, 'outgoing') // empty cache
+    expect(verdict.result).toBe('deny')
+  })
+})

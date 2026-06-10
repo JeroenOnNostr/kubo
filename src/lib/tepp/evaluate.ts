@@ -672,6 +672,13 @@ function finalize(
       if (x.v.refType === 'relay') {
         return x.v.layer !== 'blacklist'
       }
+      // KUBO-165 deviation: a bare-hex (`hex-ambiguous`) `unadmitted` deny is an
+      // over-block — txids / commit hashes / random 64-hex in normal notes must
+      // not hide the whole note. On incoming it is redactable; on outgoing it
+      // stays hard (gated above by the direction check, per KUBO-162).
+      if (x.v.refType === 'hex-ambiguous' && x.v.layer === 'unadmitted') {
+        return true
+      }
       return (
         (x.v.refType === 'event' || x.v.refType === 'hex-ambiguous') &&
         (x.v.layer === 'recursion-inner-refs' || x.v.layer === 'recursion-author')

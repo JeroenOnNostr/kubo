@@ -72,12 +72,18 @@ export interface HexAmbiguousReference {
 
 export type Reference = PubkeyReference | EventReference | RelayReference | HexAmbiguousReference
 
+// KUBO-165 deviation: all content-scanning regexes carry the `i` flag. bech32 is
+// case-insensitive per spec (BIP-173) and 64-hex may appear upper- or
+// mixed-case, so `NOSTR:NPUB1…`, all-caps bare bech32, and all-caps 64-hex all
+// extracted NOTHING before — an unextracted reference cannot be denied
+// (fail-open). Matched tokens are lower-cased before `nip19.decode` and before
+// hex comparison downstream.
 const HEX64 = /^[a-f0-9]{64}$/i
-const BECH32_NPUB = /\bnpub1[02-9ac-hj-np-z]{50,}\b/g
-const BECH32_NPROFILE = /\bnprofile1[02-9ac-hj-np-z]{50,}\b/g
-const BECH32_NEVENT = /\bnevent1[02-9ac-hj-np-z]{50,}\b/g
-const BECH32_NADDR = /\bnaddr1[02-9ac-hj-np-z]{50,}\b/g
-const HEX_BARE = /\b[a-f0-9]{64}\b/g
+const BECH32_NPUB = /\bnpub1[02-9ac-hj-np-z]{50,}\b/gi
+const BECH32_NPROFILE = /\bnprofile1[02-9ac-hj-np-z]{50,}\b/gi
+const BECH32_NEVENT = /\bnevent1[02-9ac-hj-np-z]{50,}\b/gi
+const BECH32_NADDR = /\bnaddr1[02-9ac-hj-np-z]{50,}\b/gi
+const HEX_BARE = /\b[a-f0-9]{64}\b/gi
 
 /** Extract every reference of an event. Pure, deterministic. */
 export function extractReferences(event: Event): Reference[] {
@@ -86,7 +92,7 @@ export function extractReferences(event: Event): Reference[] {
   /* Tags ------------------------------------------------------------------ */
 
   for (const tag of event.tags) {
-    const [name, v1, v2, v3] = tag
+    const [name, v1, v2, v3, v4] = tag
     if (name === 'p' && typeof v1 === 'string' && HEX64.test(v1)) {
       refs.push({ type: 'pubkey', pubkey: v1.toLowerCase(), surface: 'p-tag', raw: v1 })
       if (typeof v2 === 'string' && /^wss?:\/\//.test(v2)) {
@@ -96,6 +102,14 @@ export function extractReferences(event: Event): Reference[] {
       refs.push({ type: 'event', eventId: v1.toLowerCase(), surface: 'e-tag', raw: v1 })
       if (typeof v2 === 'string' && /^wss?:\/\//.test(v2)) {
         refs.push({ type: 'relay', url: v2, surface: 'e-tag-relay-hint', raw: v2 })
+      }
+      // KUBO-165 deviation: NIP-10 marked `e`-tags carry the referenced event's
+      // author pubkey at index 4 (`["e", id, relay, marker, pubkey]`). Extract
+      // it as a pubkey reference so a reply that omits the p-tag is still gated
+      // on the parent author without needing the parent event fetched (which
+      // otherwise fails open via `pending`).
+      if (typeof v4 === 'string' && HEX64.test(v4)) {
+        refs.push({ type: 'pubkey', pubkey: v4.toLowerCase(), surface: 'p-tag', raw: v4 })
       }
     } else if (name === 'q' && typeof v1 === 'string' && HEX64.test(v1)) {
       refs.push({ type: 'event', eventId: v1.toLowerCase(), surface: 'q-tag-event', raw: v1 })
@@ -134,8 +148,10 @@ export function extractReferences(event: Event): Reference[] {
   const claimedSpans: Array<[number, number]> = []
 
   // NIP-21 nostr: tokens
+  // KUBO-165 deviation: `i` flag — `NOSTR:NPUB1…` is valid and was extracting
+  // nothing. The matched token is lower-cased before `nip19.decode`.
   const nostrTokenRe =
-    /\bnostr:(npub1[02-9ac-hj-np-z]{50,}|nprofile1[02-9ac-hj-np-z]{50,}|nevent1[02-9ac-hj-np-z]{50,}|naddr1[02-9ac-hj-np-z]{50,})\b/g
+    /\bnostr:(npub1[02-9ac-hj-np-z]{50,}|nprofile1[02-9ac-hj-np-z]{50,}|nevent1[02-9ac-hj-np-z]{50,}|naddr1[02-9ac-hj-np-z]{50,})\b/gi
   for (const m of content.matchAll(nostrTokenRe)) {
     const start = m.index ?? 0
     const end = start + m[0].length
@@ -188,7 +204,9 @@ function extractFromBech32(
 ) {
   let decoded
   try {
-    decoded = nip19.decode(bech32)
+    // KUBO-165 deviation: bech32 is case-insensitive (BIP-173) — lower-case
+    // before decode so all-caps / mixed-case tokens are extracted, not dropped.
+    decoded = nip19.decode(bech32.toLowerCase())
   } catch {
     return
   }
