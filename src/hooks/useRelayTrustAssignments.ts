@@ -52,6 +52,37 @@ async function recordRelayPermissionEventId(
   return recordTeppPermissionId(kidPubkey, tier, eventId);
 }
 
+/**
+ * Pure helper: split a kid's relay-trust assignment map into the two relay
+ * permission lists that actually go on the wire.
+ *
+ * KUBO-170: the kind-8714 interaction-relay list is published under a SINGLE
+ * shared d-tag (`<kid>:interact:relay`), so it must carry the UNION of the
+ * `interact` and `extend` tiers — relay `extend` has no distinct on-wire list
+ * in the v0.1 PoC (mode-B relay ownership is parked), it folds into 8714 just
+ * like the migration does (`teppMigration.ts:175`:
+ * `[...groupedRelay.interact, ...groupedRelay.extend]`). The `view` tier maps
+ * to the separate kind-8715 list under `<kid>:view:relay`.
+ *
+ * Every publish of either list — set OR clear — is rebuilt from this helper so
+ * a single relay's change never clobbers the rest of its list off the wire.
+ */
+export function buildRelayUnionItems(assignments: {
+  [relayUrl: string]: KuboTrustLevel;
+}): { view: string[]; interact: string[] } {
+  const view: string[] = [];
+  const interact: string[] = [];
+  for (const [url, tier] of Object.entries(assignments)) {
+    if (tier === 'view') {
+      view.push(url);
+    } else {
+      // 'interact' and 'extend' share the 8714 list.
+      interact.push(url);
+    }
+  }
+  return { view, interact };
+}
+
 export interface RelayTrustAssignmentsApi {
   get: (relayUrl: string) => KuboTrustLevel | undefined;
   setLevel: (relayUrl: string, level: KuboTrustLevel) => Promise<void>;
@@ -100,31 +131,38 @@ export function useRelayTrustAssignments(
       await setRelayTrustLevel(kidPubkey, url, level);
 
       if (!featureTepp) return;
-      // Relay-extend not yet supported; spec covers extend on relay-list via
-      // NIP-11 ownership which the v0.1 PoC parks. Fall back to interact for
-      // Kubo-tier 'extend' on relays — the localStorage tier pill still shows extend.
-      const targetKind =
-        level === 'view' ? KIND_PERMISSION_VIEW_RELAY : KIND_PERMISSION_INTERACTION_RELAY;
+      // Relay-extend not yet supported as a distinct on-wire list; the v0.1
+      // PoC parks NIP-11-ownership relay extend, so Kubo-tier 'extend' folds
+      // into the 8714 interaction-relay list (the localStorage tier pill still
+      // shows extend). KUBO-170: 'view' → 8715, {'interact','extend'} → 8714,
+      // and EACH publish rebuilds the whole list from the post-write union so
+      // we never clobber the rest of the tier off the wire.
+      const isView = level === 'view';
+      const targetKind = isView
+        ? KIND_PERMISSION_VIEW_RELAY
+        : KIND_PERMISSION_INTERACTION_RELAY;
       // Read post-write snapshot. Closure-captured `assigned` is the
-      // pre-write view, so it omits same-tier entries written this session.
+      // pre-write view, so it omits the entry written this session.
       const fresh =
         getFamilySnapshot()?.relayTrustAssignments?.[kidPubkey] ?? {};
-      const sameTierExisting = Object.entries(fresh)
-        .filter(([u, tier]) =>
-          tier === level &&
-          u !== url &&
-          (level === 'extend' ? false : true),
-        )
-        .map(([u]) => u);
+      const { view, interact } = buildRelayUnionItems(fresh);
+      const relayItems = isView ? view : interact;
 
       try {
         const permissionEvent = await publishPermission.mutateAsync({
           kind: targetKind,
-          dIdentifier: `${kidPubkey}:${level === 'extend' ? 'interact' : level}:relay`,
-          relayItems: [...sameTierExisting, url],
+          dIdentifier: `${kidPubkey}:${isView ? 'view' : 'interact'}:relay`,
+          relayItems,
         });
-        const tier: 'viewRelay' | 'interactRelay' =
-          level === 'view' ? 'viewRelay' : 'interactRelay';
+        // Ref slot mirrors the migration (teppMigration.ts order 4 →
+        // 'interactRelay'): the shared 8714 event is a single replaceable
+        // permission event, so interact AND extend record under the one
+        // 'interactRelay' slot; 8715 records under 'viewRelay'. There is no
+        // distinct 'extendRelay' slot and the state-ref builder
+        // (buildPublicPermissionRefs) emits only those two.
+        const tier: 'viewRelay' | 'interactRelay' = isView
+          ? 'viewRelay'
+          : 'interactRelay';
         const nextFamily = await recordRelayPermissionEventId(
           kidPubkey,
           tier,
@@ -156,25 +194,34 @@ export function useRelayTrustAssignments(
         getFamilySnapshot()?.relayTrustAssignments?.[kidPubkey]?.[url];
       await clearRelayTrustLevel(kidPubkey, url);
 
-      if (!featureTepp || !previousLevel || previousLevel === 'extend') return;
-      const targetKind =
-        previousLevel === 'view'
-          ? KIND_PERMISSION_VIEW_RELAY
-          : KIND_PERMISSION_INTERACTION_RELAY;
-      // Read post-write snapshot to compute the surviving same-tier list.
+      // KUBO-170: an extend relay used to return early here, so its 8714
+      // membership stayed admitted on the wire forever (a permanent grant the
+      // parent could never revoke). Now we publish the shrunken union for
+      // extend exactly as for interact — clearing it is a real revocation.
+      if (!featureTepp || !previousLevel) return;
+      const isView = previousLevel === 'view';
+      const targetKind = isView
+        ? KIND_PERMISSION_VIEW_RELAY
+        : KIND_PERMISSION_INTERACTION_RELAY;
+      // Read post-write snapshot to compute the surviving union for this list.
+      // 'view' shrinks the 8715 list; 'interact'/'extend' both shrink the
+      // shared 8714 union (clearing an interact relay must keep extend-tier
+      // relays in the published union, and vice-versa).
       const fresh =
         getFamilySnapshot()?.relayTrustAssignments?.[kidPubkey] ?? {};
-      const sameTierRemaining = Object.entries(fresh)
-        .filter(([u, tier]) => tier === previousLevel && u !== url)
-        .map(([u]) => u);
+      const { view, interact } = buildRelayUnionItems(fresh);
+      const relayItems = isView ? view : interact;
       try {
         const permissionEvent = await publishPermission.mutateAsync({
           kind: targetKind,
-          dIdentifier: `${kidPubkey}:${previousLevel}:relay`,
-          relayItems: sameTierRemaining,
+          dIdentifier: `${kidPubkey}:${isView ? 'view' : 'interact'}:relay`,
+          relayItems,
         });
-        const tier: 'viewRelay' | 'interactRelay' =
-          previousLevel === 'view' ? 'viewRelay' : 'interactRelay';
+        // Same single-slot mapping as setLevel: the shared 8714 event records
+        // under 'interactRelay' regardless of view-tier extend vs interact.
+        const tier: 'viewRelay' | 'interactRelay' = isView
+          ? 'viewRelay'
+          : 'interactRelay';
         const nextFamily = await recordRelayPermissionEventId(
           kidPubkey,
           tier,
