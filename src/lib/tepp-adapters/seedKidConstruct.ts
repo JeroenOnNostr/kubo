@@ -14,11 +14,9 @@ import {
   KIND_PERMISSION_VIEW_NPUB_A,
 } from '@/lib/tepp/kinds';
 import type { PermissionRef } from '@/lib/tepp/types';
+import { assocExpirationAt } from '@/lib/tepp-adapters/assocExpiry';
 import { appendTeppAuditEntry } from '@/lib/tepp-adapters/teppAuditLog';
 import { clearVerdictCache } from '@/lib/tepp-adapters/verdictCache';
-
-/** 30 days, in seconds — spec recommended NIP-40 expiration for kind 17700. */
-const ASSOC_EXPIRATION_SECONDS = 30 * 24 * 60 * 60;
 
 /** Minimal nostr surface this seed needs — a relay publish + a query. */
 export interface SeedNostr {
@@ -51,7 +49,13 @@ export interface SeedKidConstructArgs {
   parent: SeedParentSigner;
   /** Enabled follow-pack a-tags whose members get seeded at `view`. */
   packAtags: string[];
-  /** Abort signal for relay round-trips. Defaults to an 8s timeout per call. */
+  /**
+   * Abort signal for relay round-trips. When provided it covers the WHOLE
+   * seed (pack expansion + every publish). When omitted (production default)
+   * the pack-expansion fetch and the sequential publishes each get their own
+   * fresh 8s budget, so a slow pack fetch can never abort the publish sequence
+   * mid-flight and leave a partial construct (KUBO-166).
+   */
   signal?: AbortSignal;
   /**
    * Test seam: builds the kid signer from the nsec. Defaults to the same
@@ -133,7 +137,13 @@ export async function seedKidConstruct(
     throw new Error('seedKidConstruct: kid nsec does not match kid pubkey');
   }
 
-  const signal = args.signal ?? AbortSignal.timeout(8000);
+  // Separate timeout budgets (KUBO-166). A caller-supplied signal opts into a
+  // single shared budget for the whole seed; otherwise the pack-expansion fetch
+  // and the publish sequence each get their own fresh 8s window so a slow pack
+  // fetch can't abort the five sequential publishes mid-sequence and leave the
+  // partial construct this function exists to prevent.
+  const fetchSignal = args.signal ?? AbortSignal.timeout(8000);
+  const publishSignal = args.signal ?? AbortSignal.timeout(8000);
 
   // ── 1. Expand enabled packs → member pubkeys (deduped, capped). ──────────
   // A relay hiccup here yields zero members; the kid still gets a valid
@@ -142,17 +152,17 @@ export async function seedKidConstruct(
     nostr,
     packAtags,
     excludePubkeys: [kidLower, parentLower],
-    signal,
+    signal: fetchSignal,
   });
 
   // ── 2. Association (17700) — kid signs, parent is the sole guardian. ─────
   const assocTpl = buildAssociationTemplate({
     subject: kidLower,
     guardians: [{ pubkey: parentLower }],
-    expirationSeconds: Math.floor(Date.now() / 1000) + ASSOC_EXPIRATION_SECONDS,
+    expirationSeconds: assocExpirationAt(Math.floor(Date.now() / 1000)),
   });
   const assocEvent = (await kidSigner.signEvent(assocTpl)) as NostrEvent;
-  await nostr.event(assocEvent, { signal });
+  await nostr.event(assocEvent, { signal: publishSignal });
   appendTeppAuditEntry({
     kind: assocEvent.kind,
     signerPubkey: kidLower,
@@ -169,7 +179,7 @@ export async function seedKidConstruct(
     npubItems: [{ pubkey: parentLower }],
   });
   const interactEvent = (await parent.signer.signEvent(interactTpl)) as NostrEvent;
-  await nostr.event(interactEvent, { signal });
+  await nostr.event(interactEvent, { signal: publishSignal });
   appendTeppAuditEntry({
     kind: interactEvent.kind,
     signerPubkey: parentLower,
@@ -190,7 +200,7 @@ export async function seedKidConstruct(
       npubItems: viewMembers.map((pubkey) => ({ pubkey })),
     });
     viewEvent = (await parent.signer.signEvent(viewTpl)) as NostrEvent;
-    await nostr.event(viewEvent, { signal });
+    await nostr.event(viewEvent, { signal: publishSignal });
     appendTeppAuditEntry({
       kind: viewEvent.kind,
       signerPubkey: parentLower,
@@ -218,7 +228,7 @@ export async function seedKidConstruct(
     encryptedContent: ciphertext,
   });
   const stateEvent = (await parent.signer.signEvent(stateTpl)) as NostrEvent;
-  await nostr.event(stateEvent, { signal });
+  await nostr.event(stateEvent, { signal: publishSignal });
   appendTeppAuditEntry({
     kind: stateEvent.kind,
     signerPubkey: parentLower,
@@ -237,7 +247,14 @@ export async function seedKidConstruct(
       created_at: Math.floor(Date.now() / 1000),
     };
     const followEvent = (await kidSigner.signEvent(followTpl)) as NostrEvent;
-    await nostr.event(followEvent, { signal });
+    await nostr.event(followEvent, { signal: publishSignal });
+    appendTeppAuditEntry({
+      kind: followEvent.kind,
+      signerPubkey: kidLower,
+      subjectPubkey: kidLower,
+      eventId: followEvent.id,
+      note: `TEPP kid kind-3 follow list (onboarding seed, ${viewMembers.length} members)`,
+    });
   }
 
   // Flush any stale per-event verdicts so the first feed evaluation sees the

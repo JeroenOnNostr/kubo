@@ -3,6 +3,7 @@ import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { seedKidConstruct, type SeedNostr, type SeedParentSigner } from './seedKidConstruct';
+import { ASSOC_TTL_SECONDS } from './assocExpiry';
 import {
   KIND_PERMISSION_INTERACTION_NPUB_A,
   KIND_PERMISSION_VIEW_NPUB_A,
@@ -161,6 +162,35 @@ describe('seedKidConstruct', () => {
     );
 
     expect(result.viewMembers.sort()).toEqual([MEMBER_1, MEMBER_2].sort());
+  });
+
+  it('pins the association TTL to ASSOC_TTL_SECONDS (no 30d hardcode regression)', async () => {
+    const kid = makeKid();
+    const parent = makeParentSigner();
+    const { nostr, published } = makeNostr(makePackEvent([MEMBER_1]));
+
+    const before = Math.floor(Date.now() / 1000);
+    await seedKidConstruct({
+      nostr,
+      kidNsec: kid.nsec,
+      kidPubkey: kid.pubkey,
+      parent,
+      packAtags: [PACK_ATAG],
+      makeKidSigner: stubKidSigner(kid.pubkey),
+    });
+    const after = Math.floor(Date.now() / 1000);
+
+    const assoc = published.find((e) => e.kind === KIND_ASSOCIATION)!;
+    const expTag = assoc.tags.find((t) => t[0] === 'expiration')?.[1];
+    expect(expTag).toBeDefined();
+    const expiration = Number(expTag);
+
+    // Expiration must be now + the single-source-of-truth TTL (1 year), not the
+    // old hardcoded 30 days. Bound by the seed-run window for clock tolerance.
+    expect(expiration).toBeGreaterThanOrEqual(before + ASSOC_TTL_SECONDS);
+    expect(expiration).toBeLessThanOrEqual(after + ASSOC_TTL_SECONDS);
+    // And explicitly NOT the old 30-day fuse.
+    expect(expiration).toBeGreaterThan(before + 30 * 24 * 60 * 60);
   });
 
   it('skips the 8712 view permission and kid kind-3 when no pack members resolve', async () => {
