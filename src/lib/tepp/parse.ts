@@ -31,8 +31,19 @@ export function parseAssociation(raw: Event): ParsedAssociation {
   if (!expirationTag) parseProblems.push('Missing required expiration tag')
   else if (Number.isNaN(expiration)) parseProblems.push('expiration tag value is not a number')
 
+  // KUBO-157 deviation: guard the expiration against non-finite / out-of-range
+  // values. A forged 17700 (relays don't verify sigs) can carry a finite-but-huge
+  // expiration like 1e20, which makes `new Date(expiration * 1000).toISOString()`
+  // below throw a RangeError *before* the signature filter in
+  // pickCurrentAssociation — crashing the whole construct query. The upper bound
+  // 8.64e12 is the ECMA-262 max time value (in seconds) past which Date is invalid.
+  const validExp =
+    Number.isFinite(expiration) && expiration > 0 && expiration < 8.64e12
+
   const now = Math.floor(Date.now() / 1000)
-  const expired = !Number.isNaN(expiration) && expiration < now
+  // KUBO-157 deviation: fail closed. A present-but-invalid expiration (garbage,
+  // NaN, or out-of-range) is treated as expired rather than never-expires.
+  const expired = validExp ? expiration < now : Boolean(expirationTag)
 
   // verifyEvent is the costly one; only run if structure is roughly OK.
   let signatureValid = false
@@ -55,9 +66,10 @@ export function parseAssociation(raw: Event): ParsedAssociation {
       signatureValid,
       subjectMatchesPubkey,
       expired,
-      expiresAtIso: Number.isNaN(expiration)
-        ? '—'
-        : new Date(expiration * 1000).toISOString(),
+      // KUBO-157 deviation: only construct a Date when the expiration is in the
+      // valid Date range; otherwise show the dash. Previously the `!isNaN`
+      // guard let through finite-but-huge values that threw in `new Date(...)`.
+      expiresAtIso: validExp ? new Date(expiration * 1000).toISOString() : '—',
       parseProblems,
     },
   }
@@ -69,7 +81,19 @@ export function parseAssociation(raw: Event): ParsedAssociation {
  * Returns null if none qualify.
  */
 export function pickCurrentAssociation(events: Event[]): ParsedAssociation | null {
-  const parsed = events.map(parseAssociation)
+  // KUBO-157 deviation: parse each candidate defensively. A single malformed /
+  // hostile candidate that throws during parse must be skipped, not abort the
+  // whole pick (which previously crashed the construct query). The date guard
+  // above removes the known RangeError, but a throwing candidate here stays
+  // contained regardless of future parse changes.
+  const parsed: ParsedAssociation[] = []
+  for (const ev of events) {
+    try {
+      parsed.push(parseAssociation(ev))
+    } catch {
+      // Skip the unparseable candidate.
+    }
+  }
   const valid = parsed.filter(
     (p) => p.validity.signatureValid && p.validity.subjectMatchesPubkey && !p.validity.expired,
   )

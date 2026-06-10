@@ -18,6 +18,7 @@ import {
 } from '@/lib/tepp/kinds';
 import type {
   Construct,
+  ParsedAssociation,
   ParsedBlacklist,
   ParsedGlobal,
   ParsedPermission,
@@ -46,6 +47,61 @@ export interface UseKuboTeppConstructResult {
     | 'fetch-failed';
   /** Error message attached when reason === 'fetch-failed' or 'decrypt-failed'. */
   errorMessage?: string;
+}
+
+/** 10-minute clock-skew allowance for association `created_at` (KUBO-157). */
+export const ASSOC_CREATED_AT_SKEW_SECONDS = 600;
+
+/**
+ * KUBO-157: pick the current valid association for a specific family, applying
+ * Kubo-side integrity checks the vendored picker can't (it has no knowledge of
+ * who the real parent is):
+ *
+ * 1. Future-dating clamp — drop candidates whose `created_at` is more than
+ *    `ASSOC_CREATED_AT_SKEW_SECONDS` ahead of `now`. Without this a kid-signed
+ *    17700 dated years ahead permanently wins `pickCurrentAssociation`'s
+ *    max-`created_at` sort.
+ * 2. Structural rejection — drop candidates whose parse flags a missing subject
+ *    or missing guardian tag (we accept missing *expiration* deliberately: Kubo
+ *    always emits one and the picker fails-closed on a present-but-invalid one).
+ * 3. Guardian pinning — after picking, require the winning association's guardian
+ *    set to include the family's known parent pubkey. Otherwise a kid could name
+ *    their own second key as guardian and self-govern; treat as no-association.
+ *
+ * Returns the picked `ParsedAssociation`, or `null` (→ caller reports
+ * `no-association`). Pure and React-free so it's unit-testable directly.
+ */
+export function pickAssociationForFamily(
+  events: NostrEvent[],
+  parentPubkey: string,
+  now: number = Math.floor(Date.now() / 1000),
+): ParsedAssociation | null {
+  const skewCutoff = now + ASSOC_CREATED_AT_SKEW_SECONDS;
+  const candidates = events.filter((e) => {
+    if (e.created_at > skewCutoff) return false; // future-dated — drop
+    const parsed = (() => {
+      try {
+        return parseAssociation(e);
+      } catch {
+        return null;
+      }
+    })();
+    if (!parsed) return false;
+    const { parseProblems } = parsed.validity;
+    if (parseProblems.includes('Missing required subject tag')) return false;
+    if (parseProblems.includes('No guardian tags found')) return false;
+    return true;
+  });
+
+  const picked = pickCurrentAssociation(candidates);
+  if (!picked) return null;
+
+  // Guardian pinning: the family's real parent must be among the guardians.
+  const parentLower = parentPubkey.toLowerCase();
+  const namesParent = picked.guardians.some((g) => g.pubkey.toLowerCase() === parentLower);
+  if (!namesParent) return null;
+
+  return picked;
 }
 
 /**
@@ -109,7 +165,11 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
         [{ kinds: [KIND_ASSOCIATION], authors: [kidPubkey], limit: 10 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
       );
-      const assoc = pickCurrentAssociation(assocEvents.map((e) => e));
+      // KUBO-157: future-dating clamp, structural rejection, and guardian
+      // pinning against the family's known parent (parent.pubkey). A winning
+      // association that does not name the real parent as a guardian is treated
+      // as no-association (a kid cannot self-govern by naming their own key).
+      const assoc = pickAssociationForFamily(assocEvents, parent.pubkey);
       if (!assoc) {
         return { construct: null, fingerprint: null, reason: 'no-association' as const };
       }
@@ -250,8 +310,6 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
   if (parentReason === 'parent-logged-out') {
     return { construct: null, fingerprint: null, loading: false, reason: 'parent-logged-out' };
   }
-  // Avoid "unused" warning for the imported parser; surface for tests/diagnostics.
-  void parseAssociation;
 
   if (query.isLoading) return { construct: null, fingerprint: null, loading: true };
   const data = query.data;

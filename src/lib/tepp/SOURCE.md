@@ -26,6 +26,16 @@ This directory holds **only the 11 pure-logic files** from TEPP's `tepp-webapp/s
 - `construct.ts` (`assembleConstruct` orchestrator) — reimplemented in [../tepp-adapters/construct.ts](../tepp-adapters/construct.ts).
 - `useConstruct.ts` (React hook) — reimplemented as a TanStack-Query hook in [../tepp-adapters/useConstruct.ts](../tepp-adapters/useConstruct.ts).
 
+## Local deviations
+
+These vendored files carry small, upstreamable Kubo patches. Each patch site is
+marked with a `// KUBO-xxx deviation:` comment. When updating from upstream,
+re-apply (or upstream) each of these.
+
+| File | Task | Change |
+|---|---|---|
+| `parse.ts` | KUBO-157 | Guard `expiration` against non-finite / out-of-range values before building the `expiresAtIso` Date (a forged 17700 with `expiration` ≈ `1e20` previously threw a `RangeError` inside `pickCurrentAssociation`, crashing the construct query). A present-but-invalid expiration is now treated as `expired: true` (fail-closed) instead of never-expires. `pickCurrentAssociation` wraps each candidate parse in try/catch so a throwing candidate is skipped, not fatal. |
+
 ## How to update from upstream
 
 The subtree was added with `--prefix=src/lib/tepp-staging`, then the 11 files were `git mv`'d into here and the staging dir was deleted. That means a vanilla `git subtree pull --prefix=src/lib/tepp …` will NOT work — the prefix tree is a strict subset of upstream.
