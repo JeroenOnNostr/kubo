@@ -8,6 +8,35 @@ Completed work lives in [DONE.md](DONE.md).
 
 > TEPP integration (Phases 0–8, KUBO-123–133) and its follow-up fixes (KUBO-143 trust-sync clobber, KUBO-144 render loops) are **done and committed** (`7f3934f8`) — see [DONE.md](DONE.md). Only the manual-QA walkthrough (KUBO-145, below) remains open for TEPP.
 
+### TEPP hardening (KUBO-152–175) — from the 2026-06-10 five-track deep review
+
+Full per-task specs with file:line evidence and acceptance criteria: [docs/tepp-hardening-plan.md](docs/tepp-hardening-plan.md). Execute in the plan's wave order. Threat model confirmed 2026-06-10: young kids + untrusted relays/content (no devtools-capable-kid scope, no NIP-46 bunker work).
+
+- **KUBO-152: Derive kid enforcement from the construct, not kid-writable `featureTepp`** (critical)
+- **KUBO-153: Guard `/parent/*` routes; PIN lockout** (critical)
+- **KUBO-154: Fail-closed outbound gate when construct loading/absent/error** (high)
+- **KUBO-155: Fail-closed read path on `parent-logged-out` / unassemblable construct** (high)
+- **KUBO-156: Construct assembly: subject pinning, blacklist/global sig+guardian checks, fail-closed deny-lists** (high)
+- **KUBO-157: Association integrity: parser overflow crash, created_at clamp, guardian pinning, expiration fail-closed** (critical)
+- **KUBO-158: Kid shell escape via hashtag/relay links** (high)
+- **KUBO-159: Render-side TEPP filter in kid feed + repost author check** (high, after 161)
+- **KUBO-160: Gate at the kid signer seam (covers 18 direct-publish paths)** (high)
+- **KUBO-161: Relay-hint references must not hard-deny** (high functional, blocks 159/163)
+- **KUBO-162: Outgoing denies never redactable** (high)
+- **KUBO-163: Read-side gaps: post detail flash, comments, profiles, favorites** (medium)
+- **KUBO-164: Kind-3 must not brick on one unadmitted follow** (medium)
+- **KUBO-165: Reference extraction: case-insensitivity, e-tag author, bare-hex redactable** (medium)
+- **KUBO-166: `seedKidConstruct` must use `assocExpiry` (30d hardcode) + per-step timeouts + audit kind-3** (high)
+- **KUBO-167: Trust-request approval must publish TEPP** (high)
+- **KUBO-168: Default-ON migration account/device mismatch + re-flip + retry hot-loop** (high)
+- **KUBO-169: Reconcile against the construct, not localStorage** (high)
+- **KUBO-170: Relay `extend` tier shrink-clobber + clear revocation** (medium)
+- **KUBO-171: Serialize kind-34700 publishes per kid; self-source refs** (medium)
+- **KUBO-172: `removeKid` TEPP teardown** (medium)
+- **KUBO-173: TEPP events to private family relay only (privacy); upstream issue for content encryption** (high privacy)
+- **KUBO-174: Adversarial + structural test suite (parsers, construct, gate, filter, migration)** (high value)
+- **KUBO-175: Small fixes batch (debug logs, audit-log ts, diagnostics, verdict time-bucket, etc.)** (low)
+
 - **KUBO-149: TEPP association no longer a self-destruct fuse — 365d TTL + self-healing renewal**
   Root cause found while verifying the "enable TEPP on app update" migration: the kid association (kind 17700) was published with a **30-day** NIP-40 expiration and **nothing renewed it** (the only rotation-capable hook, `useKuboTeppPublishAssociation`, was dead code with zero call sites). Once `family.teppMigratedAt` was set the migration never re-ran, so ~30 days after enabling TEPP the association expired → construct `no-association` → all filtering silently died, permanently, with no recovery. Reproduced on the local install (migrated 2026-05-09, observed dead 2026-06-10). Fix: (1) single source of truth `src/lib/tepp-adapters/assocExpiry.ts` (`ASSOC_TTL_SECONDS = 365d`, `ASSOC_RENEWAL_WINDOW_SECONDS = 60d`, `assocExpirationAt`, `shouldRenewAssociation`), consumed by both publish sites (`teppMigration.ts` migration step + `useKuboTeppPublish.ts` rotation hook) so they can't drift; (2) new `useEnsureKidAssociation` hook republishes when the assoc is missing/expired/within 60d of expiry, signing as the kid via the (now-wired) `useKuboTeppPublishAssociation`; deliberately NOT gated on `teppMigratedAt` so it recovers already-dead installs. Mounted in `KuboKidLayout` (kid is active signer) and `KuboParentLayout` (parent shell, shares a per-kid session guard so no double-publish). Unit tests: `assocExpiry.test.ts` (8). tsc + eslint + full TEPP vitest (61) clean. **Browser QA owed:** with the current dead install (construct `no-association`), open the kid app / Trust→Diagnostics → confirm a fresh kind-17700 publishes and Construct flips `no-association`→`loaded`; then temporarily shorten the TTL to ~2min, confirm republish-on-expiry; then wipe storage, onboard fresh, confirm migration still publishes assoc.
 
