@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
@@ -82,6 +82,57 @@ export function transientPollDelayMs(failureCount: number): number {
  * (the TanStack query data itself can't track "how many times in a row").
  */
 const decryptFailureCounts = new Map<string, number>();
+
+/**
+ * KUBO-155: last-known-GOOD construct per `kid:parent`. On a TRANSIENT failure
+ * (a relay flap that withholds the association/state/permission events for a
+ * few seconds — `no-association` / `no-state-event` / `fetch-failed`) we serve
+ * the most recent successfully-assembled construct rather than collapsing to a
+ * null construct, which would otherwise blank the kid feed and (with the
+ * KUBO-155 fail-closed filter/feed) flip every item to hidden during the flap.
+ *
+ * This is the explicit equivalent of TanStack's `keepPreviousData`, but it
+ * survives the queryFn returning a *settled* null (which `keepPreviousData`
+ * does NOT cover — that only bridges the in-flight/key-change gap). We never
+ * cache across a `decrypt-failed` (stable key/format problem, not a flap) and
+ * never resurrect a construct once a TERMINAL reason (flag-off / parent
+ * logged out) is reached — those are handled by the hook's early returns and
+ * by clearing the cache below.
+ */
+const lastKnownGoodConstructs = new Map<
+  string,
+  { construct: Construct; fingerprint: string | null }
+>();
+
+/** Reasons treated as TRANSIENT relay flaps eligible for last-known-good fallback. */
+const TRANSIENT_FALLBACK_REASONS: ReadonlySet<string> = new Set([
+  'no-association',
+  'no-state-event',
+  'fetch-failed',
+]);
+
+/**
+ * KUBO-155 pure fallback decision (unit-testable). Given the query's settled
+ * data and a last-known-good entry, decide what to serve:
+ *  - fresh construct present → serve it (and the caller caches it).
+ *  - null + transient reason + a cached LKG → serve the cached construct (flap).
+ *  - otherwise → serve the data as-is (null).
+ *
+ * `decrypt-failed` is intentionally NOT transient (stable key/format problem),
+ * so it never resurrects a stale construct.
+ */
+export function pickConstructWithFallback(
+  data: { construct: Construct | null; fingerprint: string | null; reason?: string },
+  lkg: { construct: Construct; fingerprint: string | null } | undefined,
+): { construct: Construct | null; fingerprint: string | null; usedFallback: boolean } {
+  if (data.construct) {
+    return { construct: data.construct, fingerprint: data.fingerprint, usedFallback: false };
+  }
+  if (lkg && data.reason && TRANSIENT_FALLBACK_REASONS.has(data.reason)) {
+    return { construct: lkg.construct, fingerprint: lkg.fingerprint, usedFallback: true };
+  }
+  return { construct: null, fingerprint: data.fingerprint, usedFallback: false };
+}
 
 /**
  * KUBO-157: pick the current valid association for a specific family, applying
@@ -180,6 +231,12 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
     // set); the verdict cache absorbs per-event evaluation cost.
     staleTime: 5_000,
     gcTime: 5 * 60_000,
+    // KUBO-155: keep serving the previous query result while a refetch is in
+    // flight (relay flap), so the construct doesn't momentarily read as
+    // loading/null between polls. The module-level last-known-good cache above
+    // additionally bridges the case where the queryFn SETTLES to a transient
+    // null (which keepPreviousData alone does not cover).
+    placeholderData: keepPreviousData,
     // KUBO-152: while the construct is null for a TRANSIENT reason (the
     // association/state/permission events exist but haven't propagated to the
     // queried relays yet — common in the seconds right after onboarding seeds
@@ -387,22 +444,42 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
     },
   });
 
+  const lkgKey = `${kidPubkey ?? ''}:${parent?.pubkey ?? ''}`;
+
   if (!enforced) {
+    // Enforcement off — drop any stale last-known-good so a later re-enable
+    // starts clean and can't resurrect a construct for a different family.
+    lastKnownGoodConstructs.delete(lkgKey);
     return { construct: null, fingerprint: null, loading: false, reason: 'flag-off' };
   }
   if (!kidPubkey) {
     return { construct: null, fingerprint: null, loading: false, reason: 'no-kid' };
   }
   if (parentReason === 'parent-logged-out') {
+    // Terminal + fail-closed: do NOT serve last-known-good. With the parent
+    // logged out we can't verify anything; KUBO-155's read path holds the feed.
+    lastKnownGoodConstructs.delete(lkgKey);
     return { construct: null, fingerprint: null, loading: false, reason: 'parent-logged-out' };
   }
 
   if (query.isLoading) return { construct: null, fingerprint: null, loading: true };
   const data = query.data;
   if (!data) return { construct: null, fingerprint: null, loading: false };
+
+  // KUBO-155: cache the last successfully-assembled construct so we can serve
+  // it across TRANSIENT failures (a brief relay flap) instead of blanking the
+  // feed / flipping every item to hidden under the fail-closed filter.
+  if (data.construct) {
+    lastKnownGoodConstructs.set(lkgKey, {
+      construct: data.construct,
+      fingerprint: data.fingerprint,
+    });
+  }
+
+  const picked = pickConstructWithFallback(data, lastKnownGoodConstructs.get(lkgKey));
   return {
-    construct: data.construct,
-    fingerprint: data.fingerprint,
+    construct: picked.construct,
+    fingerprint: picked.fingerprint,
     loading: false,
     reason: data.reason,
     errorMessage: data.errorMessage,

@@ -3,8 +3,8 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useKuboTeppConstruct } from '@/hooks/useKuboTeppConstruct';
+import { useTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 import { useTeppReferenceCache } from '@/hooks/useTeppReferenceCache';
 import { evaluateEvent } from '@/lib/tepp/evaluate';
 import {
@@ -34,6 +34,23 @@ export interface KuboTeppFeedFilter {
 const PASS: KuboTeppFeedFilter = { enabled: false, shouldShow: () => true };
 
 /**
+ * KUBO-155 pure mode decision (unit-testable):
+ *  - `'pass'`     — TEPP not enforced; show everything (no filtering).
+ *  - `'hide-all'` — enforced but no construct/fingerprint → fail-closed: hide
+ *                   every item rather than fall through to the firehose.
+ *  - `'evaluate'` — enforced + construct loaded → per-event evaluation.
+ */
+export function resolveFeedFilterMode(
+  enforced: boolean,
+  hasConstruct: boolean,
+  hasFingerprint: boolean,
+): 'pass' | 'hide-all' | 'evaluate' {
+  if (!enforced) return 'pass';
+  if (!hasConstruct || !hasFingerprint) return 'hide-all';
+  return 'evaluate';
+}
+
+/**
  * Render-side TEPP feed filter. Detects whether the active user is a kid
  * with a loaded construct; if so, returns a predicate that drops events
  * whose authors (or referenced surfaces) are *denied* by the kid's construct.
@@ -50,22 +67,33 @@ export function useKuboTeppFeedFilter(
   events?: NostrEvent[],
 ): KuboTeppFeedFilter {
   const { user } = useCurrentUser();
-  const { family } = useKuboFamily();
   const activePubkey = user?.pubkey;
-  const isKid = !!activePubkey && !!family?.kids.some((k) => k.pubkey === activePubkey);
-  const { construct, fingerprint } = useKuboTeppConstruct(isKid ? activePubkey : undefined);
+  // KUBO-152: enforcement is the parent-controlled family flag, not the
+  // kid-writable feedSettings.
+  const enforced = useTeppEnforced(activePubkey);
+  const { construct, fingerprint } = useKuboTeppConstruct(
+    enforced ? activePubkey : undefined,
+  );
 
-  const active = !!(isKid && construct && fingerprint);
+  const active = !!(enforced && construct && fingerprint);
   const { cache, isResolving } = useTeppReferenceCache(events, fingerprint, active);
 
   return useMemo<KuboTeppFeedFilter>(() => {
-    if (!active || !construct || !fingerprint) return PASS;
+    // KUBO-155 fail-closed: PASS (show everything) ONLY when TEPP is not
+    // enforced for this user. When enforced but the construct is null (relay
+    // withholding the state event, cold start, parent logged out, …) we HIDE
+    // every item rather than fall through to the unscoped firehose.
+    const mode = resolveFeedFilterMode(enforced, !!construct, !!fingerprint);
+    if (mode === 'pass') return PASS;
+    if (mode === 'hide-all') {
+      return { enabled: true, shouldShow: () => false };
+    }
     return {
       enabled: true,
       shouldShow: (event: NostrEvent) =>
-        isVisible(event, construct, fingerprint, cache, isResolving),
+        isVisible(event, construct!, fingerprint!, cache, isResolving),
     };
-  }, [active, construct, fingerprint, cache, isResolving]);
+  }, [enforced, construct, fingerprint, cache, isResolving]);
 }
 
 function isVisible(

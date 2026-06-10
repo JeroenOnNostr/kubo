@@ -94,6 +94,7 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
     isFetchingNextPage,
     isPending,
     isLoading,
+    teppHold,
   } = useKidFeed();
   const { muteItems } = useMuteList();
 
@@ -149,11 +150,16 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
     }
   }, [capAtIndex, feedItems.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const showSkeleton = isPending || (isLoading && !data);
+  // KUBO-155: when the feed is HELD (TEPP enforced but no construct), the
+  // underlying query is disabled — so `isPending` stays true forever. The hold
+  // notice must take precedence over the skeleton, and the boot splash must
+  // dismiss, so treat a hold as "settled" (not a skeleton).
+  const showSkeleton = !teppHold && (isPending || (isLoading && !data));
 
   // Signal the first settle of the initial page exactly once. Guarded by a
   // ref so background refetches (which can briefly re-raise the loading
-  // flags) never re-fire it. See `onFirstLoadSettled` prop docs.
+  // flags) never re-fire it. See `onFirstLoadSettled` prop docs. A hold also
+  // counts as settled so KidHomePage's boot splash dismisses to the notice.
   const settledFired = useRef(false);
   useEffect(() => {
     if (settledFired.current) return;
@@ -172,6 +178,28 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
     variant === 'kid'
       ? cn(KID_TILE_ROUNDING, 'overflow-hidden bg-white/10')
       : 'rounded-2xl overflow-hidden bg-card';
+
+  // KUBO-155: fail-closed hold — never the firehose. Show a kid-friendly
+  // notice (empty feed) when TEPP is enforced but the construct is unavailable.
+  if (teppHold) {
+    const noticeText =
+      teppHold === 'parent-logged-out'
+        ? 'Ask your grown-up to log in so you can see your feed.'
+        : 'Hold on — still checking with your grown-up. Your feed will be back in a moment.';
+    return (
+      <div
+        className={cn(
+          'rounded-2xl p-8 text-center text-sm',
+          variant === 'kid'
+            ? 'bg-white/10 text-white/80'
+            : 'bg-card text-muted-foreground',
+        )}
+        data-kubo-tepp-hold={teppHold}
+      >
+        {noticeText}
+      </div>
+    );
+  }
 
   if (showSkeleton) {
     return (

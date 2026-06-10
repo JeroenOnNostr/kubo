@@ -9,6 +9,7 @@ import { useFollowList } from './useFollowActions';
 import { fetchPacksByAtags } from './useFollowPacks';
 import { useKidFeedSourcesSelector } from './useKidFeedSources';
 import { useKuboTeppConstruct } from './useKuboTeppConstruct';
+import { useTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 import { useSelectedKid } from './useSelectedKid';
 import { getTeppAllowedAuthors } from '@/lib/tepp-adapters/allowedAuthors';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
@@ -43,6 +44,43 @@ import { isReplyEvent } from '@/lib/nostrEvents';
  */
 
 export type { FeedItem };
+
+/**
+ * KUBO-155 fail-closed read-path hold reason. When TEPP is enforced for the kid
+ * but no construct can be assembled, the feed is HELD (empty + notice) rather
+ * than falling through to the unscoped firehose.
+ *  - `'parent-logged-out'` — the parent (guardian) isn't signed in on this
+ *    device; the kid should ask their grown-up to log in.
+ *  - `'construct-unavailable'` — the construct can't be assembled right now
+ *    (relay withholding the state event, no association yet, decrypt failure).
+ *  - `null` — not held (not enforced, construct loaded, or still loading).
+ */
+export type TeppFeedHold = 'parent-logged-out' | 'construct-unavailable' | null;
+
+/**
+ * KUBO-155 pure hold-decision (unit-testable). Returns the hold reason the kid
+ * feed must surface, or null when the feed may proceed (either not enforced, a
+ * construct is loaded, or the construct is still loading within the boot-splash
+ * window — loading is NOT a hold).
+ *
+ * The critical fail-closed property: when `enforced` is true and there is no
+ * construct and we're not loading, the result is ALWAYS a hold — never null —
+ * so the caller can never fall through to the unscoped firehose. In particular
+ * `parent-logged-out` (KUBO-155's headline case) holds rather than running the
+ * feed unscoped on a shared device.
+ */
+export function computeTeppHold(
+  enforced: boolean,
+  hasConstruct: boolean,
+  loading: boolean,
+  reason: string | undefined,
+): TeppFeedHold {
+  if (!enforced || hasConstruct) return null;
+  if (loading) return null; // splash/skeleton covers it
+  if (reason === 'parent-logged-out') return 'parent-logged-out';
+  // Any other null-construct reason while enforced → hold (fail-closed).
+  return 'construct-unavailable';
+}
 
 const PAGE_SIZE = 15;
 const OVER_FETCH_MULTIPLIER = 3;
@@ -95,6 +133,9 @@ export function useKidFeed() {
   // client-side reference-closure walk, no fail-open window. When the flag is
   // off / no construct, `allowedAuthors` is null and the legs behave as before
   // (relay firehose, follows union).
+  // KUBO-152: enforcement is the parent-controlled family flag, not the
+  // kid-writable feedSettings mirror.
+  const teppEnforced = useTeppEnforced(kidPubkey ?? undefined);
   const { construct: teppConstruct, loading: teppLoading, reason: teppReason } =
     useKuboTeppConstruct(kidPubkey ?? undefined);
   const allowedAuthors = useMemo(
@@ -118,24 +159,43 @@ export function useKidFeed() {
   // preloader gate) until either:
   //   • a construct is loaded (the normal path; the feed opens correctly
   //     scoped on first paint), OR
-  //   • the construct hit a TERMINAL reason it can never recover from on its
-  //     own (flag-off / no-kid / parent-logged-out) — then proceed unscoped
-  //     rather than hang.
-  // Transient reasons (no-association / no-state-event / fetch/decrypt-failed)
-  // keep us holding; `useKuboTeppConstruct` polls (refetchInterval) so this
-  // resolves within ~1.5s of the seed propagating. KidHomePage's 10s preloader
-  // backstop dismisses the splash regardless, so a never-arriving construct can
-  // never wedge the boot.
-  const teppTerminal =
-    teppReason === 'flag-off' ||
-    teppReason === 'no-kid' ||
-    teppReason === 'parent-logged-out';
-  const teppReady =
-    !feedSettings.featureTepp || !!teppConstruct || (!teppLoading && teppTerminal);
+  //   • TEPP is NOT enforced for this kid (flag-off / no-kid — i.e. the
+  //     family flag is off or this isn't a kid) — then proceed unscoped.
+  //
+  // KUBO-155 fail-closed read path: when TEPP IS enforced and the construct
+  // cannot be assembled, we MUST NOT proceed unscoped (that is the
+  // firehose-on-logout fail-open). Instead we HOLD with an empty feed and a
+  // kid-friendly notice. The terminal-but-enforced reasons are:
+  //   • parent-logged-out — "ask your grown-up to log in" (held indefinitely).
+  //   • no-state-event / fetch-failed — held; the construct query keeps polling
+  //     (refetchInterval) so a transient relay flap recovers on its own. The
+  //     last-known-good cache in useKuboTeppConstruct serves a prior construct
+  //     across brief flaps, so these only surface as a hold when there has
+  //     never been a good construct (e.g. a relay persistently withholding the
+  //     state event).
+  //   • no-association / decrypt-failed — also held (no scoped authors yet).
+  //
+  // `teppEnforced` is the gate: only when NOT enforced do we ever run unscoped.
+  const teppReady = !teppEnforced || !!teppConstruct;
 
-  const followsReady = !!user && followList !== undefined && teppReady;
+  // The hold reason the UI renders as a notice (empty feed, not the firehose).
+  // Null = no hold (either not enforced, construct loaded, or still loading
+  // within the boot splash window). Loading is NOT a hold — KidHomePage's boot
+  // splash / KidFeedList skeleton covers it.
+  const teppHold: TeppFeedHold = computeTeppHold(
+    teppEnforced,
+    !!teppConstruct,
+    teppLoading,
+    teppReason,
+  );
 
-  return useInfiniteQuery<FeedPage, Error>({
+  // When enforced but we have no construct, the feed is held: never enable the
+  // query (no firehose), regardless of follow/sync readiness.
+  const enforcedHold = teppEnforced && !teppConstruct && !teppLoading;
+  const followsReady =
+    !!user && followList !== undefined && teppReady && !enforcedHold;
+
+  const query = useInfiniteQuery<FeedPage, Error>({
     // `followList` deliberately excluded — we invalidate explicitly on
     // follow/unfollow from the Profiles tile (plan M2 from Stage 1).
     queryKey: [
@@ -346,4 +406,9 @@ export function useKidFeed() {
     gcTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
+
+  // KUBO-155: expose the hold status so the UI (KidFeedList) can render a
+  // kid-friendly notice instead of an empty-feed message or a spinner. The
+  // query itself is disabled while held (no firehose).
+  return { ...query, teppHold };
 }
