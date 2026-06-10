@@ -95,7 +95,7 @@ export function useKidFeed() {
   // client-side reference-closure walk, no fail-open window. When the flag is
   // off / no construct, `allowedAuthors` is null and the legs behave as before
   // (relay firehose, follows union).
-  const { construct: teppConstruct, loading: teppLoading } =
+  const { construct: teppConstruct, loading: teppLoading, reason: teppReason } =
     useKuboTeppConstruct(kidPubkey ?? undefined);
   const allowedAuthors = useMemo(
     () => (teppConstruct ? getTeppAllowedAuthors(teppConstruct) : null),
@@ -103,13 +103,35 @@ export function useKidFeed() {
   );
   const allowedKey = allowedAuthors ? [...allowedAuthors].sort().join(',') : '';
 
-  // When TEPP is on, hold the feed query until the construct resolves. Without
-  // this, the brief window before the construct loads would run the unscoped
-  // firehose and flash disallowed authors into the feed (the fail-open bug).
-  // `useKuboTeppConstruct` returns loading:false the moment it settles to a
-  // construct OR a terminal reason (no-association, flag-off, etc.), so a kid
-  // with no usable construct still proceeds (unscoped) rather than hanging.
-  const teppReady = !feedSettings.featureTepp || !teppLoading;
+  // When TEPP is on, hold the feed query until the construct is actually
+  // LOADED — not merely "settled". (KUBO-152)
+  //
+  // The old gate (`!teppLoading`) released the feed the moment the construct
+  // query settled to ANYTHING, including a transient null (e.g. the seeded
+  // association/state events hadn't propagated to the queried relays yet). In
+  // that window `allowedAuthors` is null, so the feed runs UNSCOPED and flashes
+  // the full pack firehose — then, once the construct loads a beat later, the
+  // query re-runs scoped and the just-shown notes vanish. That is exactly the
+  // "loads then disappears" behaviour.
+  //
+  // Now we hold (the kid stays on the boot loading screen — see KidHomePage's
+  // preloader gate) until either:
+  //   • a construct is loaded (the normal path; the feed opens correctly
+  //     scoped on first paint), OR
+  //   • the construct hit a TERMINAL reason it can never recover from on its
+  //     own (flag-off / no-kid / parent-logged-out) — then proceed unscoped
+  //     rather than hang.
+  // Transient reasons (no-association / no-state-event / fetch/decrypt-failed)
+  // keep us holding; `useKuboTeppConstruct` polls (refetchInterval) so this
+  // resolves within ~1.5s of the seed propagating. KidHomePage's 10s preloader
+  // backstop dismisses the splash regardless, so a never-arriving construct can
+  // never wedge the boot.
+  const teppTerminal =
+    teppReason === 'flag-off' ||
+    teppReason === 'no-kid' ||
+    teppReason === 'parent-logged-out';
+  const teppReady =
+    !feedSettings.featureTepp || !!teppConstruct || (!teppLoading && teppTerminal);
 
   const followsReady = !!user && followList !== undefined && teppReady;
 

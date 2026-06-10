@@ -21,6 +21,14 @@ import { DEFAULT_KID_FEED_SETTINGS } from '@/lib/extraKinds';
 import { KUBO_DEFAULT_KID_PACK_ATAG } from '@/lib/helpContent';
 import { parseAuthorEvent } from '@/hooks/useAuthor';
 import { clearOnboardingParent, getOnboardingParent } from '@/lib/onboardingParent';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { seedKidConstruct } from '@/lib/tepp-adapters/seedKidConstruct';
+import {
+  recordTeppPermissionId,
+  setTrustLevelsBatch,
+  setFamily as setFamilyStore,
+  getFamilySnapshot,
+} from '@/hooks/useKuboFamily';
 
 interface ParentHandoffState {
   parentPubkey?: string;
@@ -45,6 +53,10 @@ export function AddKidPage() {
   const login = useLoginActions();
   const { setLogin } = useNostrLogin();
   const { family, setFamily, addKid } = useKuboFamily();
+  // The active user during onboarding IS the parent (the kid-login flip happens
+  // only after the family record is written). Captured here so the construct
+  // seed can sign permission/state events as the parent guardian.
+  const { user: activeUser, users } = useCurrentUser();
 
   const queryClient = useQueryClient();
   const { mutateAsync: uploadKidAvatar } = useUploadKidAvatar();
@@ -168,6 +180,79 @@ export function AddKidPage() {
         console.warn('Failed to seed kid encrypted settings:', err);
       }
 
+      // TEPP construct seed (KUBO-152). Closure so `finish()` can await it
+      // with the parent still active. Resolves the parent NUser, expands the
+      // kid's enabled packs, publishes the complete construct, then persists
+      // the resulting permission ids + view-member trust assignments and marks
+      // the migration done so the migration runner never re-seeds (and so can
+      // never clobber this state event with an empty-refs one). Fails soft.
+      const seedKidConstructForOnboarding = async (kid: {
+        kidPubkey: string;
+        kidNsec: `nsec1${string}`;
+      }): Promise<void> => {
+        if (!config.feedSettings.featureTepp) return;
+        // Parent guardian signer: prefer the explicit parent match, fall back
+        // to the active user (which is the parent at this point in the flow).
+        const parentUser =
+          users.find((u) => u.pubkey === parentPubkey) ?? activeUser;
+        if (!parentUser || parentUser.pubkey !== parentPubkey) {
+          console.warn(
+            'seedKidConstruct: parent signer unavailable — deferring to reconcile',
+          );
+          return;
+        }
+        // Enabled packs come from the family record we just wrote.
+        const packAtags =
+          getFamilySnapshot()?.feedSources?.[kid.kidPubkey]?.packs ?? [];
+        try {
+          const result = await seedKidConstruct({
+            nostr,
+            kidNsec: kid.kidNsec,
+            kidPubkey: kid.kidPubkey,
+            parent: parentUser,
+            packAtags,
+          });
+
+          // Persist the pack members as `view` trust so the parent Trust view
+          // shows them admitted (and clear/upgrade flows have a base list).
+          if (result.viewMembers.length > 0) {
+            await setTrustLevelsBatch(kid.kidPubkey, result.viewMembers, 'view');
+          }
+          // Record the published permission ids so any later state re-publish
+          // (useTrustAssignments) carries the full ref set.
+          if (result.permissionIds.interact) {
+            await recordTeppPermissionId(
+              kid.kidPubkey,
+              'interact',
+              result.permissionIds.interact,
+            );
+          }
+          if (result.permissionIds.view) {
+            await recordTeppPermissionId(
+              kid.kidPubkey,
+              'view',
+              result.permissionIds.view,
+            );
+          }
+          // Mark migration complete for this family: the construct is fully
+          // seeded, so the one-shot migration must not run (it would re-publish
+          // a state event and could clobber the refs we just set).
+          const snap = getFamilySnapshot();
+          if (snap && !snap.teppMigratedAt) {
+            await setFamilyStore({
+              ...snap,
+              teppMigratedAt: Date.now(),
+              teppMigrationPlan: undefined,
+            });
+          }
+        } catch (err) {
+          console.warn(
+            'seedKidConstruct: onboarding seed failed — reconcile will backfill',
+            err,
+          );
+        }
+      };
+
       // Finishing handoff — runs either after a successful avatar upload,
       // or after the user opts to skip a failed upload. Writing the family
       // record is what anchors the kid permanently; doing it *after* the
@@ -197,6 +282,15 @@ export function AddKidPage() {
               trustAssignments: {
                 [identity.pubkey]: { [parentPubkey]: 'interact' },
               },
+              // KUBO-152: this onboarding flow seeds the full TEPP construct
+              // inline (below, before /kid). Pre-mark the migration done so the
+              // background TeppMigrationRunner — mounted app-wide — does not
+              // fire for this brand-new family and race the inline seed. The
+              // inline seed is the single authoritative seeding path here; the
+              // parent-side reconcile (useEnsureParentTrust) remains the
+              // backstop if the inline seed fails. featureTepp-off installs are
+              // unaffected (the migration is a no-op when the flag is off).
+              teppMigratedAt: Date.now(),
             });
           } else {
             await addKid({ pubkey: identity.pubkey, displayName: trimmed });
@@ -206,6 +300,19 @@ export function AddKidPage() {
           // key. From here on, family?.parentPubkey is the source of truth
           // for "who is the parent on this device."
           clearOnboardingParent();
+
+          // TEPP construct seed (KUBO-152): publish the kid's full initial
+          // construct — association + parent-interact + pack-members-view +
+          // state + kid follow list — NOW, while the parent is still the
+          // active signer and BEFORE we flip to the kid and navigate to the
+          // feed. This is what makes the feed's author allowlist already admit
+          // the default follow pack on first paint, instead of flashing notes
+          // and then emptying once a parent-only construct loads. Fails soft:
+          // a relay hiccup leaves the parent-side reconcile as the backstop.
+          await seedKidConstructForOnboarding({
+            kidPubkey: identity.pubkey,
+            kidNsec: identity.nsec,
+          });
 
           // Make the freshly-created kid the active signer and drop the
           // parent straight into the kid app, so onboarding ends on a

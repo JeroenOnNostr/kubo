@@ -80,6 +80,24 @@ export function useKuboTeppConstruct(kidPubkey: string | undefined): UseKuboTepp
     // set); the verdict cache absorbs per-event evaluation cost.
     staleTime: 5_000,
     gcTime: 5 * 60_000,
+    // KUBO-152: while the construct is null for a TRANSIENT reason (the
+    // association/state/permission events exist but haven't propagated to the
+    // queried relays yet — common in the seconds right after onboarding seeds
+    // them), poll so the kid feed's hold-until-ready gate resolves quickly
+    // instead of waiting for the next staleTime window or a manual
+    // invalidation. Stops the moment a construct loads OR a terminal reason
+    // (flag-off / no-kid / parent-logged-out) is reached.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 1_500; // first fetch in flight / errored — keep trying
+      if (data.construct) return false; // loaded — stop polling
+      const transient =
+        data.reason === 'no-association' ||
+        data.reason === 'no-state-event' ||
+        data.reason === 'fetch-failed' ||
+        data.reason === 'decrypt-failed';
+      return transient ? 1_500 : false;
+    },
     queryFn: async ({ signal }) => {
       // Re-check guards inside the query (TS narrowing + safety):
       if (!kidPubkey || !parent) {
