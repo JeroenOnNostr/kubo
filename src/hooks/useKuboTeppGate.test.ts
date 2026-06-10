@@ -1,13 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
+import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 
 import {
   TeppDeniedError,
   resolveEnforcedConstruct,
   waitForConstruct,
+  computeFollowListDelta,
+  buildDeltaEventForRecordList,
+  readCachedFollowPubkeys,
   CONSTRUCT_UNAVAILABLE_MESSAGE,
 } from './useKuboTeppGate';
-import type { Construct } from '@/lib/tepp/types';
+import { evaluateEvent } from '@/lib/tepp/evaluate';
+import { KIND_PERMISSION_VIEW_NPUB_A } from '@/lib/tepp/kinds';
+import type { Construct, ConstructEntry } from '@/lib/tepp/types';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 /**
  * KUBO-154 — fail-closed outbound gate when the construct is loading / absent /
@@ -125,5 +132,129 @@ describe('waitForConstruct (bounded cache poll)', () => {
     const qc = new QueryClient();
     const result = await waitForConstruct(qc, KID, PARENT, 200, 40);
     expect(result).toBeNull();
+  });
+});
+
+/**
+ * KUBO-164 — kind-3 delta evaluation. The gate must not hard-deny the whole
+ * follow list because one stale, now-unadmitted follow lingers in it. It
+ * evaluates only the entries NEWLY added versus the kid's previous list.
+ */
+
+const ADMITTED = 'd'.repeat(64); // admitted at view threshold in the construct
+const STALE = 'e'.repeat(64); // formerly-followed, NOT in the construct anymore
+const FRESH_DENY = 'f'.repeat(64); // newly added but not admitted
+
+function viewEntry(pubkey: string): ConstructEntry {
+  return {
+    kind: KIND_PERMISSION_VIEW_NPUB_A,
+    sourceEventId: `view-${pubkey.slice(0, 8)}`,
+    source: 'direct',
+    items: [{ pubkey }],
+    restrictions: [],
+    monitorRelays: [],
+  };
+}
+
+const deltaConstruct: Construct = {
+  subject: KID,
+  guardians: [PARENT],
+  // Only ADMITTED is granted view trust. STALE / FRESH_DENY are unadmitted.
+  entries: [viewEntry(ADMITTED)],
+  blacklist: undefined,
+  extensionTraces: [],
+  inertAuditFindings: [],
+};
+
+function kind3(pubkeys: string[]): NostrEvent {
+  return {
+    id: '0'.repeat(64),
+    sig: '0'.repeat(128),
+    pubkey: KID,
+    kind: 3,
+    content: '',
+    tags: pubkeys.map((pk) => ['p', pk]),
+    created_at: 1_700_000_000,
+  };
+}
+
+/** Mirror the gate's record-list path: build the delta event, evaluate at view. */
+function evaluateFollowList(next: NostrEvent, prev: string[] | null): string {
+  const delta = buildDeltaEventForRecordList(next, prev);
+  return evaluateEvent(
+    delta as unknown as NostrToolsEvent,
+    deltaConstruct,
+    'incoming',
+  ).result;
+}
+
+describe('computeFollowListDelta (KUBO-164 pure helper)', () => {
+  it('treats every entry as added when there is no previous list', () => {
+    expect(computeFollowListDelta(null, [ADMITTED, STALE])).toEqual({
+      added: [ADMITTED, STALE],
+    });
+  });
+
+  it('returns only the entries not present in the previous list', () => {
+    expect(computeFollowListDelta([STALE], [STALE, ADMITTED])).toEqual({
+      added: [ADMITTED],
+    });
+  });
+
+  it('returns no additions for a removals-only change', () => {
+    expect(computeFollowListDelta([STALE, ADMITTED], [ADMITTED])).toEqual({
+      added: [],
+    });
+  });
+
+  it('dedups and ignores empty pubkeys', () => {
+    expect(computeFollowListDelta([], [ADMITTED, ADMITTED, ''])).toEqual({
+      added: [ADMITTED],
+    });
+  });
+});
+
+describe('buildDeltaEventForRecordList (KUBO-164)', () => {
+  it('keeps only the added p-tags and preserves non-p tags', () => {
+    const draft: NostrEvent = {
+      ...kind3([STALE, ADMITTED]),
+      tags: [['p', STALE], ['p', ADMITTED], ['client', 'kubo']],
+    };
+    const delta = buildDeltaEventForRecordList(draft, [STALE]);
+    expect(delta.tags).toEqual([['client', 'kubo'], ['p', ADMITTED]]);
+  });
+});
+
+describe('kind-3 delta evaluation end-to-end (KUBO-164)', () => {
+  it('permits a list with a stale unadmitted follow + a newly-added admitted follow', () => {
+    // prev had STALE (now unadmitted); next adds ADMITTED. Only ADMITTED is
+    // evaluated → permit, even though STALE is unadmitted and still in the list.
+    expect(evaluateFollowList(kind3([STALE, ADMITTED]), [STALE])).not.toBe('deny');
+  });
+
+  it('denies when the newly-added follow is itself unadmitted', () => {
+    expect(evaluateFollowList(kind3([STALE, FRESH_DENY]), [STALE])).toBe('deny');
+  });
+
+  it('evaluates every entry when there is no previous list (denies an unadmitted one)', () => {
+    expect(evaluateFollowList(kind3([ADMITTED, STALE]), null)).toBe('deny');
+  });
+
+  it('permits a removals-only publish (no added entries to evaluate)', () => {
+    // prev had ADMITTED + STALE; next drops STALE. Nothing added → permit.
+    expect(evaluateFollowList(kind3([ADMITTED]), [ADMITTED, STALE])).not.toBe('deny');
+  });
+});
+
+describe('readCachedFollowPubkeys (KUBO-164)', () => {
+  it('returns the cached follow pubkeys when present', () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['follow-list', KID], { event: null, pubkeys: [ADMITTED, STALE] });
+    expect(readCachedFollowPubkeys(qc, KID)).toEqual([ADMITTED, STALE]);
+  });
+
+  it('returns null when no follow list is cached', () => {
+    const qc = new QueryClient();
+    expect(readCachedFollowPubkeys(qc, KID)).toBeNull();
   });
 });

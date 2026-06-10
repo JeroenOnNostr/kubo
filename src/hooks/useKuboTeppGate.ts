@@ -40,6 +40,75 @@ import type { Construct, FullEventVerdict } from '@/lib/tepp/types';
 const RECORD_LIST_KINDS = new Set<number>([3]);
 
 /**
+ * KUBO-164: pure delta between the kid's previous published kind-3 follow list
+ * and the one being published. Returns the pubkeys that are NEWLY ADDED (present
+ * in `next`, absent from `prev`). Removals are intentionally ignored — a kid may
+ * always shrink their own list, and pre-existing entries are carried regardless
+ * of current admission (they were admitted when added; a later trust-clear must
+ * not brick the whole list).
+ *
+ * Inputs are the `p`-tag pubkey columns (`tag[1]`) of each event. A missing
+ * previous list (`prevPubkeys === null`) means EVERY entry is treated as new —
+ * the first follow-list publish is fully evaluated.
+ *
+ * Exported for unit testing.
+ */
+export function computeFollowListDelta(
+  prevPubkeys: string[] | null,
+  nextPubkeys: string[],
+): { added: string[] } {
+  if (prevPubkeys === null) {
+    // No prior list on record — evaluate the whole thing.
+    return { added: [...new Set(nextPubkeys.filter(Boolean))] };
+  }
+  const prevSet = new Set(prevPubkeys.filter(Boolean));
+  const added = [...new Set(nextPubkeys.filter(Boolean))].filter((pk) => !prevSet.has(pk));
+  return { added };
+}
+
+/**
+ * KUBO-164: build the synthetic event the gate feeds to the evaluator for a
+ * record/list kind. We keep all non-`p` tags as-is, but replace the `p` tags
+ * with ONLY the newly-added entries (per `computeFollowListDelta`). This means
+ * the evaluator decides solely on the delta: a stale, now-unadmitted follow that
+ * predates this publish is no longer present in the evaluated event, so it can't
+ * hard-deny the whole list — while a newly-added unadmitted follow still does.
+ *
+ * Exported for unit testing.
+ */
+export function buildDeltaEventForRecordList(
+  draft: NostrEvent,
+  prevPubkeys: string[] | null,
+): NostrEvent {
+  const nextPubkeys = draft.tags.filter(([name]) => name === 'p').map(([, pk]) => pk);
+  const { added } = computeFollowListDelta(prevPubkeys, nextPubkeys);
+  const addedSet = new Set(added);
+  const nonPTags = draft.tags.filter(([name]) => name !== 'p');
+  // Carry only the added p-tags through; preserve their original tag shape
+  // (relay hints / petnames) by selecting from the draft's own p-tags.
+  const addedPTags = draft.tags.filter(([name, pk]) => name === 'p' && addedSet.has(pk));
+  return { ...draft, tags: [...nonPTags, ...addedPTags] };
+}
+
+/**
+ * KUBO-164: read the kid's previous published kind-3 follow pubkeys from the
+ * TanStack cache populated by `useFollowList` (`['follow-list', pubkey]`).
+ * Returns `null` when no list is cached (treated as "all entries are new" by
+ * `computeFollowListDelta`). We prefer the cache over a fresh relay query so the
+ * gate stays synchronous-ish and a relay flap can't brick a follow publish; the
+ * cache is kept warm by the UI's `useFollowList` read on every kid session.
+ * Exported for unit testing.
+ */
+export function readCachedFollowPubkeys(
+  queryClient: QueryClient,
+  pubkey: string,
+): string[] | null {
+  const data = queryClient.getQueryData<{ pubkeys?: string[] }>(['follow-list', pubkey]);
+  if (data && Array.isArray(data.pubkeys)) return data.pubkeys;
+  return null;
+}
+
+/**
  * Distinct denial reasons the UI can map to different copy.
  * - `'deny'`: a concrete construct verdict denied the action (the default).
  * - `'construct-unavailable'`: KUBO-154 fail-closed — TEPP is enforced for
@@ -145,7 +214,22 @@ export function useKuboTeppGate(): KuboTeppGate {
             : undefined,
       });
 
-      const draft = templateToEvent(template, activePubkey ?? '');
+      const fullDraft = templateToEvent(template, activePubkey ?? '');
+
+      // KUBO-164: for record/list kinds (the kid's own kind-3 follow list),
+      // evaluate ONLY the delta versus the kid's previously-published list.
+      // Newly-added p-tags must clear the view threshold; pre-existing entries
+      // are carried regardless of current admission (they were admitted when
+      // added — a later parent trust-clear must not brick every follow/unfollow
+      // publish). Removals are always allowed (they shrink the evaluated set).
+      // No previous list on record → every entry is treated as new.
+      const isRecordList = RECORD_LIST_KINDS.has(fullDraft.kind);
+      const draft = isRecordList
+        ? buildDeltaEventForRecordList(
+            fullDraft,
+            activePubkey ? readCachedFollowPubkeys(queryClient, activePubkey) : null,
+          )
+        : fullDraft;
 
       // Pre-fetch the draft's reference closure so a reply/quote resolves to a
       // concrete admit/deny instead of `pending`. Failure to fetch fails open.
@@ -161,7 +245,7 @@ export function useKuboTeppGate(): KuboTeppGate {
       // referenced pubkey to be admitted at view-or-better — the same
       // threshold as an incoming event. Real interactions stay 'outgoing'
       // (interaction-level required).
-      const direction = RECORD_LIST_KINDS.has(draft.kind) ? 'incoming' : 'outgoing';
+      const direction = isRecordList ? 'incoming' : 'outgoing';
 
       const verdict = evaluateEvent(
         draft as unknown as Parameters<typeof evaluateEvent>[0],

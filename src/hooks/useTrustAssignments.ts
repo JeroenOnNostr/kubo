@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useFollowActions } from '@/hooks/useFollowActions';
 import { useToast } from '@/hooks/useToast';
 import {
   makeTrustTierUpsert,
@@ -47,6 +49,23 @@ function buildPublicPermissionRefs(
   return refs;
 }
 
+/**
+ * KUBO-164: pure decision for whether clearing `targetPubkey`'s trust should
+ * also unfollow them from the kid's kind-3. The unfollow is published via
+ * `useFollowActions`, which signs with the ACTIVE login — so we only do it when
+ * the active login IS the kid being cleared (otherwise we'd write the wrong
+ * user's follow list). When the kid isn't the active login, we skip and rely on
+ * the gate's delta evaluation (KUBO-164) plus a later reconcile.
+ *
+ * Exported for unit testing.
+ */
+export function shouldUnfollowOnClear(
+  activePubkey: string | undefined,
+  kidPubkey: string | undefined,
+): boolean {
+  return !!kidPubkey && activePubkey === kidPubkey;
+}
+
 export interface TrustAssignmentsApi {
   get: (targetPubkey: string) => KuboTrustLevel | undefined;
   setLevel: (targetPubkey: string, level: KuboTrustLevel) => Promise<void>;
@@ -90,6 +109,8 @@ export interface TrustAssignmentsApi {
 export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignmentsApi {
   const { family, setTrustLevel, clearTrustLevel } = useKuboFamily();
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
+  const { unfollowMany } = useFollowActions();
   const { toast } = useToast();
   const featureTepp = !!config.feedSettings.featureTepp;
   const publishPermission = useKuboTeppPublishPermission(kidPubkey);
@@ -311,8 +332,33 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
           variant: 'destructive',
         });
       }
+
+      // KUBO-164 coherence: clearing a person's trust must also drop them from
+      // the kid's kind-3 follow list, so the published list and the published
+      // trust stay coherent (the reverse of the KUBO-148 "trust before follow"
+      // model). Otherwise a stale follow lingers — and with KUBO-162 making
+      // outgoing denies hard, the kid's next follow/unfollow would hard-deny on
+      // that now-unadmitted entry. (The KUBO-164 gate delta is the read-side
+      // backstop; this keeps the wire clean too.)
+      //
+      // `unfollowMany` (via `useFollowActions`) signs the kind-3 with the ACTIVE
+      // user. The kid's kind-3 MUST be kid-signed, so we only unfollow when the
+      // kid being cleared is the active login (true in the parent shell, where
+      // the kid stays selected/active). If the kid isn't the active login we
+      // SKIP rather than publish a kind-3 under the wrong key — the KUBO-164
+      // gate delta still prevents the brick, and a later kid session reconcile
+      // can converge the list. (No new infra; documented limitation.)
+      if (shouldUnfollowOnClear(user?.pubkey, kidPubkey)) {
+        try {
+          await unfollowMany([targetPubkey]);
+        } catch (err) {
+          // Non-fatal: trust is already cleared. The follow entry just lingers;
+          // the gate delta keeps publishes working until it's reconciled.
+          console.warn('clear: kid-3 unfollow failed', err);
+        }
+      }
     },
-    [kidPubkey, clearTrustLevel, featureTepp, publishPermission, publishState, toast],
+    [kidPubkey, clearTrustLevel, featureTepp, publishPermission, publishState, toast, user?.pubkey, unfollowMany],
   );
 
   return { get, setLevel, setLevelIfUnassigned, setLevelsBatch, clear };
