@@ -23,6 +23,15 @@ const NADDR_PATH   = /^\/(naddr1[023456789acdefghjklmnpqrstuvwxyz]+)/;
 // /notifications, /letters/compose, etc.) safely out of scope.
 const NIP05_PATH   = /^\/([^/?#]+@[^/?#]+|[^/?#@]+\.[^/?#@]+)$/;
 
+// KUBO-158: the kid shell's own route subtree. The only same-origin paths the kid
+// app legitimately navigates to (see renderKuboKidRoutes in src/kuboKidRoutes.tsx:
+// /kid, /kid/blobbi, /kid/favorites, /kid/profile/:npub, /kid/post/:id). The
+// interceptor rewrites recognized npub/note/nip05 anchors into /kid/profile|post
+// itself, so any anchor that already points at /kid is a legitimate in-shell link
+// and is allowed through unchanged. Everything else (/t/, /r/, /search,
+// /notifications, /, unknown) is default-DENIED below.
+const KID_SHELL_PATH = /^\/kid(\/|$)/;
+
 /**
  * Intercepts profile/note/card clicks inside a kid-rendered NoteCard and rewrites
  * them to /kid/profile/:npub or /kid/post/:id so the kid stays inside KuboKidLayout.
@@ -48,6 +57,13 @@ const NIP05_PATH   = /^\/([^/?#]+@[^/?#]+|[^/?#@]+\.[^/?#@]+)$/;
  * View-only mode also blocks profile and note anchor clicks entirely — no
  * navigation to /kid/profile or /kid/post from the feed. Profile viewer is
  * still reachable when view-only is OFF.
+ *
+ * - KUBO-158 default-DENY: every OTHER same-origin anchor is BLOCKED. Inline
+ *   #hashtag links (/t/:tag), relay links (/r/...), and any /search,
+ *   /notifications, global-feed, or unknown path are shell escapes — one tap
+ *   would land the kid in the ungated Ditto MainLayout. Only paths inside the
+ *   kid shell (/kid/...) pass through. External (cross-origin) links are left
+ *   untouched so they open normally.
  */
 export function KidNavigationInterceptor({
   pubkey,
@@ -122,9 +138,18 @@ export function KidNavigationInterceptor({
           return;
         }
 
-        // Anchor with some other path (hashtag, geo, relay, etc.) — let it
-        // through unchanged. Those routes are parent-only but not destinations
-        // we need to redirect for KUBO-085/086 scope.
+        // KUBO-158: default-DENY. Any remaining same-origin anchor that is NOT
+        // a kid-shell path (/kid/...) is a shell-escape — hashtag (/t/), relay
+        // (/r/), /search, /notifications, the global feed (/), and any unknown
+        // route would drop the kid into the ungated Ditto MainLayout. Block it
+        // outright (quiet no-op, matching the view-only block above). Anchors
+        // that already point inside the kid shell are legitimate and pass
+        // through to React Router unchanged.
+        if (KID_SHELL_PATH.test(path)) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
         return;
       }
 

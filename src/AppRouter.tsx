@@ -43,6 +43,7 @@ const EmojiPackDialog = lazy(() => import("@/components/EmojiPackDialog").then(m
 import { KuboBootGate } from "@/components/KuboBootGate";
 import { KuboParentLayout } from "@/components/KuboParentLayout";
 import { RequireParentGate } from "@/components/auth/RequireParentGate";
+import { RequireNotKid } from "@/components/auth/RequireNotKid";
 import { KuboOnboardLayout } from "@/components/KuboOnboardLayout";
 import { WelcomePage } from "@/pages/WelcomePage";
 import { CreateParentAccountPage } from "@/pages/CreateParentAccountPage";
@@ -194,6 +195,14 @@ export function AppRouter() {
           <Route path="/follow/:npub" element={<FollowPage />} />
 
           {/* All routes share the persistent MainLayout (sidebar + nav) */}
+          {/* KUBO-158 backstop: RequireNotKid wraps the whole MainLayout group.
+              If the active session is a kid in the family, every MainLayout
+              route (raw URL entry on web — /t/:tag, /search, /notifications,
+              the global feed, unknown paths) redirects to /kid. This is Layer 2
+              behind KidNavigationInterceptor's in-feed default-DENY: a kid must
+              never land in the ungated Ditto MainLayout. Parents / non-kid /
+              logged-out sessions fall through to MainLayout normally. */}
+          <Route element={<RequireNotKid />}>
           <Route element={<MainLayout />}>
             <Route path="/" element={<KuboBootGate />} />
             <Route path="/feed" element={<Index />} />
@@ -323,6 +332,7 @@ export function AppRouter() {
             <Route path="/:nip19" element={<NIP19Page />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
+          </Route>
           </Route>
 
           {/* ─── Kubo parent app ──────────────────────────────────────────── */}
