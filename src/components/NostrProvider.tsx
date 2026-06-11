@@ -267,15 +267,16 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
         // KUBO-173: kind-aware routing. TEPP events (kid↔parent association,
         // permission/blacklist/global lists, allowed-time windows) describe a
-        // minor's social graph + daily schedule and must NEVER fan out to the
-        // public write relays. `routesForEvent` confines them to the configured
-        // family relay set; with none configured it falls back to the primary
-        // write relay (privacyWarning is surfaced to the parent in settings).
-        // Non-TEPP events keep the existing public write-relay routing exactly.
+        // minor's social graph + daily schedule. `routesForEvent` confines them
+        // to the configured family relay set; with none configured it falls
+        // back to the full public write fan-out (KUBO-180 — a single-relay
+        // fallback broke every fresh family because writeRelays[0] is a
+        // restricted-writes pyramid relay; privacyWarning is surfaced to the
+        // parent in settings). Non-TEPP events keep the existing public
+        // write-relay routing exactly.
         if (isTeppKind(event.kind)) {
           const decision = routesForEvent(event, {
             familyRelays: familyRelaysRef.current,
-            primaryRelay: writeRelays[0],
             defaultRelays: writeRelays,
           });
           return [...new Set(decision.relays)];

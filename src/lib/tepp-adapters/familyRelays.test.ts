@@ -31,7 +31,6 @@ const FAMILY = ['wss://family.example/'];
 
 const baseConfig = (over: Partial<RoutingConfig> = {}): RoutingConfig => ({
   familyRelays: [],
-  primaryRelay: PUBLIC[0],
   defaultRelays: PUBLIC,
   ...over,
 });
@@ -79,23 +78,17 @@ describe('routesForEvent (KUBO-173)', () => {
     }
   });
 
-  it('TEPP kind + NO family relay → falls back to the primary relay + warning flag', () => {
-    const out = routesForEvent(
-      { kind: KIND_STATE },
-      baseConfig({ familyRelays: [], primaryRelay: PUBLIC[0] }),
-    );
-    expect(out.relays).toEqual([PUBLIC[0]]);
-    expect(out.privacyWarning).toBe(true);
-    expect(out.isTepp).toBe(true);
-  });
-
-  it('TEPP kind + no family relay + no primary → falls back to public defaults + warning', () => {
-    const out = routesForEvent(
-      { kind: KIND_BLACKLIST },
-      baseConfig({ familyRelays: [], primaryRelay: undefined }),
-    );
-    expect(out.relays).toEqual(PUBLIC);
-    expect(out.privacyWarning).toBe(true);
+  it('TEPP kind + NO family relay → falls back to the FULL public write fan-out + warning (KUBO-180)', () => {
+    // KUBO-180: the fallback must be the full fan-out, never a single relay —
+    // writeRelays[0] (relay.kubo.watch) is a restricted-writes pyramid relay
+    // that rejects non-member pubkeys, so a single-relay fallback made every
+    // fresh family's TEPP publish fail and the kid feed stay fail-closed.
+    for (const kind of [KIND_STATE, KIND_BLACKLIST]) {
+      const out = routesForEvent({ kind }, baseConfig({ familyRelays: [] }));
+      expect(out.relays).toEqual(PUBLIC);
+      expect(out.privacyWarning).toBe(true);
+      expect(out.isTepp).toBe(true);
+    }
   });
 
   it('non-TEPP kind (kind 1) → unchanged default routing, never a warning, never the family relays', () => {

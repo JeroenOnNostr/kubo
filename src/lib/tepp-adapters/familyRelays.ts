@@ -60,17 +60,13 @@ export function normalizeRelayUrl(url: string): string {
  * Config surface `routesForEvent` needs. Mirrors the fields the eventRouter
  * already has on hand in `NostrProvider`:
  *  - `familyRelays`  : the configured private family relay set (normalized).
- *  - `primaryRelay`  : the kid's/app's configured primary WRITE relay — the
- *                      fallback target when no family relay is set (the existing
- *                      `config.relayUrl` semantics). Optional: a brand-new install
- *                      mid-onboarding may have none yet.
  *  - `defaultRelays` : the public write relays a non-TEPP event routes to today
  *                      (the existing eventRouter behavior, passed through
- *                      untouched).
+ *                      untouched). Also the fallback target when no family relay
+ *                      is set (KUBO-180).
  */
 export interface RoutingConfig {
   familyRelays: string[];
-  primaryRelay?: string;
   defaultRelays: string[];
 }
 
@@ -80,9 +76,9 @@ export interface RouteDecision {
   relays: string[];
   /**
    * True only for a TEPP event with NO family relay configured: routing fell
-   * back to the primary relay (or, lacking that, the public default), so the
-   * parent must be warned that TEPP data is on public relays. Always false for
-   * non-TEPP events and for TEPP events with a family relay set.
+   * back to the public write relays, so the parent must be warned that TEPP
+   * data is on public relays. Always false for non-TEPP events and for TEPP
+   * events with a family relay set.
    */
   privacyWarning: boolean;
   /** Whether the event was treated as TEPP (privately routed). */
@@ -96,9 +92,17 @@ export interface RouteDecision {
  *  - Non-TEPP kind  → the existing public write-relay set, unchanged. No warning.
  *  - TEPP kind, family relay set configured → ONLY the family relay set. The
  *    public write relays receive nothing. No warning.
- *  - TEPP kind, NO family relay set → fall back to the primary relay if one
- *    exists, else the public defaults; flag `privacyWarning` so the UI can tell
- *    the parent the data is public.
+ *  - TEPP kind, NO family relay set → fall back to the FULL public write-relay
+ *    fan-out (the pre-KUBO-173 behavior); flag `privacyWarning` so the UI can
+ *    tell the parent the data is public.
+ *
+ * KUBO-180: the fallback was originally the single primary write relay ("at
+ * least stay off the broad fan-out"), but writeRelays[0] is relay.kubo.watch —
+ * a pyramid relay with restricted writes that rejects every non-member pubkey.
+ * Routing a fresh family's TEPP events there alone made every publish fail
+ * ("All promises were rejected"), so no association ever existed and the kid
+ * feed stayed fail-closed forever. Privacy is already conceded on this branch;
+ * the fan-out must maximize the chance the events land somewhere.
  *
  * Defensive: empty strings are dropped and the family set is deduped. A TEPP
  * event NEVER routes to BOTH the family set and the public defaults — that would
@@ -117,13 +121,8 @@ export function routesForEvent(
     return { relays: family, privacyWarning: false, isTepp: true };
   }
 
-  // No family relay configured — fall back, and warn. Prefer the configured
-  // primary relay (so TEPP data at least stays off the broad public fan-out);
-  // if there isn't one yet, the public defaults are the only place to go.
-  const primary = config.primaryRelay && config.primaryRelay.trim()
-    ? [config.primaryRelay.trim()]
-    : config.defaultRelays;
-  return { relays: dedupeNonEmpty(primary), privacyWarning: true, isTepp: true };
+  // No family relay configured — fall back to the public write relays, and warn.
+  return { relays: dedupeNonEmpty(config.defaultRelays), privacyWarning: true, isTepp: true };
 }
 
 /**
