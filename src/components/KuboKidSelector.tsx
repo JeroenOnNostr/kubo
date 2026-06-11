@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, UserRound } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
@@ -18,7 +18,9 @@ import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { toast } from '@/hooks/useToast';
+import { isDarkTheme } from '@/lib/colorUtils';
 import { cn } from '@/lib/utils';
+import { builtinThemes, coreToTokens, toThemeVar } from '@/themes';
 
 /**
  * Persistent kid selector shown in the parent chrome header. Displays the
@@ -39,6 +41,31 @@ export function KuboKidSelector() {
   const kids = family?.kids ?? [];
   const label = selectedKid?.displayName ?? 'Select kid';
   const initial = selectedKid?.displayName?.charAt(0).toUpperCase() ?? '';
+
+  // The selector only renders inside KuboParentLayout, so the active view is
+  // always the parent view of `selectedKid`. Never offer a destination that's
+  // the view we're already on: hide the currently-selected kid from the
+  // "Switch to parent view" list (jumping into a kid's *kid app* is always a
+  // real navigation, so the "kid view" list stays complete). A section with no
+  // remaining entries — and its separator — is dropped entirely.
+  const parentTargets = kids.filter((k) => k.pubkey !== selectedKid?.pubkey);
+
+  // The menu renders through a Radix Portal at document.body — outside the
+  // ScopedTheme wrapper in KuboParentLayout — so it'd otherwise inherit the
+  // global (light) theme variables and render off-white. Apply Kubo's dark
+  // palette as CSS variables directly on the content element so its own
+  // `bg-popover`/`text-popover-foreground` resolve against the dark theme.
+  // (Wrapping the menu's children doesn't work: vars cascade downward, and
+  // the content's background is painted on the element itself, not a child.)
+  const darkThemeVars = useMemo(() => {
+    const tokens = coreToTokens(builtinThemes.dark);
+    const vars: Record<string, string> = {};
+    for (const [key, val] of Object.entries(tokens) as [string, string][]) {
+      vars[toThemeVar(key)] = val;
+    }
+    return vars;
+  }, []);
+  const darkThemeMode = isDarkTheme(builtinThemes.dark.background) ? 'dark' : 'light';
 
   const pickKid = (kidPubkey: string, destination: '/kid' | '/parent/home') => {
     const loginId = logins.find((l) => l.pubkey === kidPubkey)?.id;
@@ -82,7 +109,12 @@ export function KuboKidSelector() {
           <ChevronDown className="size-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent
+        align="end"
+        className="w-56"
+        style={darkThemeVars}
+        data-theme-mode={darkThemeMode}
+      >
         <DropdownMenuLabel>Switch to kid view</DropdownMenuLabel>
         {kids.map((k) => (
           <DropdownMenuItem
@@ -99,22 +131,26 @@ export function KuboKidSelector() {
           </DropdownMenuItem>
         ))}
 
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel>Switch to parent view</DropdownMenuLabel>
-        {kids.map((k) => (
-          <DropdownMenuItem
-            key={`parent-${k.pubkey}`}
-            onClick={() => pickKid(k.pubkey, '/parent/home')}
-            className="gap-2.5"
-          >
-            <KidAvatar
-              pubkey={k.pubkey}
-              className="size-6"
-              fallbackInitial={k.displayName.charAt(0).toUpperCase()}
-            />
-            <span className="flex-1">{k.displayName}</span>
-          </DropdownMenuItem>
-        ))}
+        {parentTargets.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Switch to parent view</DropdownMenuLabel>
+            {parentTargets.map((k) => (
+              <DropdownMenuItem
+                key={`parent-${k.pubkey}`}
+                onClick={() => pickKid(k.pubkey, '/parent/home')}
+                className="gap-2.5"
+              >
+                <KidAvatar
+                  pubkey={k.pubkey}
+                  className="size-6"
+                  fallbackInitial={k.displayName.charAt(0).toUpperCase()}
+                />
+                <span className="flex-1">{k.displayName}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
 
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => nav('/onboard/add-kid')}>
