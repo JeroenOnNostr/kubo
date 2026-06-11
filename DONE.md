@@ -4,6 +4,11 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-06-11
+
+- **KUBO-180: TEPP no-family-relay fallback must fan out to all write relays** (`88de5dc5`)
+  Regression introduced by KUBO-173 (`8d49fa90`): with no family relay configured, TEPP events fell back to the SINGLE primary write relay — but `writeRelays[0]` is `relay.kubo.watch`, a fiatjaf/pyramid relay with `restricted_writes: true` that rejects every non-member pubkey (`blocked: not authorized`, verified with a throwaway-key kind-17700 probe). Every fresh family's TEPP publish failed via `Promise.any` ("All promises were rejected"): `seedKidConstruct` never published the association → construct stuck at `no-association` → kid feed held fail-closed forever ("Hold on — still checking with your grown-up") → parent Trust view toasted "TEPP publish failed" on every reconcile. Fix: [familyRelays.ts](src/lib/tepp-adapters/familyRelays.ts) `routesForEvent` no-family fallback restored to the FULL public write fan-out (pre-KUBO-173 behavior; `privacyWarning` still flagged), `primaryRelay` dropped from `RoutingConfig`; [NostrProvider.tsx](src/components/NostrProvider.tsx) no longer passes it. Family-relay-configured path unchanged (TEPP events still go ONLY to the family set). Fallback tests updated. tsc + eslint clean, vitest 530/530, fresh incognito onboarding browser-verified (feed populates, construct loads).
+
 ## 2026-06-10
 
 - **KUBO-174: Adversarial + structural TEPP test suite** (`e2f645ef`)
