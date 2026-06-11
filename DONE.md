@@ -6,7 +6,7 @@ Completed work, most recent first.
 
 ## 2026-06-11
 
-- **KUBO-187: Switch to calendar versioning (`vYEAR.MONTH.DAY`)** (`PENDING`)
+- **KUBO-187: Switch to calendar versioning (`vYEAR.MONTH.DAY`)** (`5c43fab2`)
   Version is now the release date, so the number itself tells you when a build shipped. Changed [package.json](package.json) `"version"` `2.10.2` → `2026.06.11` (the single source for `import.meta.env.VERSION` → Settings footer / VersionCheck toast / Sentry release, inlined by `vite.config.ts`), and [android/app/build.gradle](android/app/build.gradle) `versionName "0.4.5"` → `"2026.06.11"` with `versionCode 12` → `20260611` (date as `YYYYMMDD`, keeping the store-required monotonic integer well above the old counter). Added the scheme-switch entry to [CHANGELOG.md](CHANGELOG.md) and updated the version-bump step in [docs/zapstore-publish.md](docs/zapstore-publish.md) from semver to calver (tag prefix stays `kubo-v`, so the tag is `kubo-v2026.06.11`). Note `2026.06.11` is not strict-semver (leading zeros) — harmless here since the package is `private` and nothing in the build path runs semver against it; `npm version` tooling won't operate on it. **Merge-safety checked:** only version *values* changed — no edits to the shared version machinery (`vite.config.ts`, `changelog.ts`), so future Ditto merges see the same trivial one-line "keep ours" conflicts on `package.json`/`CHANGELOG.md` that already exist today (we were at 2.10.2, upstream at 2.13.1). Verified: tsc exit 0, `vite build` exit 0, new version inlined in `dist` bundle (3 occurrences), old `2.10.2` absent.
 
 - **KUBO-183: Fix kid/view selector dropdown theming and redundant entries** (`9423b856`)
