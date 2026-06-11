@@ -106,10 +106,12 @@ If any prerequisite is missing, restore it before continuing — do **not** rege
 
 #### 1. Bump version
 
+Kubo uses **calendar versioning**: the version is the release date as `vYEAR.MONTH.DAY` (e.g. a build released on 11 June 2026 is `2026.06.11`). Keep `package.json` `"version"` and the gradle values below in sync — set all to the same release date.
+
 Edit `android/app/build.gradle`:
 
-- `versionCode` — increment by 1 (Android-side monotonic int).
-- `versionName "X.Y.Z"` — semver. Tag prefix is `kubo-v`, so `versionName "0.4.2"` → tag `kubo-v0.4.2`.
+- `versionCode` — the release date as an integer `YYYYMMDD` (e.g. `20260611`). Stays monotonic as long as each release has a later date.
+- `versionName "YEAR.MM.DD"` — the calendar version (zero-padded month/day, e.g. `2026.06.11`). Tag prefix is `kubo-v`, so `versionName "2026.06.11"` → tag `kubo-v2026.06.11`.
 
 #### 2. Add a CHANGELOG entry
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.06.11] - 2026-06-11
+
+### Changed
+- **New version scheme** — Kubo now uses calendar versioning (`vYEAR.MONTH.DAY`), so the version number is simply the date the build was released. The Android `versionCode` is derived from the same date (`YYYYMMDD`).
+
 ## [0.4.5] - 2026-05-07
 
 ### Added
