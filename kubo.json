@@ -21,6 +21,7 @@
     "showVideos": true,
     "feedIncludeNormalVideos": true,
     "feedIncludeShortVideos": false,
+    "followsFeedShowReplies": false,
     "showUserStatuses": false,
     "showPolls": false,
     "feedIncludePolls": false,

@@ -543,19 +543,28 @@ export function getPageKinds(def: ExtraKindDef, feedSettings: FeedSettings): num
 
 /**
  * Feed settings applied to a newly created kid account. Kids start with only
- * visual content types (photos, videos, vines) enabled — every other feed-kind
- * toggle is off. Parents can adjust via /parent/kid/:id/feed-settings.
+ * normal videos (kind 21) enabled — matching the kubo.json app-wide default —
+ * with every other feed-kind toggle off and replies hidden. This must stay in
+ * sync with kubo.json's `feedSettings`: the kid default is meant to mirror the
+ * fresh-install default, not diverge from it (KUBO-181). Parents can broaden
+ * the kid's feed later via /parent/kid/:id/feed-settings.
  *
  * Partial: unspecified keys fall through to `hardcodedConfig.feedSettings`
  * defaults, so future upstream additions inherit the app-wide default rather
  * than silently defaulting to false for kids.
  */
 export const DEFAULT_KID_FEED_SETTINGS: Partial<FeedSettings> = {
-  // Visual content types — the four kinds kids start with
-  feedIncludePhotos: true,
+  // Visual content — normal videos (kind 21) only, mirroring kubo.json.
   feedIncludeNormalVideos: true,
-  feedIncludeShortVideos: true,
-  feedIncludeVines: true,
+
+  // Other visual kinds off — photos, short videos and vines are NOT part of
+  // the kid default (they used to be; that contradicted kubo.json — KUBO-181).
+  feedIncludePhotos: false,
+  feedIncludeShortVideos: false,
+  feedIncludeVines: false,
+
+  // Replies hidden by default for kids, regardless of the app-wide default.
+  followsFeedShowReplies: false,
 
   // Everything else off
   feedIncludePosts: false,
