@@ -8,6 +8,7 @@ import { useKuboFamily } from "@/hooks/useKuboFamily";
 import { useEncryptedSettings, setLocalSettingsSync } from "@/hooks/useEncryptedSettings";
 import { isSyncDone } from "@/hooks/useInitialSync";
 import { parseBlossomServerList } from "@/lib/appBlossom";
+import { resolveKidActiveFeatureTeppMirror } from "@/lib/tepp-adapters/featureTeppMirror";
 import { getStorageKey } from "@/lib/storageKey";
 import { ACTIVE_THEME_KIND, parseActiveProfileTheme } from "@/lib/themeEvent";
 import type { ThemeConfig } from "@/themes";
@@ -361,7 +362,21 @@ export function NostrSync() {
           const merged = { ...currentFeed, ...remoteFeed };
           // Preserve the parent's mirror value for skipped keys (don't let the
           // kid's synced value bleed into config even cosmetically).
-          if (activeIsKid) merged.featureTepp = currentFeed?.featureTepp ?? false;
+          // KUBO-182: fall back to the app-wide default (`config.feedSettings`,
+          // which is the deep-merged value including the `true` default), NOT
+          // `false`. `current` here is the persisted partial, so an install
+          // where the parent never touched the toggle has `currentFeed` with no
+          // `featureTepp` key at all. The old `?? false` then wrote `false` into
+          // the device-local mirror the first time a freshly-added kid became
+          // the active session (their seeded settings omit `featureTepp`),
+          // contradicting the KUBO-150/151 default-ON intent and hiding the
+          // Trust → Diagnostics link. Default-ON keeps the mirror honest.
+          if (activeIsKid) {
+            merged.featureTepp = resolveKidActiveFeatureTeppMirror(
+              currentFeed?.featureTepp,
+              config.feedSettings.featureTepp,
+            );
+          }
           updates.feedSettings = merged;
           changed = true;
         }
@@ -469,6 +484,8 @@ export function NostrSync() {
     recentlyWritten,
     seededTimestamp,
     config.appId,
+    // KUBO-182: read as the default-ON fallback for the kid-active mirror skip.
+    config.feedSettings.featureTepp,
   ]);
 
   // Sync active profile theme (kind 16767) on pageload when autoShareTheme is enabled.

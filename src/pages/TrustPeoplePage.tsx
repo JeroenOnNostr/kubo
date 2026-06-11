@@ -173,6 +173,16 @@ export function TrustHeader({
 }) {
   const nav = useNavigate();
   const { config } = useAppContext();
+  const { family } = useKuboFamily();
+
+  // KUBO-182: show the Diagnostics link off the AUTHORITATIVE enforcement flag
+  // (`family.teppEnforced`), not the `config.feedSettings.featureTepp` mirror.
+  // Per KUBO-152 the mirror is device-local and parent-UI-only; it gets
+  // clobbered to `false` when the active session flips to a freshly-added kid
+  // whose synced settings omit `featureTepp` (adding a 2nd/3rd kid). That made
+  // the button vanish even though TEPP was still enforced for the family. Use
+  // the same predicate the EditKidSettingsPage toggle reflects so the two agree.
+  const teppOn = family?.teppEnforced ?? !!config.feedSettings.featureTepp;
 
   return (
     <>
@@ -193,7 +203,7 @@ export function TrustHeader({
       </div>
       {/* Diagnostics link — only when TEPP is on. Helps the parent see why
           trust assignments aren't filtering the kid feed. */}
-      {config.feedSettings.featureTepp && (
+      {teppOn && (
         <button
           type="button"
           onClick={() => nav('/parent/trust/diagnostics')}
