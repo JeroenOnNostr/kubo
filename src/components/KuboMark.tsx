@@ -16,7 +16,9 @@ interface KuboMarkProps {
  *
  * NOTE: public/logo-color.svg must stay on disk — the favicon and the
  * pre-React #preloader in index.html still reference it as a file. Keep this
- * markup in sync with that file.
+ * markup in sync with that file AND with the #preloader's inline copy. The
+ * React loading splash (KuboLoadingScreen.tsx) reuses THIS component, so it
+ * needs no separate copy.
  */
 export function KuboMark({ size = 48, className }: KuboMarkProps) {
   return (

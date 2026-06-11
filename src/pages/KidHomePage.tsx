@@ -12,6 +12,7 @@ import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { NextPostFAB } from '@/components/kid/NextPostFAB';
 import { KidFeedList } from '@/components/feed/KidFeedList';
 import { KidNavigationInterceptor } from '@/components/feed/KidNavigationInterceptor';
+import { KuboLoadingScreen } from '@/components/KuboLoadingScreen';
 import { NoteCard } from '@/components/NoteCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { dismissPreloader } from '@/lib/preloader';
@@ -78,19 +79,34 @@ export function KidHomePage() {
   const INITIAL_UNLOCKED_COUNT = 2;
   const [unlockedCount, setUnlockedCount] = useState(INITIAL_UNLOCKED_COUNT);
 
-  // KUBO-140: the single boot loading screen is the static #preloader
-  // (index.html). It stays up while the feed loads underneath, and is
-  // dismissed once BOTH (a) the feed's first notes page has settled AND (b)
-  // the first few visible video thumbnails are warmed — so the feed reveals
-  // already painted, no thumbnail pop-in. KidFeedList surfaces the items via
-  // onFeedItems; usePrefetchKidThumbnails warms them (and has its own
+  // KUBO-140: the kid app holds a loading splash while the feed loads
+  // underneath, dismissed once BOTH (a) the feed's first notes page has settled
+  // AND (b) the first few visible video thumbnails are warmed — so the feed
+  // reveals already painted, no thumbnail pop-in. KidFeedList surfaces the items
+  // via onFeedItems; usePrefetchKidThumbnails warms them (and has its own
   // timeouts so a slow/missing thumbnail never hangs boot).
+  //
+  // KUBO-xxx: the splash is now the re-armable React <KuboLoadingScreen/>
+  // overlay (rendered below), not just the one-shot static #preloader. Because
+  // KidHomePage remounts fresh on every entry — cold boot, finishing
+  // onboarding, and a parent swapping back into the kid feed — `feedSettled`
+  // starts false and the overlay covers all three uniformly. The static
+  // #preloader stays only as the pre-React first paint; KuboLoadingScreen
+  // dismisses it on mount.
   const [feedSettled, setFeedSettled] = useState(false);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const thumbsReady = usePrefetchKidThumbnails(feedItems, {
     n: 3,
     enabled: feedSettled,
   });
+
+  // Safety override: force the splash down even if the gate never satisfies
+  // (notes never arrive). Re-armed per kid in the pubkey-change effect below.
+  const [forceHidden, setForceHidden] = useState(false);
+
+  // The overlay is shown whenever the feed isn't ready yet — the exact inverse
+  // of the condition that used to dismiss the static preloader.
+  const showLoadingScreen = !forceHidden && !(feedSettled && thumbsReady);
 
   useEffect(() => {
     if (feedSettled && thumbsReady) dismissPreloader();
@@ -100,21 +116,27 @@ export function KidHomePage() {
   // changes (parent swaps kid via signer-swap, or a kid logs in). Without this
   // the next kid starts with the previous kid's progress unlocked and the
   // gate wouldn't re-arm for the new feed.
+  //
+  // The 10s safety timer is armed HERE (keyed on user?.pubkey) rather than on
+  // mount, so a kid swap >10s into a session gets a fresh 10s budget instead of
+  // an already-expired one. Never keep the splash up longer than the feed
+  // query's own 10s timeout (AbortSignal.timeout(10_000) in useKidFeed); if
+  // notes never arrive, force it down. (lib/preloader has an 11s backstop for
+  // the static node; this is the tighter one for the React overlay, and the
+  // prefetch hook caps at ~2.5s once notes do arrive.)
   useEffect(() => {
     setUnlockedCount(INITIAL_UNLOCKED_COUNT);
     setFeedSettled(false);
     setFeedItems([]);
+    setForceHidden(false);
     window.scrollTo(0, 0);
-  }, [user?.pubkey]);
 
-  // Safety net: never keep the preloader up longer than the feed query's own
-  // 10s timeout (AbortSignal.timeout(10_000) in useKidFeed). If notes never
-  // arrive, dismiss anyway. (lib/preloader has an 11s backstop; this is the
-  // tighter one, and the prefetch hook caps at ~2.5s once notes do arrive.)
-  useEffect(() => {
-    const t = setTimeout(() => dismissPreloader(), 10_000);
+    const t = setTimeout(() => {
+      setForceHidden(true);
+      dismissPreloader();
+    }, 10_000);
     return () => clearTimeout(t);
-  }, []);
+  }, [user?.pubkey]);
   const postRefs = useRef<(HTMLElement | null)[]>([]);
   const getPostElement = useCallback(
     (idx: number) => postRefs.current[idx] ?? null,
@@ -214,9 +236,10 @@ export function KidHomePage() {
     <div className="min-h-dvh pb-24 flex flex-col gap-3 px-5 pt-2">
       {/* Scrollable feed — Nostr events from the kid's follow list, kinds
           driven by feedSettings. Videos play inline via NoteCard + VideoPlayer.
-          KidFeedList is mounted immediately so its query runs; the #preloader
-          (index.html) stays on top until onFirstLoadSettled fires, then we
-          dismiss it to reveal the already-painted feed (see markFeedReady). */}
+          KidFeedList is mounted immediately so its query runs; the loading
+          overlay below stays on top until onFirstLoadSettled fires and the
+          first thumbnails warm, then it fades to reveal the already-painted
+          feed. */}
       <div className="flex-1">
         <KidFeedList
           variant="kid"
@@ -237,6 +260,14 @@ export function KidHomePage() {
           getPostElement={getPostElement}
         />
       )}
+
+      {/* Re-armable loading splash. Covers the feed (and top bar / bottom nav
+          via z-index:9999) on cold boot, after finishing onboarding, and when a
+          parent swaps back into a kid's feed — held until feedSettled &&
+          thumbsReady. A TEPP hold counts as settled, so a held feed reveals its
+          notice instead of hanging behind the splash. Only the loaded branch
+          renders it; favorites/playing/inbox have their own states. */}
+      {showLoadingScreen && <KuboLoadingScreen />}
     </div>
   );
 }

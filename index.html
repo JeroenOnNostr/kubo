@@ -33,12 +33,14 @@
   </head>
   <body style="margin:0;background:#1E3A8A">
     <!-- Pre-React loading screen. Lives OUTSIDE #root so React doesn't
-         touch it. Removed by main.tsx once the app has mounted.
-         KEEP IN SYNC with src/components/KuboLoadingScreen.tsx (kid variant):
-         this is its pre-React twin, so the very first paint already IS the
-         "Getting your videos ready…" splash and the handoff to React is
-         invisible (logo+halo, white spinner, title, three pulsing dots on
-         #1E3A8A). theme.js no longer recolors it. -->
+         touch it. Dismissed (faded + removed) via dismissPreloader() once real
+         content has painted underneath — on the kid path, the moment
+         KuboLoadingScreen mounts.
+         KEEP IN SYNC with src/components/KuboLoadingScreen.tsx (the re-armable
+         React twin): this is its pre-React paint, so the very first frame
+         already IS the "Getting your videos ready…" splash and the handoff to
+         the React overlay is invisible (logo+halo, white spinner, title, three
+         pulsing dots on #1E3A8A). theme.js no longer recolors it. -->
     <div id="preloader" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#1E3A8A">
       <!-- Font: system-ui ONLY (no Inter). The preloader paints before the
            Inter webfont loads; including Inter here caused a font-display:swap
