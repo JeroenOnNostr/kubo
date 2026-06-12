@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.06.12.1] - 2026-06-12
+
+### Fixed
+- **Removed in-app version notifications** — the post-update "What's new" pop-up has been removed. It linked into release notes that could take you out of Kubo, so the notification is now disabled.
+
 ## [2026.06.12] - 2026-06-12
 
 ### Added
