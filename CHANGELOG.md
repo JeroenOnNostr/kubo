@@ -1,9 +1,19 @@
 # Changelog
 
-## [2026.06.11] - 2026-06-11
+## [2026.06.12] - 2026-06-12
+
+### Added
+- **Trust-gated kid feed** — every post, profile, reaction, and repost a child can see or interact with now flows through Kubo's Trust Extended Permissions Protocol (TEPP), so the feed is scoped to people the parent has admitted — no strangers, no algorithmic reach-around.
+- **Group chat** — parents can create and join managed group chats, including private groups, directly from Kubo.
 
 ### Changed
+- **Trust is on by default** — new installs start with the trust gate enabled and the child's circle seeded during onboarding, so the feed is safe from the very first launch instead of needing setup first.
+- **Smoother startup** — a single loading screen now holds until the feed and its first thumbnails are actually ready, including during onboarding and when switching back from the parent area, so the feed no longer flashes empty.
 - **New version scheme** — Kubo now uses calendar versioning (`vYEAR.MONTH.DAY`), so the version number is simply the date the build was released. The Android `versionCode` is derived from the same date (`YYYYMMDD`).
+
+### Fixed
+- **Reliable family setup** — adding a second or third child, leaving and returning to the parent area, and editing feed sources no longer drop trust associations or break the link into Diagnostics.
+- **Privacy hardening** — trust events now route to the family's private relay set, and the feed fails closed (shows nothing) rather than leaking unvetted content if the trust data can't be loaded.
 
 ## [0.4.5] - 2026-05-07
 
