@@ -4,6 +4,11 @@ Issue prefix: `KUBO-xxx`
 
 Completed work, most recent first.
 
+## 2026-06-12
+
+- **KUBO-191: Release v2026.06.12 to Zapstore + GitHub** (`aa19624a`)
+  First release on the calendar-versioning scheme. Bumped the version to today's date across [package.json](package.json), [package-lock.json](package-lock.json), and [android/app/build.gradle](android/app/build.gradle) (`versionName "2026.06.12"`, `versionCode 20260612`). Note `npm version` normalizes the calver to `2026.6.12` (strips zero-padding) and rewrites both package.json + lockfile — had to manually re-pad to `2026.06.12` in all three fields so the tag/store version stays zero-padded. Built the release APK via the runbook ([docs/zapstore-publish.md](docs/zapstore-publish.md)) and verified the signer: SHA-256 `3a997f99…7cc8`, `CN=Kubo, O=Web of Trust Foundation` — the permanent release key, not the debug fallback. Published to Zapstore (`zsp publish -q --skip-preview`) — confirmed on `wss://relay.zapstore.dev` as kind-32267 + kind-30063 `com.kubo.app@2026.06.12` with a fresh `created_at`. Tagged `kubo-v2026.06.12` and cut a GitHub release with the APK attached. CHANGELOG bundles the user-facing work accrued since v0.4.5: TEPP trust-gating (on by default, seeded at onboarding), group chat, the single-boot loading screen, and privacy/relay hardening. **Publish gotcha:** the first two `zsp publish` attempts hung waiting for the bunker signer (user's NostraSigner/nsec.app bunker was timing out independently); once the bunker recovered, a plain retry went through with no re-pairing needed (persisted client key at `~/.config/zsp/bunker-keys/73d69a0d…0071.key` still valid). See memory [[kubo-zapstore-publish]].
+
 ## 2026-06-11
 
 - **KUBO-188: Re-armable kid-feed loading screen for onboarding + parent→feed transitions**
