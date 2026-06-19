@@ -57,7 +57,7 @@ import { TrustPeoplePage } from "@/pages/TrustPeoplePage";
 import { TrustPlacesPage } from "@/pages/TrustPlacesPage";
 import { ParentTrustIndexPage } from "@/pages/ParentTrustIndexPage";
 import { ParentTrustDiagnosticsPage } from "@/pages/ParentTrustDiagnosticsPage";
-import { ParentAlertsPage } from "@/pages/ParentAlertsPage";
+import { SupportPage } from "@/pages/SupportPage";
 import { ParentFeedPage } from "@/pages/ParentFeedPage";
 import { renderKuboFeedSourcesRoutes } from "@/kuboFeedSourcesRoutes";
 import { VideoViewPage } from "@/pages/VideoViewPage";
@@ -359,7 +359,11 @@ export function AppRouter() {
             <Route path="/parent/trust/diagnostics" element={<ParentTrustDiagnosticsPage />} />
             <Route path="/parent/groups/invite/:host/:gid/:code" element={<GroupInviteLandingPage />} />
             <Route path="/parent/groups/:addr"  element={<GroupViewPage       />} />
-            <Route path="/parent/alerts"        element={<ParentAlertsPage    />} />
+            <Route path="/parent/support"       element={<SupportPage         />} />
+            {/* KUBO-185: Alerts merged into Home + tab replaced by Support.
+                Keep the old route as a redirect so deep links / tourState
+                references resolve to the dashboard instead of 404ing. */}
+            <Route path="/parent/alerts"        element={<Navigate to="/parent/home" replace />} />
             <Route path="/parent/kid-settings"  element={<EditKidSettingsPage />} />
             <Route path="/parent/feed-settings" element={<EditKidFeedSettingsPage />} />
             <Route path="/parent/keys"          element={<KidKeysPage         />} />

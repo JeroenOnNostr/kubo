@@ -11,6 +11,7 @@ import {
 import { NavTile } from '@/components/NavTile';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { KidAvatar } from '@/components/KidAvatar';
+import { AlertsSection } from '@/components/AlertsSection';
 import { WatchHistoryStrip } from '@/pages/KidDashboardPage.WatchHistoryStrip';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -142,6 +143,15 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
           </TabsContent>
         </Tabs>
       </section>
+
+      {/* Alerts — KUBO-185: folded in from the former /parent/alerts tab so
+          kid → parent requests live one tap away on Home. Reuses the shared
+          <AlertsSection /> (same Approve/Deny path), with the compact `home`
+          empty state so this block stays quiet when nothing's pending. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold">Alerts</h2>
+        <AlertsSection variant="home" />
+      </section>
     </div>
   );
 }
@@ -157,7 +167,9 @@ function ActivityChartCard({
 }) {
   return (
     <Card className="p-4 flex flex-col gap-3">
-      <div className="h-40 w-full">
+      {/* Shrunk h-40 → h-32 (KUBO-185): the Alerts block now sits beneath this
+          card, so a slightly shorter chart keeps Home from getting top-heavy. */}
+      <div className="h-32 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} barCategoryGap="20%">
             <CartesianGrid vertical={false} stroke="hsl(var(--muted))" />

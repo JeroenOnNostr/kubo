@@ -21,8 +21,9 @@ interface RequestInteractButtonProps {
  *   - the creator is currently assigned trust level "view"
  *
  * Tapping fires a kid → parent in-device request (stored on `KuboFamily.
- * trustRequests`) that the parent approves or denies in /parent/alerts. While
- * pending, the button flips to "Request pending" and a second tap cancels.
+ * trustRequests`) that the parent approves or denies in the Alerts section of
+ * the parent Home dashboard (KUBO-185). While pending, the button flips to
+ * "Request pending" and a second tap cancels.
  *
  * Hidden on own-profile, when logged out, and when the creator is already
  * Interact or Extend (no upgrade to ask for).

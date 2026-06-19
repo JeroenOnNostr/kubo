@@ -14,7 +14,7 @@ import { useSyncExternalStore } from 'react';
  *   0 = inactive (not started, or finished)
  *   1 = centered intro card on /kid (no anchor — full-screen statement)
  *   2 = parent-gate gear icon (no Next button — advances on gate-success)
- *   3 = parent bottom nav (Home/Feed/Trust/Upload/Alerts overview)
+ *   3 = parent bottom nav (Home/Feed/Trust/Upload/Support overview)
  *   4 = parent Feed source-tiles area on /parent/feed (source-types primer)
  *   5 = kid selector pill (round-trip + add another kid)
  *   6 = Groups section on /parent/trust/people (Kubo Testers nudge)
