@@ -1,22 +1,26 @@
 import { useMemo, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, PlaySquare, Upload, Users, Bell } from 'lucide-react';
+import { Home, PlaySquare, Upload, Users, LifeBuoy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { selectionChanged } from '@/lib/haptics';
 import { ArcBackground } from '@/components/ArcBackground';
 import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { useHasUnreadTestersGroup } from '@/hooks/useHasUnreadTestersGroup';
+import { isTestersGroupAddr } from '@/lib/appRelays';
 
 /**
- * Kubo parent-app bottom nav: Home · Feed · Trust · Upload · Alerts.
+ * Kubo parent-app bottom nav: Home · Feed · Trust · Upload · Support.
  *
  * - Home  → per-kid dashboard (KidDashboardPage) for the currently-selected
  *           kid signer. Tiles link to the kid-settings / feed-settings /
- *           trust / keys / alerts pages.
+ *           trust / keys pages. Alerts (kid → parent requests) now live inline
+ *           on this dashboard (KUBO-185), and the pending-request dot badge
+ *           rides on this tab.
  * - Feed  → preview feed of what the selected kid will see (ParentFeedPage).
  * - Trust → kid-scoped trust-people / trust-places.
  * - Upload → content uploader.
- * - Alerts → watch-requests and safety notifications.
+ * - Support → get help / give support (KUBO-186), replacing the old Alerts tab.
  */
 const HOME_PATHS = new Set([
   '/parent/home',
@@ -25,17 +29,38 @@ const HOME_PATHS = new Set([
   '/parent/wot',
 ]);
 
+/**
+ * Pull the (still URL-encoded) group address out of a `/parent/groups/:addr`
+ * path, or null if it isn't a group-view route. Used to route the single group
+ * view to the correct bottom-nav tab — the Kubo Testers group belongs to
+ * Support, every other group to Trust.
+ */
+function groupAddrFromPath(p: string): string | null {
+  const m = p.match(/^\/parent\/groups\/([^/]+)$/);
+  return m ? m[1] : null;
+}
+
 const TABS = [
   { to: '/parent/home',   icon: Home,       label: 'Home',
     match: (p: string) => HOME_PATHS.has(p) },
   { to: '/parent/feed',   icon: PlaySquare, label: 'Feed',
     match: (p: string) => p === '/parent/feed' || p === '/parent/feed-settings' || p.startsWith('/parent/feed/') },
   { to: '/parent/trust',  icon: Users,      label: 'Trust',
-    match: (p: string) => p.startsWith('/parent/trust') || p.startsWith('/parent/groups/') },
+    match: (p: string) => {
+      if (p.startsWith('/parent/trust')) return true;
+      // Group views belong to Trust — except the Kubo Testers group, which is
+      // reached from (and highlights) Support.
+      const addr = groupAddrFromPath(p);
+      return addr !== null && !isTestersGroupAddr(addr);
+    } },
   { to: '/parent/upload', icon: Upload,     label: 'Upload',
     match: (p: string) => p === '/parent/upload' },
-  { to: '/parent/alerts', icon: Bell,       label: 'Alerts',
-    match: (p: string) => p === '/parent/alerts' },
+  { to: '/parent/support', icon: LifeBuoy,  label: 'Support',
+    match: (p: string) => {
+      if (p === '/parent/support') return true;
+      // The testers group view is part of the Support flow.
+      return isTestersGroupAddr(groupAddrFromPath(p) ?? undefined);
+    } },
 ] as const;
 
 export function KuboBottomNav() {
@@ -49,9 +74,10 @@ export function KuboBottomNav() {
   useRegisterTourAnchor('parentBottomNav', navRef);
   useRegisterTourAnchor('parentFeedTab', feedTabRef);
 
-  // KUBO-098: badge the Alerts tab when there's at least one pending kid →
-  // parent trust request. Counts across all kids — single-device, single-
-  // family scope means a dot is enough; we don't render the count.
+  // KUBO-098/185: badge the Home tab when there's at least one pending kid →
+  // parent trust request. Alerts moved onto the Home dashboard, so its
+  // "something needs you" dot rides the Home tab now. Counts across all kids —
+  // single-device, single-family scope means a dot is enough; no count.
   const hasAlerts = useMemo(() => {
     const requests = family?.trustRequests;
     if (!requests) return false;
@@ -61,6 +87,10 @@ export function KuboBottomNav() {
     return false;
   }, [family]);
 
+  // KUBO-191: badge the Support tab when there are unread messages in the
+  // Kubo Testers group (the support chat now lives on /parent/support).
+  const hasUnreadTesters = useHasUnreadTestersGroup();
+
   return (
     <nav ref={navRef} className="fixed bottom-0 left-0 right-0 z-40 sidebar:hidden">
       <div className="relative">
@@ -68,7 +98,9 @@ export function KuboBottomNav() {
         <div className="h-11 flex items-center relative">
           {TABS.map(({ to, icon: Icon, label, match }) => {
             const active = match(location.pathname);
-            const showAlertDot = to === '/parent/alerts' && hasAlerts;
+            const showAlertDot =
+              (to === '/parent/home' && hasAlerts) ||
+              (to === '/parent/support' && hasUnreadTesters);
             return (
               <NavLink
                 key={to}
@@ -85,7 +117,7 @@ export function KuboBottomNav() {
                   {showAlertDot && (
                     <span
                       className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-destructive ring-2 ring-background"
-                      aria-label="Pending alerts"
+                      aria-label={to === '/parent/support' ? 'New messages' : 'Pending alerts'}
                     />
                   )}
                 </span>

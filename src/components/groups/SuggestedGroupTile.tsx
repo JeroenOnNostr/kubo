@@ -13,6 +13,14 @@ interface SuggestedGroupTileProps {
   subtitle: string;
   /** Optional initial / picture for the avatar fallback. */
   avatarLabel?: string;
+  /**
+   * When true the user is already a member: hide the "Suggested" pill (the
+   * tile now reads as a plain "open the chat" CTA). Tapping still navigates
+   * into the group — the join mutation treats "already a member" as success.
+   * Used on the Support page, where the tile always renders regardless of
+   * membership.
+   */
+  joined?: boolean;
 }
 
 /**
@@ -33,13 +41,20 @@ export function SuggestedGroupTile({
   title,
   subtitle,
   avatarLabel,
+  joined = false,
 }: SuggestedGroupTileProps) {
   const nav = useNavigate();
   const { join, pending } = useGroupActions();
   const { data: group } = useGroup(addr);
   const [error, setError] = useState<string | null>(null);
 
-  const initial = (avatarLabel ?? title).slice(0, 1).toUpperCase();
+  // Prefer the group's own NIP-29 (kind-39000) name/about so the tile shows
+  // what the group actually calls itself; fall back to the passed props while
+  // the metadata loads (avoids an empty flash) or if the relay omits them.
+  const displayTitle = group?.name?.trim() || title;
+  const displaySubtitle = group?.about?.trim() || subtitle;
+
+  const initial = (avatarLabel ?? displayTitle).slice(0, 1).toUpperCase();
   const picture = group?.picture;
 
   const onClick = async () => {
@@ -60,10 +75,11 @@ export function SuggestedGroupTile({
         onClick={onClick}
         disabled={pending.join}
         className={cn(
-          'w-full flex items-center gap-3 p-2.5 rounded-xl text-left',
-          // Soft primary tint instead of card/60 so the CTA reads at a
-          // glance, but the row geometry matches TrustRow exactly.
-          'bg-primary/8 hover:bg-primary/12 transition-colors',
+          'w-full flex items-center gap-3 p-3 rounded-xl text-left',
+          // Uniform card background, matching the NavTiles beside it and the
+          // tappable tiles across the app (Feed/Trust). The "Suggested" pill —
+          // not a tinted background — is what signals this is a CTA.
+          'bg-card hover:bg-card/80 transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           'disabled:opacity-60',
         )}
@@ -87,12 +103,14 @@ export function SuggestedGroupTile({
         )}
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate flex items-center gap-1.5">
-            <span className="truncate">{title}</span>
-            <span className="text-[9px] uppercase tracking-[0.08em] text-primary font-semibold flex-shrink-0">
-              Suggested
-            </span>
+            <span className="truncate">{displayTitle}</span>
+            {!joined && (
+              <span className="text-[9px] uppercase tracking-[0.08em] text-primary font-semibold flex-shrink-0">
+                Suggested
+              </span>
+            )}
           </div>
-          <div className="text-[11px] text-muted-foreground truncate">{subtitle}</div>
+          <div className="text-[11px] text-muted-foreground truncate">{displaySubtitle}</div>
         </div>
         <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" aria-hidden />
       </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
@@ -16,7 +16,10 @@ import { ManageMembersDialog } from '@/components/groups/ManageMembersDialog';
 import { useGroup } from '@/hooks/useGroup';
 import { useGroupActions } from '@/hooks/useGroupActions';
 import { useGroupJoinRequests } from '@/hooks/useGroupJoinRequests';
+import { useGroupMessages } from '@/hooks/useGroupMessages';
+import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { buildInviteUrl, parseGroupAddr } from '@/lib/nip29';
+import { groupHomePath } from '@/lib/appRelays';
 import { cn } from '@/lib/utils';
 
 /**
@@ -35,12 +38,53 @@ export function GroupViewPage() {
   const addr = params.addr ? decodeURIComponent(params.addr) : undefined;
 
   const { data: group, isLoading } = useGroup(addr);
+  // Where Back / Leave return to: Support for the Kubo Testers group (it's
+  // reached from the Support tab), Trust → People for every other group.
+  const homePath = groupHomePath(addr);
   const [tab, setTab] = useState<Tab>('chat');
   const qc = useQueryClient();
   const { leave } = useGroupActions();
   const { requests: joinRequests } = useGroupJoinRequests(
     group?.isAdmin && group?.isClosed ? addr : undefined,
   );
+
+  // Mark this group read while its chat is on screen: advance the per-group
+  // cursor to the newest message so the Support unread dot (Kubo Testers)
+  // clears. Shares useGroupMessages' cache key with GroupChatTab, so this is
+  // a free read, not a second fetch.
+  //
+  // Loop-safety: writing the cursor re-publishes the kind-30078 settings
+  // event, which gives `settings` a new identity on every save. The live
+  // message subscription also re-publishes `messages` on every echo. So we do
+  // NOT depend on settings identity or gate on it (a re-parse can churn).
+  // Instead a ref records the highest timestamp we've already written for this
+  // addr, and we only write when `newest` exceeds BOTH that ref and the stored
+  // cursor — making repeat writes idempotent no-ops and breaking the loop.
+  const { messages } = useGroupMessages(tab === 'chat' ? addr : undefined);
+  const { settings, updateSettings } = useEncryptedSettings();
+  const writtenCursorRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (tab !== 'chat' || !addr || messages.length === 0) return;
+    const newest = messages.reduce(
+      (max, m) => (m._pending ? max : Math.max(max, m.created_at)),
+      0,
+    );
+    const stored = settings?.groupCursors?.[addr] ?? 0;
+    const alreadyWritten = writtenCursorRef.current[addr] ?? 0;
+    if (newest <= stored || newest <= alreadyWritten) return;
+    writtenCursorRef.current[addr] = newest;
+    updateSettings
+      .mutateAsync({ groupCursors: { ...settings?.groupCursors, [addr]: newest } })
+      .catch(() => {
+        // Let a failed write retry on the next message/tab change.
+        if (writtenCursorRef.current[addr] === newest) {
+          delete writtenCursorRef.current[addr];
+        }
+      });
+    // Depend on the timestamp value, not object identities, so a settings
+    // re-publish/re-parse can't retrigger this. updateSettings is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, addr, messages, settings?.groupCursors?.[addr ?? '']]);
 
   // Header-menu dialogs: a single discriminated state so two of them
   // can't be open at once and the menu's onSelect is straightforward.
@@ -66,7 +110,7 @@ export function GroupViewPage() {
     if (!addr) return;
     try {
       await leave(addr);
-      nav('/parent/trust/people');
+      nav(homePath);
     } catch {
       // The About tab also exposes Leave with its own error UI; menu
       // failure is silent here.
@@ -129,7 +173,7 @@ export function GroupViewPage() {
           variant="ghost"
           size="icon"
           className="size-9 rounded-full"
-          onClick={() => nav('/parent/trust/people')}
+          onClick={() => nav(homePath)}
           aria-label="Back"
         >
           <ChevronLeft className="size-5" />

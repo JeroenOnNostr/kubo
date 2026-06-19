@@ -64,6 +64,12 @@ export interface EncryptedSettings {
   notificationStyle?: 'push' | 'persistent';
   /** Timestamp of last viewed notification (Unix timestamp in seconds) */
   notificationsCursor?: number;
+  /**
+   * Per-group last-read cursor: `{ groupAddr → Unix SECONDS of newest read
+   * message }`. Drives the Support tab's unread dot for the Kubo Testers
+   * group; written when the user opens a group's chat (see GroupViewPage).
+   */
+  groupCursors?: Record<string, number>;
   /** Per-type notification preferences (all default to true/enabled) */
   notificationPreferences?: {
     reactions?: boolean;

@@ -191,10 +191,10 @@ export function ParentTour() {
           nextLabel="Next"
           onNext={() => {
             setTourStep(6);
-            // Take the parent to the Trust > People page so the Groups
-            // section is on screen for the final coachmark. Without this
-            // the step-6 popover never finds its anchor.
-            nav('/parent/trust/people');
+            // Take the parent to the Support page so the Kubo Testers tile is
+            // on screen for the final coachmark. Without this the step-6
+            // popover never finds its anchor.
+            nav('/parent/support');
           }}
           onSkip={skip}
           side="bottom"
@@ -203,11 +203,11 @@ export function ParentTour() {
       );
     }
     if (step === 6) {
-      // Wait until the parent is actually on the people page — useNavigate
+      // Wait until the parent is actually on the Support page — useNavigate
       // is async relative to the render. Without this gate, the popover
       // tries to anchor to `groupsSection` while the page is still
       // unmounted from the previous route, which fails silently.
-      if (pathname !== '/parent/trust/people') return null;
+      if (pathname !== '/parent/support') return null;
       return (
         <Coachmark
           anchorName="groupsSection"
@@ -215,12 +215,11 @@ export function ParentTour() {
           body={
             <div className="flex flex-col gap-2">
               <p>
-                Groups let you coordinate with other parents, teachers, or
-                anyone you want to share with privately.
+                Need a hand, or want to share feedback? This is your line to us.
               </p>
               <p>
-                We've left a <strong>Kubo Testers</strong> tile here — tap
-                it any time to chat with us and other early testers.
+                Tap the <strong>Kubo Testers</strong> tile any time to chat with
+                the team and other early testers.
               </p>
             </div>
           }

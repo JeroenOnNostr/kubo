@@ -46,6 +46,31 @@ export const NIP29_RELAYS = [
  */
 export const KUBO_TESTERS_GROUP = "relay.kubo.watch'meycharghge";
 
+/**
+ * The Kubo Testers group is reached from the Support tab (its tile lives on
+ * /parent/support); every other group is reached from Trust → People. The
+ * single group-view route (/parent/groups/:addr) therefore belongs to a
+ * different bottom-nav tab depending on which group it is — this decides which
+ * tab highlights and where the group view's back button returns.
+ *
+ * `addr` may be raw or URL-encoded; the apostrophe in a NIP-29 address is an
+ * unreserved char so encodeURIComponent leaves it intact, but we decode
+ * defensively in case a caller encoded it.
+ */
+export function isTestersGroupAddr(addr: string | undefined): boolean {
+  if (!addr) return false;
+  try {
+    return decodeURIComponent(addr) === KUBO_TESTERS_GROUP;
+  } catch {
+    return addr === KUBO_TESTERS_GROUP;
+  }
+}
+
+/** Home tab (bottom nav) for a given group's view: Support for testers, else Trust. */
+export function groupHomePath(addr: string | undefined): string {
+  return isTestersGroupAddr(addr) ? '/parent/support' : '/parent/trust/people';
+}
+
 /** Normalize a relay URL for deduplication (lowercase, strip trailing slash). */
 function normalizeUrl(url: string): string {
   return url.toLowerCase().replace(/\/+$/, '');
