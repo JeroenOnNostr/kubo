@@ -140,7 +140,6 @@ export function ParentTour() {
           onSkip={skip}
           side="top"
           align="center"
-          className="w-80"
         />
       );
     }
@@ -154,7 +153,13 @@ export function ParentTour() {
       if (pathname !== '/parent/feed') return null;
       return (
         <Coachmark
-          anchorName="feedSourceTiles"
+          // Centered (not anchored): the feed source-tile stack is ~490px tall,
+          // so a ~340px card can't fit above or below it on a phone — Radix
+          // clamps it and the card runs off the bottom (the Galaxy S20 cutoff).
+          // This step is a general "how feed sources work" primer rather than a
+          // pointer at one tile, so a centered card reads correctly AND is
+          // positioned by CSS that's guaranteed to fit the viewport.
+          anchorName={null}
           title={`Pick where ${kidName}'s videos come from`}
           body={
             <div className="flex flex-col gap-2">
@@ -174,9 +179,6 @@ export function ParentTour() {
           nextLabel="Next"
           onNext={advance(5)}
           onSkip={skip}
-          side="top"
-          align="center"
-          className="w-80"
         />
       );
     }
@@ -227,7 +229,6 @@ export function ParentTour() {
           onSkip={skip}
           side="top"
           align="center"
-          className="w-80"
         />
       );
     }

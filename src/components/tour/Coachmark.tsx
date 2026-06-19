@@ -43,12 +43,33 @@ export interface CoachmarkProps {
 // Stronger contrast than the default popover against both the deep-blue kid
 // view and the dark parent dashboard.
 //
-// max-h + overflow-y-auto keeps a tall body (steps 3 and 4 in particular)
-// from overflowing the viewport — Radix can flip/shift but won't shrink, so
-// without an explicit cap a too-tall popover simply runs off the bottom and
-// loses its rounded corners + Skip/Next buttons behind the nav bar.
+// Visual chrome ONLY — no width, no height, no overflow. Width + max-height
+// are mode-specific (anchored and centered have different vertical budgets)
+// and are applied by each mode below. `flex flex-col` makes the card the flex
+// container so CoachmarkCardBody can give itself a scrolling body and a pinned
+// Skip/Next footer that never scrolls off the bottom (the Galaxy S20 cutoff).
 const TOUR_SURFACE =
-  'w-72 max-h-[80vh] overflow-y-auto rounded-xl border-0 bg-white text-slate-900 p-4 shadow-[0_8px_24px_rgba(0,0,0,0.25)] outline-none focus-visible:outline-none focus-visible:ring-0';
+  'flex flex-col rounded-xl border-0 bg-white text-slate-900 p-4 shadow-[0_8px_24px_rgba(0,0,0,0.25)] outline-none focus-visible:outline-none focus-visible:ring-0';
+
+// Single source of truth for the card width across both modes. Caps at 20rem
+// (320px) on normal screens but never exceeds the viewport minus ~40px of
+// margin, so it can't run off the edges of a 360px phone. NOTE: this is the
+// only place width is set — do NOT add a per-step `w-*` override (tailwind-merge
+// would clobber this and re-break narrow screens).
+const TOUR_WIDTH = 'w-[min(20rem,calc(100vw-2.5rem))]';
+
+// Anchored max-height: the dynamic viewport minus the top bar, bottom nav, and
+// both safe-area insets, plus a little breathing room. Uses dvh (like the rest
+// of the app) so the mobile URL/system bars are accounted for. The body scrolls
+// inside this cap; collisionPadding keeps Radix from parking the card under the
+// chrome in the first place.
+const TOUR_ANCHORED_MAX_H =
+  'max-h-[calc(100dvh-var(--top-bar-height)-var(--bottom-nav-height)-var(--safe-area-inset-top,env(safe-area-inset-top,0px))-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))-1.5rem)]';
+
+// Centered (step 1) max-height: subtracts the overlay's own 15dvh top pad and
+// the bottom nav + inset so the card + its paddings always fit the viewport.
+const TOUR_CENTERED_MAX_H =
+  'max-h-[calc(100dvh-15dvh-var(--bottom-nav-height)-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))-2rem)]';
 
 /**
  * One step of the first-run parent tour.
@@ -141,10 +162,17 @@ function AnchoredCoachmark({
           side={side}
           align={align}
           sideOffset={12}
-          collisionPadding={16}
+          // Asymmetric keep-out so Radix never parks the card over the top bar
+          // or under the bottom nav (where Skip/Next would be hidden). Static px
+          // over-estimates — Radix rejects calc(); the precise fit comes from the
+          // dvh max-height. top ≈ 40px top bar + breathing; bottom ≈ 44px nav +
+          // gesture inset + breathing.
+          collisionPadding={{ top: 56, bottom: 76, left: 16, right: 16 }}
           className={cn(
             'z-[260]',
             TOUR_SURFACE,
+            TOUR_WIDTH,
+            TOUR_ANCHORED_MAX_H,
             'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
             className,
           )}
@@ -187,14 +215,16 @@ function CenteredCoachmark({
     // except inside the card itself, so the kid view behind stays
     // interactive (and visible — no backdrop dim).
     //
-    // Card sits ~25vh from the top (rather than mathematically centered) so
+    // Card sits ~15dvh from the top (rather than mathematically centered) so
     // the sticky top bar doesn't push the perceived center too low. Lands
-    // where the eye expects an "intro" element on a phone-sized viewport.
+    // where the eye expects an "intro" element on a phone-sized viewport. The
+    // bottom pad clears the nav + safe area so the card never overlaps it; the
+    // dvh max-height on the card itself guarantees it fits between the two pads.
     <div
-      className="fixed inset-x-0 top-0 bottom-0 z-[260] flex justify-center items-start pt-[25vh] pointer-events-none"
+      className="fixed inset-x-0 top-0 bottom-0 z-[260] flex justify-center items-start pt-[max(15dvh,calc(var(--top-bar-height)+var(--safe-area-inset-top,env(safe-area-inset-top,0px))+1rem))] pb-[calc(var(--bottom-nav-height)+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))+1rem)] pointer-events-none"
       aria-live="polite"
     >
-      <div className={cn('pointer-events-auto', TOUR_SURFACE, className)}>
+      <div className={cn('pointer-events-auto', TOUR_WIDTH, TOUR_CENTERED_MAX_H, TOUR_SURFACE, className)}>
         <CoachmarkCardBody
           title={title}
           body={body}
@@ -214,13 +244,21 @@ function CoachmarkCardBody({
   onNext,
   onSkip,
 }: Pick<CoachmarkProps, 'title' | 'body' | 'nextLabel' | 'onNext' | 'onSkip'>) {
+  // The card surface (TOUR_SURFACE) is the flex column + height cap, so these
+  // three are direct flex children of it:
+  //   - title: fixed
+  //   - body:  the ONLY scroller. `min-h-0` is mandatory — without it the flex
+  //            child refuses to shrink below its content height and the card
+  //            overflows the cap regardless.
+  //   - footer: fixed, so Skip/Next stay visible even on tall bodies (the
+  //            Galaxy S20 cutoff was the footer scrolling off the card).
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <div className="text-[13px] leading-snug text-slate-600">
+    <>
+      <h3 className="shrink-0 text-sm font-semibold">{title}</h3>
+      <div className="flex-1 min-h-0 overflow-y-auto text-[13px] leading-snug text-slate-600 mt-3">
         {typeof body === 'string' ? <p>{body}</p> : body}
       </div>
-      <div className="flex items-center justify-between gap-2 pt-1">
+      <div className="shrink-0 flex items-center justify-between gap-2 pt-3 mt-1 border-t border-slate-100">
         <button
           type="button"
           onClick={onSkip}
@@ -239,6 +277,6 @@ function CoachmarkCardBody({
           </Button>
         )}
       </div>
-    </div>
+    </>
   );
 }

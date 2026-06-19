@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Eye,
@@ -20,7 +19,6 @@ import { useKidFeedSourcesSelector } from '@/hooks/useKidFeedSources';
 import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { genUserName } from '@/lib/genUserName';
-import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 
 /**
  * /parent/feed — source-picker screen. Renders two top tiles (edit feed
@@ -35,12 +33,6 @@ import { useRegisterTourAnchor } from '@/contexts/TourAnchorContext';
 export function ParentFeedPage() {
   const nav = useNavigate();
   const kid = useSelectedKid();
-
-  // KUBO-092 first-run tour anchor — step 4 attaches to the source-tile
-  // container so the parent reads the source-types primer while looking at
-  // the actual tiles. No-op outside the parent layout's TourAnchorProvider.
-  const sourceTilesRef = useRef<HTMLDivElement | null>(null);
-  useRegisterTourAnchor('feedSourceTiles', sourceTilesRef);
 
   if (!kid) {
     return <NoKidSelected title="Feed" />;
@@ -63,7 +55,7 @@ export function ParentFeedPage() {
       </div>
 
       {/* Source tiles */}
-      <div ref={sourceTilesRef} className="px-4 flex flex-col gap-3">
+      <div className="px-4 flex flex-col gap-3">
         <RelaysTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/relays')} />
         <CommunitiesTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/communities')} />
         <PacksTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/packs')} />
