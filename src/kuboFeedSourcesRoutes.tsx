@@ -5,6 +5,7 @@ import { CommunitiesSourcePage } from '@/pages/feed-sources/CommunitiesSourcePag
 import { PacksSourcePage } from '@/pages/feed-sources/PacksSourcePage';
 import { ProfilesSourcePage } from '@/pages/feed-sources/ProfilesSourcePage';
 import { RelaysSourcePage } from '@/pages/feed-sources/RelaysSourcePage';
+import { YouTubeSourcePage } from '@/pages/feed-sources/YouTubeSourcePage';
 
 /**
  * Route fragment for the /parent/feed/* subtree. Imported once inside the
@@ -26,6 +27,7 @@ export function renderKuboFeedSourcesRoutes() {
       <Route path="/parent/feed/communities" element={<CommunitiesSourcePage   />} />
       <Route path="/parent/feed/packs"       element={<PacksSourcePage         />} />
       <Route path="/parent/feed/profiles"    element={<ProfilesSourcePage      />} />
+      <Route path="/parent/feed/youtube"     element={<YouTubeSourcePage       />} />
     </>
   );
 }

@@ -273,6 +273,7 @@ export function AddKidPage() {
                   relays: [],
                   communities: [],
                   packs: [KUBO_DEFAULT_KID_PACK_ATAG],
+                  youtube: [],
                 },
               },
               // Seed the parent into the kid's trust domain at `interact`

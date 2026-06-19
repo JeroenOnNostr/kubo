@@ -52,6 +52,23 @@ export interface KidSettings {
   nextPostButton?: boolean;
 }
 
+/**
+ * A YouTube channel bridged via the external DVM (KUBO-YT). The bridge derives a
+ * per-channel npub that signs the channel's video events; following that npub +
+ * granting it `view` trust is what makes the videos flow into the kid's feed.
+ * The ref is persisted so the parent can disable/re-enable a channel without a
+ * fresh DVM search.
+ */
+export interface YouTubeChannelRef {
+  /** The per-channel npub (bech32) — the trust/follow target. */
+  npub: string;
+  /** YouTube channel id (UC…) — sent to the DVM watch request. */
+  channelId: string;
+  title: string;
+  /** Channel avatar; may be flaky → UI Avatar falls back to initials. */
+  picture?: string;
+}
+
 export interface KidFeedSources {
   /** Normalized wss:// URLs enabled as relay firehoses. */
   relays: string[];
@@ -59,12 +76,21 @@ export interface KidFeedSources {
   communities: string[];
   /** NIP-33 a-tags for enabled follow packs/sets: `<kind>:<pubkey>:<d-tag>` (30000|39089). */
   packs: string[];
+  /**
+   * YouTube channels added via the bridge DVM. The ref persists even when the
+   * channel is disabled (trust set to `none`) so it can be re-enabled without a
+   * fresh search — `forgetYouTubeChannel` is the only thing that drops it.
+   * Whether a ref is currently *enabled* is derived from the npub's trust level
+   * (`view` = enabled, `none`/absent = disabled), NOT stored here.
+   */
+  youtube: YouTubeChannelRef[];
 }
 
 export const EMPTY_FEED_SOURCES: KidFeedSources = {
   relays: [],
   communities: [],
   packs: [],
+  youtube: [],
 };
 
 export interface KuboTrustRequest {
@@ -296,7 +322,7 @@ export async function addKid(kid: KuboKid): Promise<void> {
   if (!existing && !feedSources?.[kid.pubkey]) {
     feedSources = {
       ...current.feedSources,
-      [kid.pubkey]: { relays: [], communities: [], packs: [KUBO_DEFAULT_KID_PACK_ATAG] },
+      [kid.pubkey]: { relays: [], communities: [], packs: [KUBO_DEFAULT_KID_PACK_ATAG], youtube: [] },
     };
   }
   // KUBO-147: the parent always belongs in the kid's trust domain at
@@ -780,7 +806,10 @@ async function mutateFeedSources(
   if (!current) {
     throw new Error('Cannot update feed sources: no family record exists yet.');
   }
-  const existing = current.feedSources?.[kidPubkey] ?? EMPTY_FEED_SOURCES;
+  // Backward-compat: families persisted before `youtube[]` existed won't carry
+  // it, so default it to [] before handing the record to `mutate`.
+  const stored = current.feedSources?.[kidPubkey] ?? EMPTY_FEED_SOURCES;
+  const existing: KidFeedSources = { ...stored, youtube: stored.youtube ?? [] };
   const next = mutate(existing);
   // Skip the disk write + notify if nothing actually changed. Toggles on the
   // same source are common and the equality check keeps the re-render budget
@@ -788,7 +817,8 @@ async function mutateFeedSources(
   if (
     next.relays === existing.relays &&
     next.communities === existing.communities &&
-    next.packs === existing.packs
+    next.packs === existing.packs &&
+    next.youtube === existing.youtube
   ) {
     return;
   }
@@ -833,7 +863,44 @@ export async function toggleFeedPack(
 }
 
 export function getFeedSources(kidPubkey: string): KidFeedSources {
-  return family?.feedSources?.[kidPubkey] ?? EMPTY_FEED_SOURCES;
+  const stored = family?.feedSources?.[kidPubkey];
+  if (!stored) return EMPTY_FEED_SOURCES;
+  // Backward-compat: default `youtube` for families persisted before it existed.
+  return stored.youtube ? stored : { ...stored, youtube: [] };
+}
+
+// ─── YouTube channels (KUBO-YT, bridge DVM) ──────────────────────────────────
+
+/**
+ * Add (or update) a bridged YouTube channel ref in the kid's `youtube[]` list,
+ * deduped by npub. Trust/follow are NOT touched here — the page composes this
+ * with the trust+follow grant (see `useYouTubeChannels.addChannel`). Idempotent
+ * on npub: re-adding refreshes the stored title/picture/channelId.
+ */
+export async function addYouTubeChannelRef(
+  kidPubkey: string,
+  ref: YouTubeChannelRef,
+): Promise<void> {
+  await mutateFeedSources(kidPubkey, (fs) => {
+    const without = fs.youtube.filter((c) => c.npub !== ref.npub);
+    return { ...fs, youtube: [...without, ref] };
+  });
+}
+
+/**
+ * Remove a bridged YouTube channel ref from the kid's `youtube[]` entirely. This
+ * is the only operation that drops the record (disable merely flips trust). The
+ * trust-none / unfollow side is handled by the caller (`useYouTubeChannels`).
+ */
+export async function removeYouTubeChannelRef(
+  kidPubkey: string,
+  npub: string,
+): Promise<void> {
+  await mutateFeedSources(kidPubkey, (fs) => {
+    const without = fs.youtube.filter((c) => c.npub !== npub);
+    if (without.length === fs.youtube.length) return fs; // no-op (keeps identity)
+    return { ...fs, youtube: without };
+  });
 }
 
 // ─── React binding ────────────────────────────────────────────────────────────

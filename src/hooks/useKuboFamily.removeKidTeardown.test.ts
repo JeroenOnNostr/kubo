@@ -70,7 +70,7 @@ describe('KUBO-172: removeKid clears leftover TEPP slices', () => {
       relayTrustAssignments: { [KID]: { 'wss://a/': 'view' } },
       teppLatestPermissionIds: { [KID]: { interactRelay: 'rid' } },
       pendingRevocations: { [KID]: { [A]: 'interact' } },
-      feedSources: { [KID]: { relays: [], communities: [], packs: [] } },
+      feedSources: { [KID]: { relays: [], communities: [], packs: [], youtube: [] } },
     } as Partial<KuboFamily>);
 
     await removeKid(KID);

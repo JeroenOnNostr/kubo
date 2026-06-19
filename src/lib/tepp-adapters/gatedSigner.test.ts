@@ -10,7 +10,9 @@ import {
   TEPP_SIGNER_EXEMPT_KINDS,
   constructQueryKey,
   evaluateOutboundDraft,
+  localTrustAdmitsView,
   resolveConstructViaCache,
+  stripLocallyAdmittedFollows,
   wrapKidSigner,
 } from './gatedSigner';
 import { TeppDeniedError } from '@/hooks/useKuboTeppGate';
@@ -151,6 +153,96 @@ describe('evaluateOutboundDraft (shared core)', () => {
         construct: buildConstruct(),
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('kind-3 follow delta (KUBO-201): a NEWLY-ADDED follow the GUARDIAN has locally granted is admitted even when the construct has not caught up', async () => {
+    // The construct does NOT admit DENIED (the construct-refresh race: kind-8712
+    // grant just published, construct not refetched yet). But the guardian's
+    // localStorage records a view grant for DENIED, so the follow must succeed.
+    const followList: NostrEvent = {
+      ...kidReplyTo(DENIED),
+      kind: 3,
+      tags: [['p', DENIED]],
+    };
+    await expect(
+      evaluateOutboundDraft({
+        draft: followList,
+        prevFollowPubkeys: [], // newly added
+        query: emptyQuery,
+        construct: buildConstruct(), // does NOT admit DENIED
+        localAdmitsView: (pk) => pk === DENIED, // guardian granted it locally
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('kind-3 follow delta (KUBO-201): a NEWLY-ADDED follow with NO local grant still throws', async () => {
+    const followList: NostrEvent = {
+      ...kidReplyTo(DENIED),
+      kind: 3,
+      tags: [['p', DENIED]],
+    };
+    await expect(
+      evaluateOutboundDraft({
+        draft: followList,
+        prevFollowPubkeys: [],
+        query: emptyQuery,
+        construct: buildConstruct(),
+        localAdmitsView: () => false, // not granted → still denied
+      }),
+    ).rejects.toBeInstanceOf(TeppDeniedError);
+  });
+
+  it('KUBO-201 local admission does NOT apply to interaction (kind-1) drafts', async () => {
+    // A reply to a locally-granted-but-not-construct-admitted author must STILL
+    // be denied — local view admission is scoped to record-list follows only.
+    await expect(
+      evaluateOutboundDraft({
+        draft: kidReplyTo(DENIED),
+        prevFollowPubkeys: null,
+        query: emptyQuery,
+        construct: buildConstruct(),
+        localAdmitsView: () => true, // even if "granted", kind-1 ignores this
+      }),
+    ).rejects.toBeInstanceOf(TeppDeniedError);
+  });
+});
+
+describe('localTrustAdmitsView (KUBO-201 pure helper)', () => {
+  const lookup = (assignments: Record<string, string>) => () => assignments;
+
+  it('admits a pubkey granted view', () => {
+    expect(localTrustAdmitsView(KID, DENIED, lookup({ [DENIED]: 'view' }))).toBe(true);
+  });
+
+  it('admits a pubkey granted interact or extend (subsumes view)', () => {
+    expect(localTrustAdmitsView(KID, DENIED, lookup({ [DENIED]: 'interact' }))).toBe(true);
+    expect(localTrustAdmitsView(KID, DENIED, lookup({ [DENIED]: 'extend' }))).toBe(true);
+  });
+
+  it('does NOT admit an unassigned pubkey', () => {
+    expect(localTrustAdmitsView(KID, DENIED, lookup({}))).toBe(false);
+    expect(localTrustAdmitsView(KID, DENIED, () => undefined)).toBe(false);
+  });
+});
+
+describe('stripLocallyAdmittedFollows (KUBO-201 pure helper)', () => {
+  it('drops p-tags the predicate admits and preserves non-p tags', () => {
+    const delta: NostrEvent = {
+      ...kidReplyTo(DENIED),
+      kind: 3,
+      tags: [['p', DENIED], ['p', ALLOWED], ['client', 'kubo']],
+    };
+    const stripped = stripLocallyAdmittedFollows(delta, (pk) => pk === DENIED);
+    expect(stripped.tags).toEqual([['p', ALLOWED], ['client', 'kubo']]);
+  });
+
+  it('is a no-op when nothing is locally admitted', () => {
+    const delta: NostrEvent = {
+      ...kidReplyTo(DENIED),
+      kind: 3,
+      tags: [['p', DENIED]],
+    };
+    expect(stripLocallyAdmittedFollows(delta, () => false).tags).toEqual([['p', DENIED]]);
   });
 });
 

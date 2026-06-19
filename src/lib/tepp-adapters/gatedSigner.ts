@@ -13,6 +13,7 @@ import {
   buildDeltaEventForRecordList,
   readCachedFollowPubkeys,
 } from '@/hooks/useKuboTeppGate';
+import { getFamilySnapshot } from '@/hooks/useKuboFamily';
 
 /**
  * KUBO-160 — TEPP enforcement at the SIGNER SEAM.
@@ -78,6 +79,64 @@ export const TEPP_SIGNER_EXEMPT_KINDS: ReadonlySet<number> = new Set<number>([
 
 /** Record/list kinds evaluated by delta (kept in sync with `useKuboTeppGate`). */
 const RECORD_LIST_KINDS: ReadonlySet<number> = new Set<number>([3]);
+
+/**
+ * KUBO-201: a pubkey reference in a kid's kind-3 follow list is admitted at the
+ * VIEW threshold if the PARENT (this kid's guardian) has locally granted it any
+ * trust tier (`view`/`interact`/`extend` — interact/extend ⊇ view). The
+ * construct (published permission events) is the wire oracle, but it lags a
+ * just-published grant by a relay round-trip: `useAddFeedProfile` /
+ * `useYouTubeChannels` publish the kind-8712 grant and then IMMEDIATELY follow,
+ * and the construct query hasn't refetched/propagated the new permission yet, so
+ * the follow's kind-3 gate would deny "no permission admits pubkey …" (the
+ * construct-refresh race). The parent's localStorage assignment is the
+ * guardian's authoritative INTENT — it was written synchronously before the
+ * follow — so we honor it here. This is exactly the KUBO-147 "follow lists are
+ * evaluated at the view threshold so the follow succeeds regardless" contract;
+ * before this it was aspirational (the gate consulted only the construct). The
+ * grant publish still happens and the construct converges; if it transiently
+ * failed, KUBO-169 phase-3 reconcile re-publishes it next session.
+ *
+ * Scoped to RECORD-LIST (kind-3) follows ONLY — genuine interactions (replies,
+ * reposts, reactions, zaps) are gated at the interaction threshold against the
+ * construct and are NOT affected by this view-threshold local admission.
+ *
+ * Reads `getFamilySnapshot()` (plain localStorage-backed store, sync). Exported
+ * for unit testing. `lookup` defaults to the live family snapshot but can be
+ * injected so the pure decision is testable without the store.
+ */
+export function localTrustAdmitsView(
+  kidPubkey: string,
+  pubkey: string,
+  lookup: (kid: string) => Record<string, string> | undefined = (kid) =>
+    getFamilySnapshot()?.trustAssignments?.[kid] as
+      | Record<string, string>
+      | undefined,
+): boolean {
+  const tier = lookup(kidPubkey)?.[pubkey];
+  // Any assigned tier (view/interact/extend) subsumes the view threshold.
+  return tier === 'view' || tier === 'interact' || tier === 'extend';
+}
+
+/**
+ * KUBO-201: remove `p`-tag follows that `localAdmitsView` accepts from an
+ * already-built kind-3 DELTA event (the output of `buildDeltaEventForRecordList`,
+ * which holds only the newly-added follows + non-`p` tags). The remaining `p`
+ * tags are the genuinely-new follows the guardian has NOT locally granted — only
+ * those are evaluated against the construct, so a fresh parent-granted follow can
+ * never hard-deny the kid's follow-list publish. Non-`p` tags are preserved.
+ *
+ * Exported for unit testing.
+ */
+export function stripLocallyAdmittedFollows(
+  deltaEvent: NostrEvent,
+  localAdmitsView: (pubkey: string) => boolean,
+): NostrEvent {
+  const tags = deltaEvent.tags.filter(
+    ([name, pk]) => name !== 'p' || !localAdmitsView(pk),
+  );
+  return { ...deltaEvent, tags };
+}
 
 // ─── Construct resolution outside React ──────────────────────────────────────
 
@@ -146,12 +205,30 @@ export async function evaluateOutboundDraft(args: {
   prevFollowPubkeys: string[] | null;
   query: SeamQueryFn;
   construct: Construct;
+  /**
+   * KUBO-201: predicate that returns true when `pubkey` is locally trust-granted
+   * (view-or-better) by this kid's guardian. Applied ONLY to RECORD-LIST (kind-3)
+   * follow `p`-tag references to bridge the construct-refresh race — see
+   * `localTrustAdmitsView`. Defaults to the live family snapshot, keyed on the
+   * draft's signer (the kid). Injectable for unit testing.
+   */
+  localAdmitsView?: (pubkey: string) => boolean;
 }): Promise<void> {
   const { draft: fullDraft, prevFollowPubkeys, query, construct } = args;
 
   const isRecordList = RECORD_LIST_KINDS.has(fullDraft.kind);
+  const localAdmitsView =
+    args.localAdmitsView ??
+    ((pubkey: string) => localTrustAdmitsView(fullDraft.pubkey, pubkey));
+  // KUBO-201: for the kind-3 delta, drop newly-added follows the guardian has
+  // already locally granted view-or-better. They are admitted by INTENT even if
+  // the construct hasn't caught up to the just-published grant yet — treated
+  // exactly like a pre-existing admitted follow (carried, not re-evaluated).
   const draft = isRecordList
-    ? buildDeltaEventForRecordList(fullDraft, prevFollowPubkeys)
+    ? stripLocallyAdmittedFollows(
+        buildDeltaEventForRecordList(fullDraft, prevFollowPubkeys),
+        localAdmitsView,
+      )
     : fullDraft;
 
   // Pre-fetch the reference closure so a reply/quote resolves concretely instead

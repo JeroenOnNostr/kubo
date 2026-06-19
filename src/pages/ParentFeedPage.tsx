@@ -6,6 +6,7 @@ import {
   Users,
   UsersRound,
   UserPlus,
+  MonitorPlay,
 } from 'lucide-react';
 
 import { FeedSourceTile } from '@/components/feed/FeedSourceTile';
@@ -18,6 +19,7 @@ import { usePacksByAtags } from '@/hooks/useFollowPacks';
 import { useKidFeedSourcesSelector } from '@/hooks/useKidFeedSources';
 import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
+import { useYouTubeChannels } from '@/hooks/useYouTubeChannels';
 import { genUserName } from '@/lib/genUserName';
 
 /**
@@ -60,6 +62,7 @@ export function ParentFeedPage() {
         <CommunitiesTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/communities')} />
         <PacksTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/packs')} />
         <ProfilesTile onClick={() => nav('/parent/feed/profiles')} />
+        <YouTubeTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/youtube')} />
       </div>
     </div>
   );
@@ -209,6 +212,28 @@ function ProfileChips({ pubkeys }: { pubkeys: string[] }) {
         <ProfileChipItem key={pubkey} pubkey={pubkey} />
       ))}
     </>
+  );
+}
+
+function YouTubeTile({ kidPubkey, onClick }: { kidPubkey: string; onClick: () => void }) {
+  // Count only ENABLED channels (those that actually contribute videos) — the
+  // youtube[] list also holds disabled refs that can be re-added without a
+  // fresh DVM search. Reuses the same trust-derived view as the source page.
+  const { active } = useYouTubeChannels(kidPubkey);
+  const chips = active.slice(0, 5).map((channel) => ({
+    key: channel.npub,
+    label: channel.title,
+    avatarUrl: channel.picture,
+  }));
+  return (
+    <FeedSourceTile
+      icon={<MonitorPlay className="size-5" />}
+      title="YouTube Channels"
+      description="Add a channel; its videos appear in the feed."
+      enabledCount={active.length}
+      chips={chips}
+      onClick={onClick}
+    />
   );
 }
 

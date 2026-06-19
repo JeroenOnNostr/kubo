@@ -84,7 +84,12 @@ const AvatarImage = React.forwardRef<
 >(({ className, onError, ...props }, ref) => {
   const [hasError, setHasError] = React.useState(false)
   const hasSrcRef = React.useContext(AvatarHasSrcContext)
-  const src = props.src
+  // Treat an empty / whitespace-only src as "no image" so callers that pass a
+  // blank string (e.g. an absent channel thumbnail from the YouTube bridge, or
+  // a profile with `picture: ""`) fall straight through to AvatarFallback
+  // instead of rendering a broken <img> that the browser can't load.
+  const rawSrc = props.src
+  const src = typeof rawSrc === 'string' && rawSrc.trim() === '' ? undefined : rawSrc
 
   // Reset error when src changes
   const prevSrc = React.useRef(src)
@@ -105,6 +110,7 @@ const AvatarImage = React.forwardRef<
   return (
     <img
       {...props}
+      src={src}
       ref={ref}
       alt=""
       className={cn("absolute inset-0 h-full w-full object-cover", className)}
