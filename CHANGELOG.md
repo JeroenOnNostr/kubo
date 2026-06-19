@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.06.19] - 2026-06-19
+
+### Added
+- **Parent-curated YouTube channels** — parents can search for a YouTube channel and add it to the kid feed, so children only see videos from channels you've personally approved (KUBO-204).
+- **Support page** — a dedicated place for help: Signal contact, donate link, and the Testers group, with an unread indicator. It takes over the old "Alerts" nav slot (KUBO-202, KUBO-185).
+
+### Changed
+- **Faster YouTube channel search & add** — adding a channel no longer takes ~10 seconds. A new HTTP fast lane plus optimistic UI means the channel shows up immediately.
+- **Fullscreen kid videos** — kid videos now rotate to fullscreen in landscape.
+- **Simpler feed settings** — the inherited Ditto feed options are consolidated into a clear "Content Types" section (KUBO-201).
+- **Cleaner video descriptions** — the redundant watch URL is stripped from the end of video descriptions (KUBO-205).
+
+### Fixed
+- **First-run parent tour** — coachmarks no longer overflow on narrow phones (KUBO-195).
+- **Search typeahead** — search now waits for all relays before showing results, removing the flicker, and keeps your sort order on the first query (KUBO-194).
+- **Parent stays in the parent area** — clicking a note or profile in feed-preview no longer kicks you out of the parent shell (KUBO-198).
+- **Trust publishing** — trust events are gated on actual enforcement state rather than a mirror flag, so they publish correctly (KUBO-200).
+
 ## [2026.06.12.1] - 2026-06-12
 
 ### Fixed
