@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { ChevronDown } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { useIsLandscape } from '@/hooks/useIsLandscape';
 import { cn } from '@/lib/utils';
 import { findThumbnail } from '@/lib/youtubeThumbnail';
-
-// Tracks the currently-active YouTubeEmbed across the app so that starting a
-// new one preempts the previous (only one YouTube video plays at a time).
-let activeDeactivate: (() => void) | null = null;
+import { setActiveVideo } from '@/lib/activeVideoStore';
+import { YouTubeClickEaters } from '@/components/YouTubeClickEaters';
 
 interface YouTubeEmbedProps {
   videoId: string;
@@ -34,6 +35,16 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
   const [resolvedThumb, setResolvedThumb] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // Rotate-to-fullscreen: when this is the playing embed AND the device is
+  // landscape, we promote our OWN wrapper to fixed-fullscreen via CSS. The
+  // iframe is never remounted (it's the same live element, just pulled out of
+  // flow visually), so the video keeps playing from where it was — no restart,
+  // no jitter. Mirrors how the parent /parent/video/:id page reflows wider on
+  // rotate. The store's single-active preemption guarantees only one embed is
+  // `activated`, so only one card can ever be fullscreen.
+  const landscape = useIsLandscape();
+  const fullscreen = activated && landscape;
+
   // Kid-mode detection mirrors useActionVisibility / useKuboTeppFeedFilter:
   // active signer matches one of the family's kid pubkeys.
   const { user } = useCurrentUser();
@@ -52,22 +63,23 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
     return () => { cancelled = true; };
   }, [videoId]);
 
-  // While activated: preempt any other playing YouTube embed, and pause this
-  // one (by tearing the iframe back down to the thumbnail facade) when it
-  // scrolls out of view. Threshold matches usePlayerControls for native videos.
+  // While activated: register as the single active video (preempting any other
+  // playing embed — see activeVideoStore), and pause this one (by tearing the
+  // iframe back down to the thumbnail facade) when it scrolls out of view.
+  // Threshold matches usePlayerControls for native videos.
   useEffect(() => {
     if (!activated) return;
 
     const deactivate = () => setActivated(false);
+    const unregister = setActiveVideo({ videoId, aspect, deactivate });
 
-    if (activeDeactivate && activeDeactivate !== deactivate) {
-      activeDeactivate();
-    }
-    activeDeactivate = deactivate;
-
+    // Auto-pause on scroll-out — but NOT while fullscreen. In fullscreen the
+    // wrapper is pulled out of flow (position:fixed), so the observer would see
+    // a displaced/zero-area rect and fire a false deactivate, collapsing
+    // fullscreen the instant we rotate. Skip observing while fullscreen.
     const wrapper = wrapperRef.current;
     let observer: IntersectionObserver | undefined;
-    if (wrapper) {
+    if (wrapper && !fullscreen) {
       observer = new IntersectionObserver(
         ([entry]) => { if (!entry.isIntersecting) deactivate(); },
         { threshold: 0.25 },
@@ -77,19 +89,71 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
 
     return () => {
       observer?.disconnect();
-      if (activeDeactivate === deactivate) activeDeactivate = null;
+      unregister();
     };
-  }, [activated]);
+  }, [activated, videoId, aspect, fullscreen]);
+
+  // While fullscreen: lock body scroll (the feed can't scroll behind it) and
+  // let Android hardware-back collapse fullscreen before exiting kid mode.
+  // Capacitor fires backButton listeners last-registered-first, so this runs
+  // ahead of useKidBackGuard. Dynamic-import keeps @capacitor/app off the web
+  // critical path (mirrors useKidBackGuard).
+  useEffect(() => {
+    if (!fullscreen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    let cleanupBack: (() => void) | undefined;
+    let cancelled = false;
+    if (Capacitor.isNativePlatform()) {
+      (async () => {
+        const { App } = await import('@capacitor/app');
+        const listener = await App.addListener('backButton', () =>
+          setActivated(false),
+        );
+        if (cancelled) {
+          listener.remove();
+          return;
+        }
+        cleanupBack = () => listener.remove();
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+      cleanupBack?.();
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fullscreen]);
 
   return (
     <div
       ref={wrapperRef}
-      className={cn('rounded-xl overflow-hidden', className)}
+      className={cn(
+        fullscreen
+          ? 'fixed inset-0 z-[2147483000] bg-black flex items-center justify-center'
+          : cn('rounded-xl overflow-hidden', className),
+      )}
+      // In landscape fullscreen, keep the video clear of a side notch. The
+      // .safe-area-* utilities only cover top/bottom, so use the CSS vars
+      // (SystemBars-injected) directly with an env() fallback.
+      style={
+        fullscreen
+          ? {
+              paddingLeft: 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))',
+              paddingRight: 'var(--safe-area-inset-right, env(safe-area-inset-right, 0px))',
+            }
+          : undefined
+      }
       onClick={(e) => e.stopPropagation()}
     >
       <div
         className="relative w-full"
-        style={{ aspectRatio: aspect === 'short' ? '9 / 16' : '16 / 9' }}
+        style={{
+          aspectRatio: aspect === 'short' ? '9 / 16' : '16 / 9',
+          ...(fullscreen ? { maxHeight: '100%', maxWidth: '100%' } : null),
+        }}
       >
         {activated ? (
           <>
@@ -127,40 +191,32 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
               sandbox="allow-scripts allow-same-origin allow-presentation"
               className="absolute top-0 left-0 w-[200%] h-[200%] origin-top-left scale-50 -mb-px -mr-px"
             />
-            {/* Kid-mode click-eaters covering YouTube's player UI tap targets
-                that would let the kid escape the parent-approved video:
-                the share / chain-icon button (bottom-left), the "More videos"
-                button (bottom-centre), and the YouTube wordmark (bottom-right),
-                which all surface on tap/pause along the bottom row of the
-                player. Same defense layer as the existing Android nav guard,
-                just client-side for the actions that don't go through
-                navigation (clipboard write, in-iframe video swap).
+            {/* Kid-mode click-eaters masking YouTube's escape affordances.
+                Inside the wrapper, so they ride along into fullscreen and the
+                geometry stays size-agnostic. Only painted when the iframe is
+                mounted. */}
+            {isKidMode && <YouTubeClickEaters />}
 
-                After the KUBO-142 scale trick the chrome lays out across the
-                full bottom band (see screenshot in KUBO-143), so the masks are
-                percentage-based to track it. We mask the whole bottom ~28% of
-                the frame EXCEPT the extreme bottom-right corner, which stays
-                open for the fullscreen toggle. The centre play/pause button
-                sits at ~50% height, well above this band, so it stays tappable.
-                Transparent + cursor-default so the masks don't read as broken
-                UI. Only painted when the iframe is mounted (activated). */}
-            {isKidMode && (
-              <>
-                {/* Bottom band minus the bottom-right fullscreen corner: covers
-                    chain icon, "More videos", and the wordmark. */}
-                <div
-                  className="absolute left-0 right-[18%] bottom-0 h-[28%] z-10 cursor-default"
-                  onClick={(e) => e.stopPropagation()}
-                  aria-hidden
-                />
-                {/* Right edge above the fullscreen corner: covers the upper part
-                    of the wordmark without blocking the fullscreen toggle. */}
-                <div
-                  className="absolute right-0 w-[18%] bottom-[12%] h-[16%] z-10 cursor-default"
-                  onClick={(e) => e.stopPropagation()}
-                  aria-hidden
-                />
-              </>
+            {/* Tap-to-exit in fullscreen — kids may not rotate back. Large,
+                high-contrast, above the click-eaters, in the top-left safe
+                area. Drops back to the inline facade (which also exits
+                fullscreen since activated→false). */}
+            {fullscreen && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActivated(false);
+                }}
+                aria-label="Back to feed"
+                className="absolute top-3 left-3 z-20 size-11 rounded-full bg-black/50 text-white flex items-center justify-center active:scale-95 transition-transform"
+                style={{
+                  marginTop: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
+                  marginLeft: 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))',
+                }}
+              >
+                <ChevronDown className="size-6" />
+              </button>
             )}
           </>
         ) : (
