@@ -1434,7 +1434,17 @@ function VideoContent({ event, flushBottom = false }: { event: NostrEvent; flush
     [event.tags],
   );
   const title = getTag(event.tags, "title");
-  const description = event.content;
+  // Some bridges (e.g. the YouTube bridge) append the canonical watch URL as the
+  // final content line so URL-embed clients render a player. We already show the
+  // player from the imeta `url`, so strip that redundant trailing URL line from
+  // the displayed description rather than printing it as raw text.
+  const description = useMemo(() => {
+    const body = event.content.replace(/\s+$/, "");
+    if (url && (body === url || body.endsWith(`\n${url}`))) {
+      return body.slice(0, body.length - url.length).replace(/\s+$/, "");
+    }
+    return event.content;
+  }, [event.content, url]);
   const isShort = event.kind === 22;
   const formattedDuration = fmtDuration(duration);
   const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
