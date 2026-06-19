@@ -70,12 +70,7 @@ function useScrollCarets() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     roRef.current = ro;
-    // Defensive: any ancestor scroll-into-view on open (e.g. autofocus / soft
-    // keyboard on Android WebView) must not leave the inner list pinned. Reset
-    // to top, then re-measure carets once layout has settled.
-    el.scrollTop = 0;
     update();
-    requestAnimationFrame(update);
   }, [update]);
 
   const stopScroll = useCallback(() => {
@@ -147,7 +142,6 @@ export function KindPicker({ value, options, onChange }: {
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
   const { refCallback, canScrollUp, canScrollDown, onScroll, startScroll, stopScroll } = useScrollCarets();
 
   const filtered = useMemo(() => {
@@ -186,22 +180,15 @@ export function KindPicker({ value, options, onChange }: {
         side="bottom"
         className="w-56 p-0 flex flex-col overflow-hidden"
         style={{ maxHeight: 'min(280px, var(--radix-popover-content-available-height, 280px))' }}
-        onOpenAutoFocus={(e) => {
-          // Prevent Radix's default focus-and-scroll, then focus the search
-          // input ourselves WITHOUT scrolling any ancestor. On Android WebView
-          // the default behavior scrolls the enclosing Dialog to the bottom.
-          e.preventDefault();
-          inputRef.current?.focus({ preventScroll: true });
-        }}
       >
         <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-border shrink-0">
           <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
           <input
-            ref={inputRef}
             className="flex-1 text-base md:text-xs bg-transparent outline-none placeholder:text-muted-foreground"
             placeholder="Search kinds..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            autoFocus
           />
           {search && (
             <button onClick={() => setSearch('')} className="text-muted-foreground hover:text-foreground">
@@ -237,7 +224,6 @@ export function MultiKindPicker({ selectedKinds, options, onChange }: {
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
   const { refCallback, canScrollUp, canScrollDown, onScroll, startScroll, stopScroll } = useScrollCarets();
 
   const filtered = useMemo(() => {
@@ -293,22 +279,15 @@ export function MultiKindPicker({ selectedKinds, options, onChange }: {
           side="bottom"
           className="w-64 p-0 flex flex-col overflow-hidden"
           style={{ maxHeight: 'min(320px, var(--radix-popover-content-available-height, 320px))' }}
-          onOpenAutoFocus={(e) => {
-            // Prevent Radix's default focus-and-scroll, then focus the search
-            // input ourselves WITHOUT scrolling any ancestor. On Android WebView
-            // the default behavior scrolls the enclosing Dialog to the bottom.
-            e.preventDefault();
-            inputRef.current?.focus({ preventScroll: true });
-          }}
         >
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
             <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
             <input
-              ref={inputRef}
               className="flex-1 text-base md:text-sm bg-transparent outline-none placeholder:text-muted-foreground"
               placeholder="Search kinds..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              autoFocus
             />
             {search && (
               <button onClick={() => setSearch('')} className="text-muted-foreground hover:text-foreground">
