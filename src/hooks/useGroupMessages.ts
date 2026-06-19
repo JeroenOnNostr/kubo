@@ -1,10 +1,38 @@
 import { useNostr } from '@nostrify/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useParentSigner } from './useParentSigner';
 import { NIP29_KINDS, buildPreviousTag, parseGroupAddr } from '@/lib/nip29';
+
+/**
+ * Extract pubkeys mentioned via `nostr:npub1…` / `nostr:nprofile1…` URIs in a
+ * message body, for NIP-27 `p`-tag tagging. Without these tags the mention
+ * target isn't notified and some relays/clients won't resolve the reference.
+ * Mirrors the mention handling in ComposeBox so group chat tags behave the
+ * same as feed posts.
+ */
+function extractMentionPubkeys(content: string): Set<string> {
+  const pubkeys = new Set<string>();
+  const matches = content.matchAll(
+    /nostr:(npub1[023456789acdefghjklmnpqrstuvwxyz]+|nprofile1[023456789acdefghjklmnpqrstuvwxyz]+)/g,
+  );
+  for (const match of matches) {
+    try {
+      const decoded = nip19.decode(match[1]);
+      if (decoded.type === 'npub') {
+        pubkeys.add(decoded.data);
+      } else if (decoded.type === 'nprofile') {
+        pubkeys.add(decoded.data.pubkey);
+      }
+    } catch {
+      // Invalid bech32, skip.
+    }
+  }
+  return pubkeys;
+}
 
 export interface GroupMessage extends NostrEvent {
   /** Optimistic-only flag: true while the relay hasn't echoed the event yet. */
@@ -128,9 +156,21 @@ export function useGroupMessages(addr: string | undefined) {
       const { gid, relay } = parseGroupAddr(addr);
       const tags: string[][] = [['h', gid]];
 
+      // Track which pubkeys already have a `p` tag so mentions don't duplicate
+      // the reply target (or the sender).
+      const tagged = new Set<string>([parentUser.pubkey]);
+
       if (replyTo) {
         tags.push(['e', replyTo.id, relay, 'reply']);
         tags.push(['p', replyTo.pubkey]);
+        tagged.add(replyTo.pubkey);
+      }
+
+      // NIP-27 mention `p` tags from nostr:npub/nprofile URIs in the body.
+      for (const pk of extractMentionPubkeys(trimmed)) {
+        if (tagged.has(pk)) continue;
+        tags.push(['p', pk]);
+        tagged.add(pk);
       }
 
       // `previous` references the sender's own most-recent message in the

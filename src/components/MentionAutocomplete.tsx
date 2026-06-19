@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { nip19 } from 'nostr-tools';
+import { useDebounce } from '@/hooks/useDebounce';
 import { UserRoundCheck } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
@@ -98,9 +99,18 @@ export function MentionAutocomplete({
     dropdownHeight: 240, // must match max-h-[240px] below
   });
 
-  const { data: profiles, followedPubkeys } = useSearchProfiles(
+  const { data: profiles, followedPubkeys, isFetching } = useSearchProfiles(
     isOpen ? mentionQuery : '',
   );
+
+  // useSearchProfiles debounces its query by 300ms before the relay search
+  // even starts, so during that window `isFetching` is still false and
+  // `profiles` is empty. Mirror the same debounce here to detect the
+  // "search not yet started" window, so the keydown handler below can treat
+  // it as pending (and not let a bare Enter send a half-typed mention).
+  const debouncedQuery = useDebounce(isOpen ? mentionQuery : '', 300);
+  const searchPending = isOpen && mentionQuery.length > 0 &&
+    (isFetching || debouncedQuery !== mentionQuery);
 
   // Detect @mention query at cursor.
   // Accepts explicit text/cursor values so callers don't have to rely on
@@ -196,28 +206,50 @@ export function MentionAutocomplete({
     detectMention(content, textarea.selectionStart);
   }, [content, detectMention, textareaRef]);
 
-  // Handle keyboard navigation within the dropdown
+  // Handle keyboard navigation within the dropdown.
+  //
+  // Attach while a mention is open AND either results are showing OR a search
+  // is still resolving — not only once results have loaded. Otherwise, during
+  // the search debounce + relay round-trip (`profiles` still empty) a bare
+  // Enter would fall through to the host's own keydown handler and send the
+  // message with the literal `@query` text before the mention could resolve
+  // to `nostr:npub1…`. When the search settles with zero matches the dropdown
+  // is hidden, `isFetching` is false, and `hasProfiles` is false, so Enter
+  // correctly falls through to the host (the user can send `@unknownname`).
   useEffect(() => {
-    if (!isOpen || !profiles || profiles.length === 0) return;
+    if (!isOpen) return;
 
     const textarea = textareaRef.current;
     if (!textarea) return;
 
+    const hasProfiles = !!profiles && profiles.length > 0;
+    // Don't attach (and don't swallow keys) once a search has settled with no
+    // matches — there's no dropdown to interact with and the user should be
+    // able to send their message. `searchPending` covers both the pre-search
+    // debounce window and the in-flight relay round-trip.
+    if (!hasProfiles && !searchPending) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'ArrowDown':
+          if (!hasProfiles) return;
           e.preventDefault();
           setSelectedIndex((prev) => (prev < (profiles?.length ?? 1) - 1 ? prev + 1 : 0));
           break;
         case 'ArrowUp':
+          if (!hasProfiles) return;
           e.preventDefault();
           setSelectedIndex((prev) => (prev > 0 ? prev - 1 : (profiles?.length ?? 1) - 1));
           break;
         case 'Enter':
         case 'Tab':
-          if (profiles && profiles.length > 0) {
-            e.preventDefault();
-            selectProfile(profiles[selectedIndex]);
+          // Claim Enter/Tab so the host doesn't send/commit mid-mention. If
+          // results are in, select the highlighted profile; if still
+          // resolving, swallow the key so the user can't send a half-typed
+          // `@query` (it resolves once results land or they keep typing).
+          e.preventDefault();
+          if (hasProfiles) {
+            selectProfile(profiles![selectedIndex]);
           }
           break;
         case 'Escape':
@@ -229,7 +261,7 @@ export function MentionAutocomplete({
 
     textarea.addEventListener('keydown', handleKeyDown);
     return () => textarea.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, profiles, selectedIndex, textareaRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, profiles, searchPending, selectedIndex, textareaRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll selected item into view
   useEffect(() => {

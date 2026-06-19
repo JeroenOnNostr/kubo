@@ -2,12 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { MentionAutocomplete } from '@/components/MentionAutocomplete';
+import { useInsertText } from '@/hooks/useInsertText';
 import {
   MessageBubble,
   ReplyPreviewStrip,
   type ReplyPreviewData,
 } from '@/components/chat/MessageBubble';
+import { ChatContent } from '@/components/chat/ChatContent';
+import { collapseMentionsForPreview } from '@/lib/chatTokens';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEvent } from '@/hooks/useEvent';
@@ -55,9 +59,10 @@ function sameDay(a: number, b: number): boolean {
   );
 }
 
-/** First 80 chars of a message, collapsed to one line. */
+/** First 80 chars of a message, collapsed to one line, with raw Nostr mention
+ *  URIs shortened to `@npub1abc…` so a single key doesn't garble the preview. */
 function buildExcerpt(content: string): string {
-  const collapsed = content.replace(/\s+/g, ' ').trim();
+  const collapsed = collapseMentionsForPreview(content).replace(/\s+/g, ' ').trim();
   return collapsed.length > 80 ? `${collapsed.slice(0, 80)}…` : collapsed;
 }
 
@@ -75,6 +80,9 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Splice the selected mention (`nostr:npub1… `) into the draft at the caret.
+  const { insertAtCursor } = useInsertText(textareaRef, draft, setDraft);
   // Keep the latest message in view as new ones arrive.
   useEffect(() => {
     const el = scrollRef.current;
@@ -206,7 +214,7 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
     return out;
   }, [messages, systemEvents, ownPubkey]);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
     const body = draft.trim();
     if (!body || isSending) return;
@@ -221,10 +229,25 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
     }
   };
 
-  const onInputKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+  const onInputKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+    // Let the mention dropdown claim navigation/selection keys first. While it
+    // is open it intercepts Enter/Tab/Escape/Arrows via a native keydown
+    // listener on the textarea (see MentionAutocomplete) that runs before this
+    // React handler and calls preventDefault — so if that already happened,
+    // don't also send or cancel the reply.
+    if (e.defaultPrevented) return;
     if (e.key === 'Escape' && replyTo) {
       e.preventDefault();
       setReplyTo(null);
+      return;
+    }
+    // Enter sends; Shift+Enter inserts a newline (standard chat behavior).
+    // Skip the Enter that commits an IME composition (CJK/etc.) — otherwise a
+    // half-composed message would send. The old single-line <Input> got this
+    // for free via native form submit; the explicit handler must guard it.
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      onSubmit(e);
     }
   };
 
@@ -286,15 +309,24 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
         />
       )}
 
-      <form className="px-4 pt-2 flex items-center gap-2 flex-shrink-0" onSubmit={onSubmit}>
-        <Input
-          placeholder={replyTo ? 'Reply…' : 'Type a message…'}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onInputKeyDown}
-          className="h-11 rounded-full flex-1"
-          disabled={!user}
-        />
+      <form className="px-4 pt-2 flex items-end gap-2 flex-shrink-0" onSubmit={onSubmit}>
+        <div className="relative flex-1">
+          <Textarea
+            ref={textareaRef}
+            placeholder={replyTo ? 'Reply… (@ to mention)' : 'Type a message… (@ to mention)'}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onInputKeyDown}
+            rows={1}
+            className="min-h-11 max-h-32 rounded-3xl resize-none py-2.5 leading-snug"
+            disabled={!user}
+          />
+          <MentionAutocomplete
+            textareaRef={textareaRef}
+            content={draft}
+            onInsertMention={insertAtCursor}
+          />
+        </div>
         <Button
           type="submit"
           size="icon"
@@ -464,14 +496,13 @@ function ChatRow({
             </>
           }
         >
-          <span
+          <ChatContent
+            content={message.content}
             className={cn(
               message._pending && 'opacity-70',
               message._failed && 'opacity-70 line-through',
             )}
-          >
-            {message.content}
-          </span>
+          />
         </MessageBubble>
       </div>
     </div>
