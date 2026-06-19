@@ -132,8 +132,8 @@ export function PrivacyPolicyPage() {
           <h2 className="text-base font-bold text-foreground">Contact</h2>
           <p>
             If you have questions about this privacy policy, you can reach the team behind {config.appName} at{' '}
-            <a href="https://soapbox.pub" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-              soapbox.pub
+            <a href="https://weboftrustfoundation.com" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+              weboftrustfoundation.com
             </a>.
           </p>
         </section>
