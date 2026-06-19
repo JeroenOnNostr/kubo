@@ -9,6 +9,7 @@ import { isReplyEvent } from '@/lib/nostrEvents';
 import { isEventMuted } from '@/lib/muteHelpers';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { DITTO_RELAYS } from '@/lib/appRelays';
+import { searchQuery } from '@/lib/searchQuery';
 import { nip19 } from 'nostr-tools';
 
 interface StreamPostsOptions {
@@ -322,6 +323,15 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
       // 'all' means no media filter
     }
 
+    // Sort preference (NIP-50 extension). Must be appended BEFORE building the
+    // search string — otherwise sort:hot / sort:trending never reach the initial
+    // query and the relay returns unsorted results (KUBO-194).
+    if (options.sort === 'hot') {
+      searchParts.push('sort:hot');
+    } else if (options.sort === 'trending') {
+      searchParts.push('sort:trending');
+    }
+
     const initialFilter: NostrFilter = { ...streamFilter };
     if (searchParts.length > 0) {
       initialFilter.search = searchParts.join(' ');
@@ -333,20 +343,16 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
       streamFilter.authors = resolvedAuthorPubkeys;
     }
 
-    // Sort preference (NIP-50 extension)
-    if (options.sort === 'hot') {
-      searchParts.push('sort:hot');
-    } else if (options.sort === 'trending') {
-      searchParts.push('sort:trending');
-    }
-
-    // 1. Fetch initial batch with search filters (uses pool, reuses existing connections)
+    // 1. Fetch initial batch with search filters (uses pool, reuses existing connections).
+    // When the filter carries a NIP-50 search term it routes to the slower Ditto
+    // search relays, so use searchQuery() to wait for the laggard instead of the
+    // pool's 300ms eoseTimeout (same flicker class as profile search — KUBO-194).
     (async () => {
       try {
-        const events = await nostr.query(
-          [{ ...initialFilter, limit: 40 }],
-          { signal: ac.signal },
-        );
+        const batchFilter = { ...initialFilter, limit: 40 };
+        const events = batchFilter.search
+          ? await searchQuery(nostr, [batchFilter], { signal: ac.signal })
+          : await nostr.query([batchFilter], { signal: ac.signal });
         for (const event of events) {
           addEvent(event, false);
         }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useDebounce } from '@/hooks/useDebounce';
+import { searchQuery } from '@/lib/searchQuery';
 
 /**
  * Generic NIP-50 event search. Mirrors useSearchProfiles' debounce + stale
@@ -38,9 +39,15 @@ export function useSearchEvents({
       const trimmed = debounced.trim();
       if (trimmed) filter.search = trimmed;
 
-      const events = await nostr.query([filter as { kinds: number[]; limit: number }], {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]),
-      });
+      const typedFilter = filter as { kinds: number[]; limit: number; search?: string };
+      // Search terms route to the slower Ditto search relays, so use searchQuery()
+      // to wait for the laggard instead of the pool's 300ms eoseTimeout (KUBO-194).
+      // The empty-query "discover" firehose stays on the fast query() path.
+      const events = trimmed
+        ? await searchQuery(nostr, [typedFilter], { signal })
+        : await nostr.query([typedFilter], {
+            signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]),
+          });
 
       // Deduplicate by `d`-tag for addressable kinds, otherwise by id.
       const isAddressable = kinds.every((k) => k >= 30000 && k < 40000);

@@ -5,6 +5,7 @@ import { NSchema as n } from '@nostrify/nostrify';
 import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
 import { useFollowList } from '@/hooks/useFollowActions';
 import { useDebounce } from '@/hooks/useDebounce';
+import { searchQuery } from '@/lib/searchQuery';
 
 export interface SearchProfile {
   pubkey: string;
@@ -72,10 +73,14 @@ export function useSearchProfiles(query: string) {
     queryFn: async ({ signal }) => {
       if (!debouncedQuery.trim()) return [];
 
-      // NIP-50 profile search (uses pool, reuses existing connections)
-      const events = await nostr.query(
+      // NIP-50 profile search. Drive nostr.req via searchQuery() with a longer
+      // eoseTimeout so the slower Ditto search relay isn't aborted before it
+      // answers — the pool's global 300ms eoseTimeout truncated it, causing the
+      // dropdown flicker where completed-token matches vanished (KUBO-194).
+      const events = await searchQuery(
+        nostr,
         [{ kinds: [0], search: debouncedQuery.trim(), limit: 10 }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
+        { signal },
       );
 
       const profiles: SearchProfile[] = [];
