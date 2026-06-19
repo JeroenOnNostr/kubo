@@ -2,6 +2,15 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
+import {
+  NPUB_PATH,
+  NEVENT_PATH,
+  NOTE_PATH,
+  NADDR_PATH,
+  NIP05_PATH,
+  KID_SHELL_PATH,
+} from '@/components/feed/navInterceptorPatterns';
+
 interface KidNavigationInterceptorProps {
   /** Author of the wrapped post — fallback for ActorRow links that may render before metadata resolves. */
   pubkey: string;
@@ -11,26 +20,6 @@ interface KidNavigationInterceptorProps {
   viewOnly: boolean;
   children: React.ReactNode;
 }
-
-const NPUB_PATH    = /^\/(npub1[023456789acdefghjklmnpqrstuvwxyz]+)/;
-const NEVENT_PATH  = /^\/(nevent1[023456789acdefghjklmnpqrstuvwxyz]+)/;
-const NOTE_PATH    = /^\/(note1[023456789acdefghjklmnpqrstuvwxyz]+)/;
-const NADDR_PATH   = /^\/(naddr1[023456789acdefghjklmnpqrstuvwxyz]+)/;
-// Matches /<user>@<domain> AND /<bare-domain> (single segment with a dot, no @).
-// The bare-domain branch covers verified `_@<domain>` NIP-05 identities — useProfileUrl
-// strips the `_@` prefix, so the rendered href is /<domain> with no @ in the path.
-// Single-segment + must-have-dot keeps Ditto's top-level fixed routes (/settings,
-// /notifications, /letters/compose, etc.) safely out of scope.
-const NIP05_PATH   = /^\/([^/?#]+@[^/?#]+|[^/?#@]+\.[^/?#@]+)$/;
-
-// KUBO-158: the kid shell's own route subtree. The only same-origin paths the kid
-// app legitimately navigates to (see renderKuboKidRoutes in src/kuboKidRoutes.tsx:
-// /kid, /kid/blobbi, /kid/favorites, /kid/profile/:npub, /kid/post/:id). The
-// interceptor rewrites recognized npub/note/nip05 anchors into /kid/profile|post
-// itself, so any anchor that already points at /kid is a legitimate in-shell link
-// and is allowed through unchanged. Everything else (/t/, /r/, /search,
-// /notifications, /, unknown) is default-DENIED below.
-const KID_SHELL_PATH = /^\/kid(\/|$)/;
 
 /**
  * Intercepts profile/note/card clicks inside a kid-rendered NoteCard and rewrites
