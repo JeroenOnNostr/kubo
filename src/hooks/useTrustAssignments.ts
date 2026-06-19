@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 
-import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollowActions } from '@/hooks/useFollowActions';
 import { useToast } from '@/hooks/useToast';
@@ -15,6 +14,7 @@ import {
   KIND_PERMISSION_VIEW_NPUB_A,
   KIND_PERMISSION_VIEW_NPUB_B,
 } from '@/lib/tepp/kinds';
+import { isTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 import type { Construct } from '@/lib/tepp/types';
 
 import {
@@ -151,7 +151,7 @@ export interface TrustAssignmentsApi {
   setLevelIfUnassigned: (targetPubkey: string, level: KuboTrustLevel) => Promise<boolean>;
   /**
    * Batch-assign `level` to many targets in ONE localStorage write and, when
-   * `featureTepp` is on, ONE permission publish + ONE state publish — instead
+   * TEPP is enforced, ONE permission publish + ONE state publish — instead
    * of N of each. Targets already assigned are skipped (no-downgrade). Used by
    * the follow-pack auto-grant flow (KUBO-147). Only `view`/`interact` tiers
    * are batched; `extend` falls back to per-target `setLevel`.
@@ -197,7 +197,8 @@ export interface TrustAssignmentsApi {
  * over `useKuboFamily` — callers pass the kid pubkey once and don't have to
  * re-thread it through every read/write.
  *
- * **Phase 4b (TEPP integration):** when `featureTepp` is on, `setLevel` and
+ * **Phase 4b (TEPP integration):** when TEPP is enforced for this kid
+ * (`family.teppEnforced`, via `isTeppEnforced`), `setLevel` and
  * `clear` also publish the corresponding TEPP permission events:
  *   - `view`     → upserts target into kind 8712 (npub view-only, mode A)
  *   - `interact` → upserts target into kind 8710 (npub interaction, mode A)
@@ -213,11 +214,20 @@ export interface TrustAssignmentsApi {
  */
 export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignmentsApi {
   const { family, setTrustLevel, clearTrustLevel, clearTrustRequest } = useKuboFamily();
-  const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { unfollowMany } = useFollowActions();
   const { toast } = useToast();
-  const featureTepp = !!config.feedSettings.featureTepp;
+  // KUBO-200: gate publishes on the AUTHORITATIVE enforcement flag
+  // (`family.teppEnforced`, via `isTeppEnforced`), NOT the clobberable
+  // `config.feedSettings.featureTepp` mirror. Per KUBO-152 the mirror is a
+  // device-local, parent-UI value that reads `false` whenever a kid is the
+  // active session with synced settings omitting `featureTepp` (KUBO-182's
+  // "adding a 2nd/3rd kid" scenario). Gating the grant publish on the mirror
+  // meant Approve wrote localStorage + cleared the request but SKIPPED the
+  // kind-8710/34700 publish while enforcement was still on → the kid stayed
+  // denied on the wire. `isTeppEnforced` is the same predicate the read/gate
+  // side uses, so write and read can no longer disagree.
+  const teppEnforced = isTeppEnforced(family, kidPubkey);
   const publishPermission = useKuboTeppPublishPermission(kidPubkey);
   const publishState = useKuboTeppPublishState(kidPubkey);
 
@@ -278,7 +288,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
       if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
       await setTrustLevel(kidPubkey, targetPubkey, level);
 
-      if (!featureTepp) return;
+      if (!teppEnforced) return;
 
       // v1 restriction: extend cannot target a kid in this family. Toast and skip the TEPP publish.
       if (level === 'extend') {
@@ -318,7 +328,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         // state so the parent can retry without losing their selection.
       }
     },
-    [kidPubkey, setTrustLevel, featureTepp, family, publishTierGrant, toast],
+    [kidPubkey, setTrustLevel, teppEnforced, family, publishTierGrant, toast],
   );
 
   /**
@@ -332,7 +342,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
     async (targetPubkey: string) => {
       if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
       await runApprovalSequence({
-        enforced: featureTepp,
+        enforced: teppEnforced,
         writeTrust: () => setTrustLevel(kidPubkey, targetPubkey, 'interact'),
         publishGrant: () => {
           // Read the post-write snapshot so the grant carries the full
@@ -347,7 +357,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         clearRequest: () => clearTrustRequest(kidPubkey, targetPubkey),
       });
     },
-    [kidPubkey, setTrustLevel, featureTepp, publishTierGrant, clearTrustRequest],
+    [kidPubkey, setTrustLevel, teppEnforced, publishTierGrant, clearTrustRequest],
   );
 
   const setLevelIfUnassigned = useCallback(
@@ -382,7 +392,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
       const newlyAssigned = await setTrustLevelsBatch(kidPubkey, targetPubkeys, level);
       if (newlyAssigned.length === 0) return;
 
-      if (!featureTepp) return;
+      if (!teppEnforced) return;
 
       // ONE permission publish carrying the FULL same-tier list (prior entries
       // ∪ the batch we just wrote), then ONE state publish. The permission
@@ -404,7 +414,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         // Keep the localStorage writes — the parent can re-toggle to retry.
       }
     },
-    [kidPubkey, featureTepp, setLevelIfUnassigned, publishTierGrant, toast],
+    [kidPubkey, teppEnforced, setLevelIfUnassigned, publishTierGrant, toast],
   );
 
   /**
@@ -462,8 +472,8 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         getFamilySnapshot()?.trustAssignments?.[kidPubkey]?.[targetPubkey];
       await clearTrustLevel(kidPubkey, targetPubkey);
 
-      if (!featureTepp || !previousLevel) {
-        // featureTepp off (or nothing was assigned): localStorage clear is the
+      if (!teppEnforced || !previousLevel) {
+        // TEPP not enforced (or nothing was assigned): localStorage clear is the
         // whole operation. Drop any stale revocation marker so we don't retry a
         // publish for a tier that's no longer enforced.
         if (previousLevel) void clearPendingRevocation(kidPubkey, targetPubkey);
@@ -512,7 +522,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
         }
       }
     },
-    [kidPubkey, clearTrustLevel, featureTepp, publishTierRevocation, toast, user?.pubkey, unfollowMany],
+    [kidPubkey, clearTrustLevel, teppEnforced, publishTierRevocation, toast, user?.pubkey, unfollowMany],
   );
 
   /**
@@ -525,7 +535,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
   const publishMissingGrants = useCallback(
     async (members: string[], level: KuboTrustLevel): Promise<void> => {
       if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
-      if (!featureTepp || members.length === 0) return;
+      if (!teppEnforced || members.length === 0) return;
       // Union of the currently-recorded same-tier list and the members we're
       // (re-)admitting. The members are already in localStorage at this tier
       // (reconcile diffs localStorage-granted-but-not-on-wire), so this is
@@ -544,7 +554,7 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
       // its d-tag), then ONE state publish. No per-member amplification.
       await publishTierGrant(fullTierList[0], level, fullTierList);
     },
-    [kidPubkey, featureTepp, publishTierGrant],
+    [kidPubkey, teppEnforced, publishTierGrant],
   );
 
   /**
@@ -556,11 +566,11 @@ export function useTrustAssignments(kidPubkey: string | undefined): TrustAssignm
   const retryRevocation = useCallback(
     async (targetPubkey: string, previousLevel: KuboTrustLevel): Promise<void> => {
       if (!kidPubkey) throw new Error('useTrustAssignments: no kid selected');
-      if (!featureTepp) return;
+      if (!teppEnforced) return;
       await publishTierRevocation(targetPubkey, previousLevel);
       await clearPendingRevocation(kidPubkey, targetPubkey);
     },
-    [kidPubkey, featureTepp, publishTierRevocation],
+    [kidPubkey, teppEnforced, publishTierRevocation],
   );
 
   const clearPendingRevocationMarker = useCallback(

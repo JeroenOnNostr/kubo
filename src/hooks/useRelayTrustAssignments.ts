@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
 
-import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
 import {
   useKuboTeppPublishPermission,
@@ -10,6 +9,7 @@ import {
   KIND_PERMISSION_INTERACTION_RELAY,
   KIND_PERMISSION_VIEW_RELAY,
 } from '@/lib/tepp/kinds';
+import { isTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 
 import {
   getFamilySnapshot,
@@ -83,9 +83,12 @@ export function useRelayTrustAssignments(
   kidPubkey: string | undefined,
 ): RelayTrustAssignmentsApi {
   const { family, setRelayTrustLevel, clearRelayTrustLevel } = useKuboFamily();
-  const { config } = useAppContext();
   const { toast } = useToast();
-  const featureTepp = !!config.feedSettings.featureTepp;
+  // KUBO-200: gate publishes on the authoritative `family.teppEnforced` (via
+  // `isTeppEnforced`), not the clobberable `feedSettings.featureTepp` mirror —
+  // same fix as useTrustAssignments so relay (Places) grants can't silently
+  // skip the wire publish when a kid is the active session.
+  const teppEnforced = isTeppEnforced(family, kidPubkey);
   const publishPermission = useKuboTeppPublishPermission(kidPubkey);
   const publishState = useKuboTeppPublishState(kidPubkey);
 
@@ -109,7 +112,7 @@ export function useRelayTrustAssignments(
       if (!url) throw new Error('useRelayTrustAssignments: invalid relay URL');
       await setRelayTrustLevel(kidPubkey, url, level);
 
-      if (!featureTepp) return;
+      if (!teppEnforced) return;
       // Relay-extend not yet supported as a distinct on-wire list; the v0.1
       // PoC parks NIP-11-ownership relay extend, so Kubo-tier 'extend' folds
       // into the 8714 interaction-relay list (the localStorage tier pill still
@@ -159,7 +162,7 @@ export function useRelayTrustAssignments(
         });
       }
     },
-    [kidPubkey, setRelayTrustLevel, featureTepp, publishPermission, publishState, toast],
+    [kidPubkey, setRelayTrustLevel, teppEnforced, publishPermission, publishState, toast],
   );
 
   const clear = useCallback(
@@ -176,7 +179,7 @@ export function useRelayTrustAssignments(
       // membership stayed admitted on the wire forever (a permanent grant the
       // parent could never revoke). Now we publish the shrunken union for
       // extend exactly as for interact — clearing it is a real revocation.
-      if (!featureTepp || !previousLevel) return;
+      if (!teppEnforced || !previousLevel) return;
       const isView = previousLevel === 'view';
       const targetKind = isView
         ? KIND_PERMISSION_VIEW_RELAY
@@ -217,7 +220,7 @@ export function useRelayTrustAssignments(
         });
       }
     },
-    [kidPubkey, clearRelayTrustLevel, featureTepp, publishPermission, publishState, toast],
+    [kidPubkey, clearRelayTrustLevel, teppEnforced, publishPermission, publishState, toast],
   );
 
   return { get, setLevel, clear, assigned };

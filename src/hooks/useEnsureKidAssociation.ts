@@ -2,10 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { useAppContext } from '@/hooks/useAppContext';
 import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useParentSigner } from '@/hooks/useParentSigner';
 import { useKidSigner } from '@/lib/tepp-adapters/useKidSigner';
+import { isTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 import { useKuboTeppPublishAssociation } from '@/hooks/useKuboTeppPublish';
 import { pickCurrentAssociation, parseAssociation } from '@/lib/tepp/parse';
 import { KIND_ASSOCIATION } from '@/lib/tepp/kinds';
@@ -55,12 +55,16 @@ export function __resetEnsureKidAssociationGuard(): void {
 export function useEnsureKidAssociation(kidPubkey: string | undefined): void {
   const { nostr } = useNostr();
   const { family } = useKuboFamily();
-  const { config } = useAppContext();
   const { user: parentUser } = useParentSigner();
   const { user: kidUser } = useKidSigner(kidPubkey);
   const publishAssoc = useKuboTeppPublishAssociation(kidPubkey);
 
-  const featureTepp = !!config.feedSettings.featureTepp;
+  // KUBO-200: gate the association publish on the authoritative
+  // `family.teppEnforced` (via `isTeppEnforced`), not the clobberable
+  // `feedSettings.featureTepp` mirror — otherwise a kid whose active-session
+  // mirror reads false never publishes its kind-17700 association and its
+  // construct can't assemble. Local name kept as `featureTepp`.
+  const featureTepp = isTeppEnforced(family, kidPubkey);
   const isKid = !!kidPubkey && !!family?.kids.some((k) => k.pubkey === kidPubkey);
 
   // Keep the mutation in a ref so the effect doesn't list it as a dep (its

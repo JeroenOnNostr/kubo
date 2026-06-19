@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useNostr } from '@nostrify/react';
 
-import { useAppContext } from '@/hooks/useAppContext';
 import { useFollowActions } from '@/hooks/useFollowActions';
 import { fetchPacksByAtags } from '@/hooks/useFollowPacks';
 import { getFamilySnapshot, useKuboFamily } from '@/hooks/useKuboFamily';
@@ -17,6 +16,7 @@ import {
   KIND_PERMISSION_INTERACTION_NPUB_A,
   KIND_PERMISSION_INTERACTION_NPUB_B,
 } from '@/lib/tepp/kinds';
+import { isTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 import type { KuboTrustLevel } from '@/hooks/useKuboFamily';
 import type { Construct } from '@/lib/tepp/types';
 
@@ -101,14 +101,19 @@ function constructHasInteract(construct: Construct, pubkey: string): boolean {
 export function useEnsureParentTrust(kidPubkey: string | undefined): void {
   const { nostr } = useNostr();
   const { family } = useKuboFamily();
-  const { config } = useAppContext();
   const { user: parentUser } = useParentSigner();
   const trust = useTrustAssignments(kidPubkey);
   const { followMany } = useFollowActions();
   const { construct, loading: constructLoading } = useKuboTeppConstruct(kidPubkey);
 
   const parentPubkey = family?.parentPubkey;
-  const featureTepp = !!config.feedSettings.featureTepp;
+  // KUBO-200: reconcile against the authoritative enforcement flag
+  // (`family.teppEnforced`, via `isTeppEnforced`), not the clobberable
+  // `feedSettings.featureTepp` mirror. Otherwise the parent/pack grant
+  // reconcile short-circuits on a kid-active session and never converges
+  // localStorage-only assignments onto the wire. Local name kept as
+  // `featureTepp` (referenced throughout the effect below).
+  const featureTepp = isTeppEnforced(family, kidPubkey);
 
   useEffect(() => {
     if (!kidPubkey || !parentPubkey) return;

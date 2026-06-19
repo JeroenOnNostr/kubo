@@ -3,8 +3,8 @@ import { NSecSigner, type NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { generateSecretKey } from 'nostr-tools/pure';
 
-import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { isTeppEnforced } from '@/lib/tepp-adapters/useTeppEnforced';
 
 import { useKuboFamily } from './useKuboFamily';
 
@@ -31,10 +31,14 @@ export interface TrustRequestsApi {
  */
 export function useTrustRequests(kidPubkey: string | undefined): TrustRequestsApi {
   const { family, addTrustRequest, clearTrustRequest } = useKuboFamily();
-  const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const featureTepp = !!config.feedSettings.featureTepp;
+  // KUBO-200: gate the request gift-wrap publish on the authoritative
+  // `family.teppEnforced` (via `isTeppEnforced`), not the clobberable
+  // `feedSettings.featureTepp` mirror — so a freshly-added 2nd/3rd kid (whose
+  // active-session mirror reads false) still publishes the request to the
+  // parent. Local name kept as `featureTepp`.
+  const featureTepp = isTeppEnforced(family, kidPubkey);
 
   const kidRequests =
     kidPubkey && family?.trustRequests
