@@ -44,7 +44,7 @@ export function ParentFeedPage() {
       <div className="px-4 grid grid-cols-2 gap-3">
         <NavTile
           icon={<SlidersHorizontal className="size-5" />}
-          title="Edit feed settings"
+          title="Edit content types"
           onClick={() => nav('/parent/feed-settings')}
         />
         <NavTile

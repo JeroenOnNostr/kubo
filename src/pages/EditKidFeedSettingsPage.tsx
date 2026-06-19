@@ -18,13 +18,13 @@ export function EditKidFeedSettingsPage() {
   const kid = useSelectedKid();
 
   if (!kid) {
-    return <NoKidSelected title="Feed settings" />;
+    return <NoKidSelected title="Content types" />;
   }
 
   return (
     <main className="flex flex-col">
       <Header
-        title={`Feed settings · ${kid.displayName}`}
+        title={`Content types · ${kid.displayName}`}
         onBack={() => nav('/parent/feed')}
       />
       <div className="p-4">

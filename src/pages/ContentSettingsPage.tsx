@@ -8,7 +8,7 @@ export function ContentSettingsPage() {
   const { config } = useAppContext();
 
   useSeoMeta({
-    title: `Home Feed | Settings | ${config.appName}`,
+    title: `Content Types | Settings | ${config.appName}`,
     description: 'Choose what types of posts appear in your home feed',
   });
 
@@ -20,7 +20,7 @@ export function ContentSettingsPage() {
         alwaysShowBack
         titleContent={
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold flex items-center gap-1.5">Home Feed <HelpTip faqId="fyp" /></h1>
+            <h1 className="text-xl font-bold flex items-center gap-1.5">Content Types <HelpTip faqId="fyp" /></h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               Nostr supports many content types beyond text posts. Customize which appear in your home feed.
             </p>
