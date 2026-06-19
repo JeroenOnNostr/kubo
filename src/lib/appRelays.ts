@@ -28,6 +28,15 @@ export const DIVINE_RELAY = 'wss://divine.video/';
 export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev';
 
 /**
+ * YouTube bridge HTTP "fast lane" base URL (see src/lib/youtubeBridgeHttp.ts).
+ * The bridge's DVM still listens on Nostr relays; this HTTPS path lets Kubo ask
+ * for channel search/watch directly instead of waiting on the DVM's ~3s
+ * poll-drain. The DVM path stays as the automatic fallback. Must be the same
+ * Worker that runs the DVM — keep in sync with the bridge's wrangler.toml route.
+ */
+export const YOUTUBE_BRIDGE_BASE = 'https://nostr-youtube-bridge.jeroen-cammaart.workers.dev';
+
+/**
  * NIP-29 managed-group relays. Each NIP-29 group lives on exactly one
  * relay and is addressed as `<host>'<group-id>` — the group's host is
  * the source of truth for membership, metadata, and chat. These are the

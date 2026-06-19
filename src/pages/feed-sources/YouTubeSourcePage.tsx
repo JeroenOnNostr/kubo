@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, MonitorPlay, Loader2, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -49,85 +49,147 @@ export function YouTubeSourcePage() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[] | null>(null);
-  /** npub of the channel whose watch request is currently in flight. */
-  const [addingNpub, setAddingNpub] = useState<string | null>(null);
+  /**
+   * npubs of channels whose bridge watch (video backfill) is still in flight.
+   * The channel is already in the Active list (optimistic add); this just drives
+   * the "fetching videos…" sub-label on its row.
+   */
+  const [syncingNpubs, setSyncingNpubs] = useState<Set<string>>(new Set());
 
   const invalidateFeed = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['kid-feed'] });
     queryClient.invalidateQueries({ queryKey: ['feed', 'follows'] });
   }, [queryClient]);
 
-  const handleSearch = useCallback(async () => {
-    const q = query.trim();
-    if (!q || searching) return;
-    if (!dvm.ready) {
-      toast({
-        title: 'Log in as the parent',
-        description: 'Adding YouTube channels has to be done from the parent account.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    setSearching(true);
-    setResults(null);
-    try {
-      const found = await dvm.search(q);
-      setResults(found);
-    } catch (err) {
-      if (err instanceof YouTubeDvmTimeoutError) {
-        toast({ title: 'YouTube search timed out', description: err.message, variant: 'destructive' });
-      } else if (err instanceof YouTubeDvmError) {
-        toast({ title: 'YouTube search failed', description: err.message, variant: 'destructive' });
-      } else {
-        toast({
-          title: 'YouTube search failed',
-          description: err instanceof Error ? err.message : String(err),
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      setSearching(false);
-    }
-  }, [query, searching, dvm, toast]);
+  /** Token of the latest issued search, so a slow earlier response can't
+   *  overwrite results for a query the user has since changed. */
+  const searchSeq = useRef(0);
 
-  const handleAdd = useCallback(
-    async (result: SearchResult) => {
-      if (addingNpub) return;
-      setAddingNpub(result.npub);
-      try {
-        // Ask the DVM to watch the channel (ensures it + backfills videos),
-        // then persist the ref and grant trust+follow so the videos flow.
-        const watch = await dvm.watch({ channelId: result.channelId });
-        await addChannel({
-          npub: watch.npub || result.npub,
-          channelId: watch.channelId || result.channelId,
-          title: watch.title || result.title,
-          picture: watch.picture ?? result.thumbnail,
-        });
-        invalidateFeed();
-        toast({
-          title: `Added to ${kid?.displayName ?? 'the'} feed`,
-          description: watch.alreadyWatched
-            ? `${watch.title} was already being watched.`
-            : `Backfilled ${watch.backfilled} video${watch.backfilled === 1 ? '' : 's'}.`,
-        });
-      } catch (err) {
-        if (err instanceof YouTubeDvmTimeoutError) {
-          toast({ title: "Couldn't add channel", description: err.message, variant: 'destructive' });
-        } else if (err instanceof YouTubeDvmError) {
-          toast({ title: "Couldn't add channel", description: err.message, variant: 'destructive' });
-        } else {
+  const runSearch = useCallback(
+    async (raw: string, { silent }: { silent?: boolean } = {}) => {
+      const q = raw.trim();
+      if (!q) return;
+      if (!dvm.ready) {
+        // Only nag about parent login on an explicit Search press, not while typing.
+        if (!silent) {
           toast({
-            title: "Couldn't add channel",
-            description: err instanceof Error ? err.message : String(err),
+            title: 'Log in as the parent',
+            description: 'Adding YouTube channels has to be done from the parent account.',
             variant: 'destructive',
           });
         }
+        return;
+      }
+      const seq = ++searchSeq.current;
+      setSearching(true);
+      setResults(null);
+      try {
+        const found = await dvm.search(q);
+        if (seq !== searchSeq.current) return; // a newer search superseded this one
+        setResults(found);
+      } catch (err) {
+        if (seq !== searchSeq.current) return;
+        // Debounced (typing) searches fail quietly — only explicit presses toast.
+        if (!silent) {
+          if (err instanceof YouTubeDvmTimeoutError) {
+            toast({ title: 'YouTube search timed out', description: err.message, variant: 'destructive' });
+          } else if (err instanceof YouTubeDvmError) {
+            toast({ title: 'YouTube search failed', description: err.message, variant: 'destructive' });
+          } else {
+            toast({
+              title: 'YouTube search failed',
+              description: err instanceof Error ? err.message : String(err),
+              variant: 'destructive',
+            });
+          }
+        }
       } finally {
-        setAddingNpub(null);
+        if (seq === searchSeq.current) setSearching(false);
       }
     },
-    [addingNpub, dvm, addChannel, invalidateFeed, toast, kid?.displayName],
+    [dvm, toast],
+  );
+
+  const handleSearch = useCallback(() => runSearch(query), [runSearch, query]);
+
+  // Keep the latest runSearch in a ref so the debounce effect can depend ONLY on
+  // `query`. Depending on `runSearch` directly would re-fire the effect whenever
+  // its identity churns (a parent re-render, an upstream hook returning a fresh
+  // value) — which, combined with the setState inside runSearch, becomes a
+  // render→search→setState→render loop. The ref breaks that cycle.
+  const runSearchRef = useRef(runSearch);
+  useEffect(() => {
+    runSearchRef.current = runSearch;
+  }, [runSearch]);
+
+  // Search-as-you-type: debounce ~350ms after the user stops typing (≥2 chars).
+  // The HTTP fast lane + client/bridge caches make this feel live; failures are
+  // silent so a half-typed query doesn't spam toasts.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const t = setTimeout(() => runSearchRef.current(q, { silent: true }), 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const handleAdd = useCallback(
+    async (result: SearchResult) => {
+      // OPTIMISTIC ADD: the channel's npub/title/picture are already in the
+      // search result, so persist the ref + grant trust/follow FIRST. The row
+      // jumps into Active immediately (addChannel is idempotent on npub). Then
+      // ask the bridge to start watching + backfill in the background — the
+      // videos trickle in; we don't make the parent wait on it.
+      try {
+        await addChannel({
+          npub: result.npub,
+          channelId: result.channelId,
+          title: result.title,
+          picture: result.thumbnail,
+        });
+      } catch (err) {
+        toast({
+          title: "Couldn't add channel",
+          description: err instanceof Error ? err.message : String(err),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      invalidateFeed();
+      toast({
+        title: `Added to ${kid?.displayName ?? 'the'} feed`,
+        description: 'Fetching videos — new channels can take a few minutes to appear.',
+      });
+
+      // Mark the row as syncing while the bridge watch (backfill) runs.
+      setSyncingNpubs((prev) => new Set(prev).add(result.npub));
+      try {
+        await dvm.watch({ channelId: result.channelId, thumbnail: result.thumbnail });
+        // Videos may have landed — refetch so they show without a manual reload.
+        invalidateFeed();
+      } catch (err) {
+        // The channel is already added; a watch failure just means the backfill
+        // didn't kick off now (the bridge's 15-min cron still owns future
+        // uploads). Surface it softly rather than as a hard "couldn't add".
+        const message =
+          err instanceof YouTubeDvmTimeoutError || err instanceof YouTubeDvmError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        toast({
+          title: 'Channel added — videos may be delayed',
+          description: message,
+        });
+      } finally {
+        setSyncingNpubs((prev) => {
+          const next = new Set(prev);
+          next.delete(result.npub);
+          return next;
+        });
+      }
+    },
+    [dvm, addChannel, invalidateFeed, toast, kid?.displayName],
   );
 
   const handleSetEnabled = useCallback(
@@ -212,8 +274,6 @@ export function YouTubeSourcePage() {
                 key={result.npub}
                 result={result}
                 kidName={kid.displayName}
-                adding={addingNpub === result.npub}
-                disabled={!!addingNpub}
                 onAdd={() => handleAdd(result)}
               />
             ))}
@@ -223,6 +283,7 @@ export function YouTubeSourcePage() {
         {/* Active channels */}
         <ActiveSection
           channels={active}
+          syncingNpubs={syncingNpubs}
           onToggle={(npub) => handleSetEnabled(npub, false)}
           disabled={isPending}
         />
@@ -244,14 +305,10 @@ export function YouTubeSourcePage() {
 function ResultCard({
   result,
   kidName,
-  adding,
-  disabled,
   onAdd,
 }: {
   result: SearchResult;
   kidName: string;
-  adding: boolean;
-  disabled: boolean;
   onAdd: () => void;
 }) {
   return (
@@ -275,17 +332,10 @@ function ResultCard({
         size="sm"
         className="h-8 rounded-full px-3 text-[12px] shrink-0"
         onClick={onAdd}
-        disabled={disabled}
         aria-label={`Add ${result.title} to ${kidName}'s feed`}
       >
-        {adding ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden />
-        ) : (
-          <>
-            <Plus className="size-4 mr-1" aria-hidden />
-            Add to {kidName}'s feed
-          </>
-        )}
+        <Plus className="size-4 mr-1" aria-hidden />
+        Add to {kidName}'s feed
       </Button>
     </div>
   );
@@ -295,10 +345,12 @@ function ResultCard({
 
 function ActiveSection({
   channels,
+  syncingNpubs,
   onToggle,
   disabled,
 }: {
   channels: YouTubeChannelEntry[];
+  syncingNpubs: Set<string>;
   onToggle: (npub: string) => void;
   disabled: boolean;
 }) {
@@ -318,26 +370,36 @@ function ActiveSection({
         Active · {channels.length}
       </div>
       <div className="flex flex-col gap-2">
-        {channels.map((channel) => (
-          <div
-            key={channel.npub}
-            className="flex items-center gap-3 p-3 rounded-xl bg-card"
-          >
-            <ChannelAvatar picture={channel.picture} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium leading-tight" title={channel.title}>
-                {channel.title}
+        {channels.map((channel) => {
+          const syncing = syncingNpubs.has(channel.npub);
+          return (
+            <div
+              key={channel.npub}
+              className="flex items-center gap-3 p-3 rounded-xl bg-card"
+            >
+              <ChannelAvatar picture={channel.picture} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium leading-tight" title={channel.title}>
+                  {channel.title}
+                </div>
+                {syncing ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" aria-hidden />
+                    <span className="truncate">Fetching videos…</span>
+                  </div>
+                ) : (
+                  <div className="truncate text-[11px] text-muted-foreground">Watching</div>
+                )}
               </div>
-              <div className="truncate text-[11px] text-muted-foreground">Watching</div>
+              <Switch
+                checked
+                onCheckedChange={() => onToggle(channel.npub)}
+                disabled={disabled}
+                aria-label={`Disable ${channel.title}`}
+              />
             </div>
-            <Switch
-              checked
-              onCheckedChange={() => onToggle(channel.npub)}
-              disabled={disabled}
-              aria-label={`Disable ${channel.title}`}
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

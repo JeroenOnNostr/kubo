@@ -17,13 +17,14 @@
  * the explicit parent signer) and subscribe via `nostr.req()`.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import type { NUser } from '@nostrify/react/login';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useNostrPublish, type EventTemplate } from '@/hooks/useNostrPublish';
 import { useParentSigner } from '@/hooks/useParentSigner';
+import { httpSearch, httpWatch, isBridgeHttpConfigured } from '@/lib/youtubeBridgeHttp';
 
 // ─── Job kinds ──────────────────────────────────────────────────────────────
 
@@ -226,6 +227,9 @@ export interface RequestWatchOpts {
   channelId: string;
   /** How many long-form videos to backfill. Default 20. */
   backfillLong?: number;
+  /** Raw search thumbnail — used only by the HTTP fast lane as a placeholder
+   *  picture until the bridge rehosts the avatar. Ignored by the relay DVM. */
+  thumbnail?: string;
   /** Progress callback for 7000 `processing` status events. */
   onStatus?: (status: DvmStatus) => void;
 }
@@ -287,21 +291,55 @@ export function useYouTubeDvm(): UseYouTubeDvmReturn {
   const { mutateAsync: publish } = useNostrPublish();
   const { user: parentSigner, reason } = useParentSigner();
 
+  // HTTP fast lane first (skips the DVM's ~3s poll-drain), falling back to the
+  // relay DVM only when the HTTP path is unreachable (timeout / network /
+  // not-configured). A deliberate `YouTubeDvmError` (e.g. "could not resolve
+  // channel", a 429) is NOT a fallback trigger — it's the real answer, so we
+  // surface it immediately instead of making the user wait through both paths.
+
   const search = useCallback(
-    (query: string) => {
+    async (query: string) => {
       if (!parentSigner) throw new Error(reason ?? 'parent-logged-out');
+      if (isBridgeHttpConfigured()) {
+        try {
+          return await httpSearch(query);
+        } catch (err) {
+          if (!(err instanceof YouTubeDvmTimeoutError)) throw err;
+          // HTTP unreachable → fall back to the relay DVM below.
+        }
+      }
       return searchYouTubeChannels(nostr as ReqCapable, publish, parentSigner, query);
     },
     [nostr, publish, parentSigner, reason],
   );
 
   const watch = useCallback(
-    (opts: RequestWatchOpts) => {
+    async (opts: RequestWatchOpts) => {
       if (!parentSigner) throw new Error(reason ?? 'parent-logged-out');
+      if (isBridgeHttpConfigured()) {
+        try {
+          return await httpWatch({
+            channelId: opts.channelId,
+            backfillLong: opts.backfillLong,
+            thumbnail: opts.thumbnail,
+          });
+        } catch (err) {
+          if (!(err instanceof YouTubeDvmTimeoutError)) throw err;
+          // HTTP unreachable → fall back to the relay DVM below.
+        }
+      }
       return requestWatchChannel(nostr as ReqCapable, publish, parentSigner, opts);
     },
     [nostr, publish, parentSigner, reason],
   );
 
-  return { ready: !!parentSigner, reason, search, watch };
+  // Stable object identity: consumers put `dvm.search`/`dvm.watch` in effect
+  // deps (e.g. the debounced search effect on the YouTube page). Returning a
+  // fresh literal every render would re-fire those effects on every render — a
+  // render→search→setState→render loop. Memoize on the same primitives the
+  // callbacks depend on.
+  return useMemo(
+    () => ({ ready: !!parentSigner, reason, search, watch }),
+    [parentSigner, reason, search, watch],
+  );
 }
