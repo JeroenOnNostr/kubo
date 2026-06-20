@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.06.20] - 2026-06-20
+
+### Fixed
+- **@mentions in group chat** — tagging someone in a group chat now shows up as their @name (a clickable link) instead of a raw `nostr:npub1…` string, and the message box has mention autocomplete: type `@name` to tag a member. Mentioned users are properly notified (KUBO-206).
+
 ## [2026.06.19] - 2026-06-19
 
 ### Added
