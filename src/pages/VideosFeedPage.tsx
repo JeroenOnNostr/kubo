@@ -929,7 +929,7 @@ export function VideosFeedPage() {
             message={
               feedTab === "follows"
                 ? "No videos yet. Follow some creators to see their videos here."
-                : "No videos found. Check your relay connections or come back soon."
+                : "No videos found. Check your connection or come back soon."
             }
             onSwitchToGlobal={
               feedTab === "follows" ? () => setFeedTab("global") : undefined

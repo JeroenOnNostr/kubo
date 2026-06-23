@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Switch } from '@/components/ui/switch';
+import { SourceActionButton } from '@/components/feed/SourceActionButton';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { useAddFeedProfile } from '@/hooks/useAddFeedProfile';
@@ -13,6 +13,10 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useFollowList } from '@/hooks/useFollowActions';
 import type { SearchProfile } from '@/hooks/useSearchProfiles';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
+import {
+  excludeChannelPubkeys,
+  useYouTubeChannelPubkeys,
+} from '@/hooks/useYouTubeChannelPubkeys';
 import { genUserName } from '@/lib/genUserName';
 
 import { FeedSourceHeader } from './_FeedSourceHeader';
@@ -25,7 +29,7 @@ import { FeedSourceHeader } from './_FeedSourceHeader';
  * Search uses Ditto's shared ProfileSearchDropdown so npub/nprofile/hex/nip05
  * inputs resolve to the exact profile via Ditto's detectIdentifier + useAuthor
  * pipeline. Picking any result — text-search or identifier — follows the
- * pubkey in place (additive). Unfollows happen via the Switch on each
+ * pubkey in place (additive). Unfollows happen via the Remove button on each
  * Following row below.
  */
 export function ProfilesSourcePage() {
@@ -35,8 +39,17 @@ export function ProfilesSourcePage() {
   const { addProfile, removeProfile, isPending } = useAddFeedProfile(kid?.pubkey);
   const queryClient = useQueryClient();
 
-  const followedPubkeys = useMemo(() => followData?.pubkeys ?? [], [followData?.pubkeys]);
-  const followedSet = useMemo(() => new Set(followedPubkeys), [followedPubkeys]);
+  // The "already followed?" check (for the add flow) must consider EVERY follow,
+  // including channel npubs, so searching for a channel doesn't re-follow it.
+  const allFollowed = useMemo(() => followData?.pubkeys ?? [], [followData?.pubkeys]);
+  const followedSet = useMemo(() => new Set(allFollowed), [allFollowed]);
+  // KUBO-207: but the displayed "Following" list excludes YouTube channels —
+  // those are managed under the YouTube Channels source, not here.
+  const channelPubkeys = useYouTubeChannelPubkeys(kid?.pubkey);
+  const followedPubkeys = useMemo(
+    () => excludeChannelPubkeys(allFollowed, channelPubkeys),
+    [allFollowed, channelPubkeys],
+  );
 
   const handlePick = useCallback((profile: SearchProfile) => {
     if (!followedSet.has(profile.pubkey)) {
@@ -73,7 +86,7 @@ export function ProfilesSourcePage() {
         </p>
 
         <ProfileSearchDropdown
-          placeholder="Search by name or npub…"
+          placeholder="Search by name…"
           onSelect={handlePick}
           onSelectIdentifier={handlePick}
           hideCountry
@@ -202,11 +215,11 @@ function ProfileRow({
           </div>
         </div>
       </button>
-      <Switch
-        checked={enabled}
-        onCheckedChange={onToggle}
+      <SourceActionButton
+        action={enabled ? 'remove' : 'add'}
+        onClick={onToggle}
         disabled={disabled}
-        aria-label={`Toggle ${name}`}
+        itemLabel={name}
       />
     </div>
   );

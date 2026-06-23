@@ -20,12 +20,18 @@ import { useKidFeedSourcesSelector } from '@/hooks/useKidFeedSources';
 import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
 import { useYouTubeChannels } from '@/hooks/useYouTubeChannels';
+import {
+  excludeChannelPubkeys,
+  useYouTubeChannelPubkeys,
+} from '@/hooks/useYouTubeChannelPubkeys';
 import { genUserName } from '@/lib/genUserName';
 
 /**
  * /parent/feed — source-picker screen. Renders two top tiles (edit feed
- * settings + preview) and four source-category tiles (relays, communities,
- * follow packs, profiles) that each open their own browse screen.
+ * settings + preview) and five source-category tiles, ordered most-used
+ * first (YouTube, Profiles, Profile Lists, Communities, Places) that each
+ * open their own browse screen. "Places" is the parent-facing label for
+ * relays; "Profile Lists" is the parent-facing label for NIP-51 follow packs.
  *
  * Each tile reads only its own count via useKidFeedSourcesSelector (M4) so
  * toggling a relay doesn't re-render the communities/packs tiles. Chip
@@ -56,13 +62,13 @@ export function ParentFeedPage() {
         />
       </div>
 
-      {/* Source tiles */}
+      {/* Source tiles — ordered most-used first (KUBO-209). */}
       <div className="px-4 flex flex-col gap-3">
-        <RelaysTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/relays')} />
-        <CommunitiesTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/communities')} />
-        <PacksTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/packs')} />
-        <ProfilesTile onClick={() => nav('/parent/feed/profiles')} />
         <YouTubeTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/youtube')} />
+        <ProfilesTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/profiles')} />
+        <PacksTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/packs')} />
+        <CommunitiesTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/communities')} />
+        <RelaysTile kidPubkey={kid.pubkey} onClick={() => nav('/parent/feed/relays')} />
       </div>
     </div>
   );
@@ -80,8 +86,8 @@ function RelaysTile({ kidPubkey, onClick }: { kidPubkey: string; onClick: () => 
   return (
     <FeedSourceTile
       icon={<Radio className="size-5" />}
-      title="Relays"
-      description="Pull posts from specific relay firehoses."
+      title="Places"
+      description="Trusted places like a school or neighborhood."
       enabledCount={relays.length}
       chips={[]}
       onClick={onClick}
@@ -149,7 +155,7 @@ function CommunitiesTile({ kidPubkey, onClick }: { kidPubkey: string; onClick: (
     <FeedSourceTile
       icon={<UsersRound className="size-5" />}
       title="Communities"
-      description="Posts from moderated NIP-72 communities."
+      description="Posts from moderated communities and groups."
       enabledCount={communities.length}
       chips={chips}
       onClick={onClick}
@@ -175,8 +181,8 @@ function PacksTile({ kidPubkey, onClick }: { kidPubkey: string; onClick: () => v
   return (
     <FeedSourceTile
       icon={<Users className="size-5" />}
-      title="Follow packs"
-      description="Curated people lists others have shared."
+      title="Profile Lists"
+      description="Curated lists of profiles others have shared."
       enabledCount={packs.length}
       chips={chips}
       onClick={onClick}
@@ -184,11 +190,15 @@ function PacksTile({ kidPubkey, onClick }: { kidPubkey: string; onClick: () => v
   );
 }
 
-function ProfilesTile({ onClick }: { onClick: () => void }) {
+function ProfilesTile({ kidPubkey, onClick }: { kidPubkey: string; onClick: () => void }) {
   // Profiles = the kid's kind-3 follow list. The kid is the active signer on
   // this screen, so useFollowList reads their own follows.
   const { data } = useFollowList();
-  const pubkeys = data?.pubkeys ?? [];
+  // KUBO-207: YouTube channels are also followed in kind-3 (so their videos
+  // flow), but they're managed under the "YouTube Channels" tile — exclude them
+  // here so they don't double-render as Profiles.
+  const channelPubkeys = useYouTubeChannelPubkeys(kidPubkey);
+  const pubkeys = excludeChannelPubkeys(data?.pubkeys ?? [], channelPubkeys);
   return (
     <FeedSourceTile
       icon={<UserPlus className="size-5" />}

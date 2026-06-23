@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Search, MonitorPlay, Loader2, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Search, MonitorPlay, Loader2, Trash2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
+import { SourceActionButton } from '@/components/feed/SourceActionButton';
 import { BrowseSectionShell } from '@/components/feed/BrowseSectionShell';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
@@ -34,7 +34,7 @@ import { FeedSourceHeader } from './_FeedSourceHeader';
  *
  * Layout (mirrors ProfilesSourcePage / RelaysSourcePage):
  *   - search box (name, YouTube URL, or @handle — the DVM resolves all three)
- *   - result cards with "Add to {kid}'s feed"
+ *   - result rows with a Switch to add (uniform with packs/relays/communities)
  *   - "Active" section (enabled channels, Switch to disable)
  *   - "Removed / available to re-add" section (collapsed; re-enable or forget)
  */
@@ -273,7 +273,6 @@ export function YouTubeSourcePage() {
               <ResultCard
                 key={result.npub}
                 result={result}
-                kidName={kid.displayName}
                 onAdd={() => handleAdd(result)}
               />
             ))}
@@ -304,11 +303,9 @@ export function YouTubeSourcePage() {
 
 function ResultCard({
   result,
-  kidName,
   onAdd,
 }: {
   result: SearchResult;
-  kidName: string;
   onAdd: () => void;
 }) {
   return (
@@ -324,19 +321,16 @@ function ResultCard({
           {result.title}
         </div>
         <div className="truncate text-[11px] text-muted-foreground">
-          {result.watching ? 'Already watching' : 'Tap add to start watching'}
+          {result.watching ? 'Already watching' : 'Tap to add to feed'}
         </div>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        className="h-8 rounded-full px-3 text-[12px] shrink-0"
-        onClick={onAdd}
-        aria-label={`Add ${result.title} to ${kidName}'s feed`}
-      >
-        <Plus className="size-4 mr-1" aria-hidden />
-        Add to {kidName}'s feed
-      </Button>
+      {/*
+        Search results only ever show channels NOT yet in the list
+        (visibleResults filters out knownNpubs), so this is always "Add".
+        Same SourceActionButton the Active/Removed sections + the
+        packs/relays/communities pages use — uniform "add a source" UI (KUBO-208).
+      */}
+      <SourceActionButton action="add" onClick={onAdd} itemLabel={result.title} />
     </div>
   );
 }
@@ -391,11 +385,11 @@ function ActiveSection({
                   <div className="truncate text-[11px] text-muted-foreground">Watching</div>
                 )}
               </div>
-              <Switch
-                checked
-                onCheckedChange={() => onToggle(channel.npub)}
+              <SourceActionButton
+                action="remove"
+                onClick={() => onToggle(channel.npub)}
                 disabled={disabled}
-                aria-label={`Disable ${channel.title}`}
+                itemLabel={channel.title}
               />
             </div>
           );
@@ -438,18 +432,12 @@ function RemovedSection({
               <div className="truncate text-[11px] text-muted-foreground">Disabled</div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-8 rounded-full px-3 text-[12px]"
+              <SourceActionButton
+                action="readd"
                 onClick={() => onReenable(channel.npub)}
                 disabled={disabled}
-                aria-label={`Re-enable ${channel.title}`}
-              >
-                <RotateCcw className="size-3.5 mr-1" aria-hidden />
-                Re-enable
-              </Button>
+                itemLabel={channel.title}
+              />
               <Button
                 type="button"
                 size="icon"
