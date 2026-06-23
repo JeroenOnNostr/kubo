@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Search, Server } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -6,19 +6,18 @@ import { BrowseSectionShell } from '@/components/feed/BrowseSectionShell';
 import { ExpandableSourceRow } from '@/components/feed/ExpandableSourceRow';
 import { NoKidSelected } from '@/components/NoKidSelected';
 import { RelayBadges, RelayFooter } from '@/components/relays/RelayInfoPanel';
-import { useAppContext } from '@/hooks/useAppContext';
+import { useBrowseRelays, type BrowseRelayEntry } from '@/hooks/useBrowseRelays';
 import { useKidFeedSources } from '@/hooks/useKidFeedSources';
-import { useRelayInfo, type RelayInfoDocument } from '@/hooks/useRelayInfo';
-import { useRelays } from '@/hooks/useRelays';
+import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useSelectedKid } from '@/hooks/useSelectedKid';
-import { APP_RELAYS } from '@/lib/appRelays';
-import { normalizeRelayUrl, relayHostOf } from '@/lib/relayUrl';
+import { relayHostOf } from '@/lib/relayUrl';
 
 import { FeedSourceHeader } from './_FeedSourceHeader';
 
 /**
- * /parent/feed/relays — search, browse, and toggle relay firehoses for the
- * active kid.
+ * /parent/feed/relays — search, browse, and toggle "Places" (relay firehoses)
+ * for the active kid. "Places" is the parent-facing label; the underlying
+ * sources are Nostr relays.
  *
  * Layout (Stage 3):
  *   - search pill (also accepts pasted wss:// URLs — shown as a synthetic
@@ -30,75 +29,27 @@ import { FeedSourceHeader } from './_FeedSourceHeader';
  */
 export function RelaysSourcePage() {
   const kid = useSelectedKid();
-  const { config } = useAppContext();
   const { sources, toggleRelay } = useKidFeedSources(kid?.pubkey ?? null);
   const [query, setQuery] = useState('');
 
   const trimmedQuery = query.trim();
-  const pastedUrl = useMemo(
-    () => (trimmedQuery ? normalizeRelayUrl(trimmedQuery) : null),
-    [trimmedQuery],
+
+  // Browse list (discovered + baseline + pasted URL, minus enabled) is composed
+  // by the shared useBrowseRelays hook, also used by Trust → Places (KUBO-211).
+  const { entries: browseList, isFetching: relaysFetching } = useBrowseRelays(
+    query,
+    sources.relays,
   );
 
-  const { relays: discoveredRelays, isFetching: relaysFetching } = useRelays(query);
-
-  // Baseline candidate list: user's NIP-65 + APP_RELAYS. Always included so
-  // empty-query users see something even before the firehose lands.
-  const baselineRelays = useMemo<string[]>(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    const push = (url: string) => {
-      const normalized = normalizeRelayUrl(url);
-      if (!normalized || seen.has(normalized)) return;
-      seen.add(normalized);
-      out.push(normalized);
-    };
-    for (const r of config.relayMetadata.relays) push(r.url);
-    if (config.useAppRelays) {
-      for (const r of APP_RELAYS.relays) push(r.url);
-    }
-    return out;
-  }, [config.relayMetadata.relays, config.useAppRelays]);
-
-  const enabledSet = useMemo(() => new Set(sources.relays), [sources.relays]);
-
-  // Compose the browse list: discovered (ranked) first, then baseline
-  // relays that aren't already in the discovered list, minus anything the
-  // user has already enabled (those render in the Enabled section).
-  // Discovered rows carry inline NIP-11 from kind-30166 so RelayRow can
-  // skip the per-row HTTP fetch (KUBO-054); baseline rows have no info and
-  // fall back to the lazy fetch.
-  const browseList = useMemo<RelayBrowseEntry[]>(() => {
-    const seen = new Set<string>([...enabledSet]);
-    const out: RelayBrowseEntry[] = [];
-    const push = (entry: RelayBrowseEntry) => {
-      if (seen.has(entry.url)) return;
-      seen.add(entry.url);
-      out.push(entry);
-    };
-
-    if (pastedUrl) {
-      push({ url: pastedUrl });
-    }
-
-    for (const r of discoveredRelays) push({ url: r.url, info: r.info });
-
-    const q = trimmedQuery.toLowerCase();
-    for (const url of baselineRelays) {
-      if (!q || url.toLowerCase().includes(q)) push({ url });
-    }
-    return out;
-  }, [pastedUrl, discoveredRelays, baselineRelays, enabledSet, trimmedQuery]);
-
-  if (!kid) return <NoKidSelected title="Relays" />;
+  if (!kid) return <NoKidSelected title="Places" />;
 
   return (
     <main className="flex flex-col">
-      <FeedSourceHeader title={`Relays · ${kid.displayName}`} />
+      <FeedSourceHeader title={`Places · ${kid.displayName}`} />
       <div className="p-4 flex flex-col gap-4">
         <p className="text-[12px] text-muted-foreground px-1">
-          Each enabled relay contributes its global firehose to {kid.displayName}'s
-          feed aggregate.
+          Each enabled place — like a school or neighborhood — adds its posts
+          to {kid.displayName}'s feed.
         </p>
 
         <div className="flex items-center gap-2 h-11 px-4 rounded-full bg-card">
@@ -106,9 +57,9 @@ export function RelaysSourcePage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search relays or paste wss://…"
+            placeholder="Search places or paste wss://…"
             className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground"
-            aria-label="Search relays"
+            aria-label="Search places"
           />
         </div>
 
@@ -130,11 +81,7 @@ export function RelaysSourcePage() {
   );
 }
 
-interface RelayBrowseEntry {
-  url: string;
-  /** Inline NIP-11 from NIP-66 monitor; absent for baseline rows. */
-  info?: RelayInfoDocument;
-}
+type RelayBrowseEntry = BrowseRelayEntry;
 
 function EnabledSection({
   urls,
@@ -179,7 +126,7 @@ function BrowseSection({
         <EmptyState>Searching…</EmptyState>
       ) : entries.length === 0 ? (
         <EmptyState>
-          {query ? `No relays found for "${query}".` : 'No relays discovered yet.'}
+          {query ? `No places found for "${query}".` : 'No places discovered yet.'}
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-2">

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { TrustHeader } from '@/pages/TrustPeoplePage';
 import { TrustLegend } from '@/components/trust/TrustLegend';
 import { TrustRelayRow } from '@/components/trust/TrustRelayRow';
+import { useBrowseRelays } from '@/hooks/useBrowseRelays';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { DiscoveredRelay } from '@/hooks/useRelayDiscovery';
 import { useRelays } from '@/hooks/useRelays';
@@ -29,8 +30,14 @@ export function TrustPlacesPage() {
   const kid = useSelectedKid();
   const [query, setQuery] = useState('');
   const debounced = useDebounce(query, 300);
-  const { relays: discovered, isFetching } = useRelays(debounced);
+  // `discovered` (NIP-66 catalogue) is kept only to hydrate NIP-11 metadata
+  // for already-assigned relays in the Enabled section. The Browse list is
+  // composed by the shared useBrowseRelays hook (KUBO-211).
+  const { relays: discovered } = useRelays(debounced);
   const { assigned } = useRelayTrustAssignments(kid?.pubkey);
+
+  const assignedKeys = useMemo(() => Object.keys(assigned), [assigned]);
+  const { entries: browseEntries, isFetching } = useBrowseRelays(debounced, assignedKeys);
 
   const trimmed = debounced.trim();
 
@@ -58,10 +65,19 @@ export function TrustPlacesPage() {
     return out;
   }, [assigned, discovered]);
 
-  // Browse all: discovery catalogue minus already-assigned relays.
-  const browseList = useMemo(
-    () => discovered.filter((r) => !(r.url in assigned)),
-    [discovered, assigned],
+  // Browse all: the shared browse list (discovery catalogue + NIP-65/APP_RELAYS
+  // baseline + pasted wss:// URL), already excluding assigned relays. Map each
+  // entry to the DiscoveredRelay shape TrustRelayRow expects; baseline/pasted
+  // rows carry empty info and lazy-fetch NIP-11 on first expand.
+  const browseList = useMemo<DiscoveredRelay[]>(
+    () =>
+      browseEntries.map((entry) => ({
+        url: entry.url,
+        info: entry.info ?? {},
+        network: 'unknown',
+        monitoredAt: 0,
+      })),
+    [browseEntries],
   );
 
   if (!kid) {
@@ -79,7 +95,7 @@ export function TrustPlacesPage() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search relays…"
+          placeholder="Search places…"
           className="pl-10 pr-3 rounded-full bg-card border-0 h-9 text-[12px] focus-visible:ring-0 focus-visible:ring-offset-0"
         />
       </div>
@@ -104,7 +120,7 @@ export function TrustPlacesPage() {
         {isFetching && browseList.length === 0 ? (
           <EmptyLine>Searching…</EmptyLine>
         ) : browseList.length === 0 ? (
-          <EmptyLine>{trimmed ? `No relays found for "${trimmed}".` : 'No relays discovered yet.'}</EmptyLine>
+          <EmptyLine>{trimmed ? `No places found for "${trimmed}".` : 'No places discovered yet.'}</EmptyLine>
         ) : (
           <div className="flex flex-col gap-2">
             {browseList.map((relay) => (
