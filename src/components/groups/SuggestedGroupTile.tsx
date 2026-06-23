@@ -21,6 +21,15 @@ interface SuggestedGroupTileProps {
    * membership.
    */
   joined?: boolean;
+  /**
+   * Whether membership has actually resolved. While the kind-10009 group list
+   * is still loading we don't yet know if the user joined, so `joined` is a
+   * meaningless `false` — defaulting to "not a member" makes the "Suggested"
+   * pill flash on every cold start for someone who already joined (KUBO-208).
+   * The pill only shows once membership is known AND the user is not a member.
+   * Defaults to `true` so callers that pass a settled `joined` keep working.
+   */
+  membershipKnown?: boolean;
 }
 
 /**
@@ -42,6 +51,7 @@ export function SuggestedGroupTile({
   subtitle,
   avatarLabel,
   joined = false,
+  membershipKnown = true,
 }: SuggestedGroupTileProps) {
   const nav = useNavigate();
   const { join, pending } = useGroupActions();
@@ -104,7 +114,7 @@ export function SuggestedGroupTile({
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate flex items-center gap-1.5">
             <span className="truncate">{displayTitle}</span>
-            {!joined && (
+            {membershipKnown && !joined && (
               <span className="text-[9px] uppercase tracking-[0.08em] text-primary font-semibold flex-shrink-0">
                 Suggested
               </span>
