@@ -18,12 +18,10 @@ import { useAuthor, parseAuthorEvent } from '@/hooks/useAuthor';
 import { useUploadKidAvatar } from '@/hooks/useUploadKidAvatar';
 import { usePublishKidProfile } from '@/hooks/usePublishKidProfile';
 import { toast } from '@/hooks/useToast';
-import { getKidSettings, setKidSettings, setTeppEnforced, useKuboFamily } from '@/hooks/useKuboFamily';
+import { getKidSettings, setKidSettings } from '@/hooks/useKuboFamily';
 import type { KidSettings } from '@/hooks/useKuboFamily';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFamilyRelays } from '@/lib/tepp-adapters/familyRelays';
 
 /**
@@ -36,17 +34,8 @@ import { useFamilyRelays } from '@/lib/tepp-adapters/familyRelays';
 export function EditKidSettingsPage() {
   const nav = useNavigate();
   const kid = useSelectedKid();
-  const { feedSettings, updateFeedSettings } = useFeedSettings();
-  const { updateSettings: updateEncryptedSettings } = useEncryptedSettings();
-  const { user } = useCurrentUser();
-  const { family } = useKuboFamily();
+  const { feedSettings } = useFeedSettings();
   const { familyRelays, setFamilyRelays } = useFamilyRelays();
-
-  // KUBO-173: TEPP is "on" when the authoritative family flag is set (falling
-  // back to the feedSettings mirror for installs that predate the field) — same
-  // resolution the toggle's `checked` uses. Drives the family-relay field +
-  // privacy warning visibility.
-  const teppOn = family?.teppEnforced ?? !!feedSettings.featureTepp;
 
   // KUBO-173: the private family relay TEPP events are confined to. Single URL
   // in the UI (the set supports more, but one private relay covers the family
@@ -372,102 +361,54 @@ export function EditKidSettingsPage() {
         />
       </div>
 
-      {/* TEPP integration — family-wide flag, surfaced here because parents
-          are configuring kid behaviour. Off keeps the existing on-device
-          trust UI; on publishes assignments as Nostr events and gates the
-          kid feed/actions through them. */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-          <Label className="flex items-center gap-2">
-            Publish trust as TEPP events
-            <span className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
-              experimental · all kids
-            </span>
-          </Label>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            On: trust assignments publish as Nostr events and gate what every
-            kid in this family can see and do. Off: assignments stay on this
-            device only. First-boot migrates existing assignments and seeds an
-            unassigned kid from their follow list.
-          </p>
-        </div>
-        <Switch
-          // KUBO-152: reflect the AUTHORITATIVE family flag when set; fall back
-          // to the feedSettings mirror for installs that predate the field.
-          checked={family?.teppEnforced ?? !!feedSettings.featureTepp}
-          onCheckedChange={async (v) => {
-            // KUBO-152: write the authoritative, parent-controlled family flag
-            // FIRST — this is what enforcement (useTeppEnforced) actually reads.
-            await setTeppEnforced(v).catch((err) => {
-              console.error('Failed to set TEPP enforcement flag:', err);
+      {/* KUBO-173/205 — family relay (privacy). TEPP is always on (it's a core,
+          non-optional protection), so trust settings are always published as
+          Nostr events. Without a private family relay they go to public relays
+          where anyone can read this kid's allow-list, block-list, and daily
+          schedule. This field confines TEPP events to one private relay; the
+          warning below shows when no relay is set. */}
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="family-relay">Family place</Label>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          A private place just for your family. Trust settings are sent only
+          here, so other people can't see who this kid follows or when they're
+          allowed online.
+        </p>
+        <input
+          id="family-relay"
+          type="url"
+          inputMode="url"
+          placeholder="wss://your-family-place.example/"
+          value={familyRelayInput}
+          onChange={(e) => setFamilyRelayInput(e.target.value)}
+          onBlur={() => {
+            const next = familyRelayInput.trim();
+            if ((familyRelays[0] ?? '') === next) return;
+            setFamilyRelays(next ? [next] : []).catch((err) => {
+              console.error('Failed to save family relay:', err);
               toast({
-                title: 'Could not change TEPP setting',
+                title: 'Could not save family place',
                 description: err instanceof Error ? err.message : 'Please try again.',
                 variant: 'destructive',
               });
             });
-            // Keep the feedSettings mirror in sync for parent-UI/migration
-            // compatibility (it no longer drives enforcement).
-            updateFeedSettings({ featureTepp: v });
-            if (user) {
-              await updateEncryptedSettings.mutateAsync({
-                feedSettings: { ...feedSettings, featureTepp: v },
-              }).catch(() => {});
-            }
           }}
-          aria-label="Publish trust as TEPP events"
-        />
-      </div>
-
-      {/* KUBO-173 — family relay (privacy). When TEPP is on, trust settings are
-          published as Nostr events. Without a private family relay they go to
-          public relays where anyone can read this kid's allow-list, block-list,
-          and daily schedule. This field confines TEPP events to one private
-          relay; the warning below shows when TEPP is on but no relay is set. */}
-      {teppOn && (
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="family-relay">Family relay</Label>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            A private relay just for your family. Trust settings are sent only
-            here, so other people can't see who this kid follows or when they're
-            allowed online.
-          </p>
-          <input
-            id="family-relay"
-            type="url"
-            inputMode="url"
-            placeholder="wss://your-family-relay.example/"
-            value={familyRelayInput}
-            onChange={(e) => setFamilyRelayInput(e.target.value)}
-            onBlur={() => {
-              const next = familyRelayInput.trim();
-              if ((familyRelays[0] ?? '') === next) return;
-              setFamilyRelays(next ? [next] : []).catch((err) => {
-                console.error('Failed to save family relay:', err);
-                toast({
-                  title: 'Could not save family relay',
-                  description: err instanceof Error ? err.message : 'Please try again.',
-                  variant: 'destructive',
-                });
-              });
-            }}
-            aria-label="Family relay URL"
-            className={cn(
-              'h-11 px-3 rounded-xl bg-card text-foreground text-sm',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-            )}
-          />
-          {!familyRelays.some((r) => r.trim()) && (
-            <p
-              role="alert"
-              className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed"
-            >
-              Trust settings are stored on public relays. Set a family relay to
-              keep them private.
-            </p>
+          aria-label="Family place address"
+          className={cn(
+            'h-11 px-3 rounded-xl bg-card text-foreground text-sm',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           )}
-        </div>
-      )}
+        />
+        {!familyRelays.some((r) => r.trim()) && (
+          <p
+            role="alert"
+            className="text-[11px] text-amber-600 dark:text-amber-500 leading-relaxed"
+          >
+            Trust settings are stored in public places. Set a family place to
+            keep them private.
+          </p>
+        )}
+      </div>
 
       {/* Post actions — per-kid button visibility */}
       <div className="flex flex-col gap-2">

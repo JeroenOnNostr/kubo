@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
   useKuboFamily,
@@ -40,8 +39,9 @@ import { resolveKidSigner } from '@/lib/tepp-adapters/useKidSigner';
 import type { PermissionRef } from '@/lib/tepp/types';
 
 /**
- * One-shot, idempotent, resumable TEPP migration. Triggers when:
- *   - `featureTepp` is on
+ * One-shot, idempotent, resumable TEPP migration. TEPP is a core, non-optional
+ * protection (KUBO-209), so the migration runs for every family with kids —
+ * there is no enable flag to gate on. Triggers when:
  *   - `family` exists with at least one kid
  *   - `family.teppMigratedAt` is unset
  *   - parent is logged in
@@ -56,7 +56,6 @@ import type { PermissionRef } from '@/lib/tepp/types';
  * see an empty feed when the flag flips on.
  */
 export function useTeppMigration(): { running: boolean } {
-  const { config } = useAppContext();
   const { family } = useKuboFamily();
   const { users } = useCurrentUser();
   const { user: parent } = useParentSigner();
@@ -80,16 +79,15 @@ export function useTeppMigration(): { running: boolean } {
   parentRef.current = parent;
   nostrRef.current = nostr;
 
-  const featureTepp = !!config.feedSettings.featureTepp;
-
   // Stable trigger key: which (parent, kids, logged-in signers) combination is
   // eligible right now. Only changes when the actual identities change — not on
   // plan-write churn. Including the sorted logged-in pubkeys means that when a
   // kid logs in (so the assoc step can finally sign), the key changes and the
-  // migration retries the previously-skipped assoc step.
+  // migration retries the previously-skipped assoc step. No featureTepp gate:
+  // TEPP is core and always on (KUBO-209), so any family with kids migrates.
   const loggedInKey = users.map((u) => u.pubkey).sort().join(',');
   const triggerKey =
-    featureTepp && family && family.kids.length > 0 && !family.teppMigratedAt && parent
+    family && family.kids.length > 0 && !family.teppMigratedAt && parent
       ? `${parent.pubkey}:${family.kids.map((k) => k.pubkey).sort().join(',')}:${loggedInKey}`
       : null;
 

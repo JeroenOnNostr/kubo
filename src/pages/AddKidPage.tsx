@@ -190,7 +190,8 @@ export function AddKidPage() {
         kidPubkey: string;
         kidNsec: `nsec1${string}`;
       }): Promise<void> => {
-        if (!config.feedSettings.featureTepp) return;
+        // KUBO-209: TEPP is core and always on, so every newly added kid seeds
+        // its construct at onboarding — no featureTepp gate.
         // Parent guardian signer: prefer the explicit parent match, fall back
         // to the active user (which is the parent at this point in the flow).
         const parentUser =
@@ -289,8 +290,7 @@ export function AddKidPage() {
               // fire for this brand-new family and race the inline seed. The
               // inline seed is the single authoritative seeding path here; the
               // parent-side reconcile (useEnsureParentTrust) remains the
-              // backstop if the inline seed fails. featureTepp-off installs are
-              // unaffected (the migration is a no-op when the flag is off).
+              // backstop if the inline seed fails.
               teppMigratedAt: Date.now(),
             });
           } else {
