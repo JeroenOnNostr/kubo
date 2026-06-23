@@ -66,8 +66,17 @@ export function KidHomePage() {
   const [gateOpen, setGateOpen] = useState(false);
 
   const { user } = useCurrentUser();
-  const { family } = useKuboFamily();
-  const kidSettings = user ? family?.kidSettings?.[user.pubkey] : undefined;
+  // Subscribe to the family store so this page re-renders when settings change
+  // (signer swap, parent edits a toggle). The actual setting values are read
+  // via getKidSettings() below, which applies DEFAULT_KID_SETTINGS — a
+  // freshly-onboarded kid has NO kidSettings entry yet (addKid seeds
+  // feedSources/trustAssignments only), so reading family.kidSettings[pubkey]
+  // raw would yield undefined and silently drop the defaults (showBlobbiTab +
+  // nextPostButton are default-ON). getKidSettings() is the single source of
+  // truth every other consumer uses (KidFeedList, useScreenTime, …); KidHomePage
+  // must not diverge from it (KUBO-189).
+  useKuboFamily();
+  const kidSettings = user ? getKidSettings(user.pubkey) : undefined;
   const showBlobbiTab = !!kidSettings?.showBlobbiTab;
   const nextPostButtonOn = !!kidSettings?.nextPostButton;
 

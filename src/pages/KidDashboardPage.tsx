@@ -10,7 +10,6 @@ import {
 
 import { NavTile } from '@/components/NavTile';
 import { NoKidSelected } from '@/components/NoKidSelected';
-import { KidAvatar } from '@/components/KidAvatar';
 import { AlertsSection } from '@/components/AlertsSection';
 import { WatchHistoryStrip } from '@/pages/KidDashboardPage.WatchHistoryStrip';
 import { Card } from '@/components/ui/card';
@@ -84,23 +83,11 @@ function DashboardContent({ kidPubkey, kidDisplayName }: { kidPubkey: string; ki
 
   return (
     <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
-      {/* Kid summary */}
-      <div className="flex items-center gap-3 px-1">
-        <KidAvatar
-          pubkey={kidPubkey}
-          className="size-14"
-          fallbackInitial={kidDisplayName[0]?.toUpperCase()}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="text-lg font-semibold truncate">{kidDisplayName}</div>
-        </div>
-      </div>
-
       {/* Kid settings */}
       <NavTile
         icon={<Settings className="size-5" />}
-        title="Edit kid settings"
-        subtitle="Age, time limits, post actions"
+        title={`Edit ${kidDisplayName} settings`}
+        subtitle="Time limits, post actions"
         onClick={() => nav('/parent/kid-settings')}
       />
 
