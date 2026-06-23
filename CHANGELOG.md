@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026.06.23] - 2026-06-23
+
+### Added
+- **Support page now invites your feedback** — the support page actively asks you to report bugs and share feedback, and points you to the Kubo Testers and Signal group chats as the place to do it. It also shows the Web of Trust Foundation branding (KUBO-210).
+
+### Changed
+- **Plain, friendly language throughout** — Kubo now speaks in everyday words instead of technical jargon: "relays" are called "places", "follow packs" are called "profile lists", and search boxes simply say "Search by name". Draft and publishing messages talk about "your account" and being "online" rather than relays (KUBO-212).
+- **Trust is always on for every child** — the option to turn off TEPP trust enforcement has been removed. Protecting a child's feed is core to Kubo and can no longer be switched off (KUBO-209).
+
+### Fixed
+- **YouTube channels no longer show up twice** — adding a YouTube channel to a child's feed no longer makes it appear under both "YouTube Channels" and "Profiles". Channels are managed in one place; their videos still appear in the feed (KUBO-207).
+- **No more flashing "Suggested" tag** — the Kubo Testers chat tile no longer briefly flashes a "Suggested" tag on startup for parents who already joined (KUBO-208).
+- **Relay search under Trust now finds the same places as Feed** — searching for a place (e.g. relay.damus.io) under Trust → Places now finds it, matching the Feed sources search, and you can paste a place URL directly (KUBO-211).
+- **Child feed shows the "Next post" button again** — a freshly set-up child now correctly gets the default settings, so the "Next post" button appears and the feed is properly paced instead of scrolling endlessly (KUBO-213).
+
 ## [2026.06.20] - 2026-06-20
 
 ### Fixed
