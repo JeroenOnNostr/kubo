@@ -132,7 +132,7 @@ function shellTitleForKind(kind?: number): string {
   if (CALENDAR_EVENT_KINDS.has(kind)) return "Event Details";
   if (kind === 3) return "Follow List";
   if (kind === 30000) return "Follow Set";
-  if (kind === 39089) return "Follow Pack";
+  if (kind === 39089) return "Profile List";
   if (kind === LIVE_STREAM_KIND) return "Live Stream";
   if (kind === 30617) return "Repository";
   if (kind === 1617) return "Patch";
@@ -661,11 +661,11 @@ function EventNotFound({
           <div className="inline-flex items-center justify-center size-14 rounded-full bg-muted/60 mb-2">
             <AlertCircle className="size-7 text-muted-foreground" />
           </div>
-          <h2 className="text-xl font-bold">Event not found</h2>
+          <h2 className="text-xl font-bold">Post not found</h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {authorPubkey
-              ? "This event couldn't be loaded from your connected relays or the author's outbox relays. It may exist on a relay neither of you are connected to."
-              : "This event couldn't be loaded from your connected relays. It may exist on a relay you're not connected to."}
+              ? "This post couldn't be loaded from the places you or the author are connected to. It may live somewhere neither of you are connected to."
+              : "This post couldn't be loaded from the places you're connected to. It may live somewhere you're not connected to."}
           </p>
         </div>
 
@@ -723,7 +723,7 @@ function EventNotFound({
               <ChevronRight
                 className={`size-4 transition-transform duration-200 ${retryOpen ? "rotate-90" : ""}`}
               />
-              <span>Try another relay</span>
+              <span>Try another place</span>
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3 space-y-3">
@@ -731,7 +731,7 @@ function EventNotFound({
               <Input
                 value={relayUrl}
                 onChange={(e) => setRelayUrl(e.target.value)}
-                placeholder="wss://relay.example.com"
+                placeholder="wss://example.com"
                 className="flex-1 font-mono text-base md:text-xs h-9"
                 disabled={isRetrying}
                 onKeyDown={(e) => {

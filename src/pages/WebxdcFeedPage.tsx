@@ -21,7 +21,7 @@ export function WebxdcFeedPage() {
       icon={sidebarItemIcon('webxdc', 'size-5')}
       tagFilters={TAG_FILTERS}
       onFabClick={handleFabClick}
-      emptyMessage="No webxdc apps found yet. Check your relay connections or try again later."
+      emptyMessage="No webxdc apps found yet. Check your connection or try again later."
       extra={<WebxdcUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />}
     />
   );

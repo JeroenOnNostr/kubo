@@ -73,7 +73,7 @@ export function RelayFooter({
         className="inline-flex items-center gap-1 text-primary hover:underline"
       >
         <ExternalLink className="size-3" />
-        Visit relay
+        Visit place
       </Link>
     </div>
   );

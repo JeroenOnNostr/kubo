@@ -2011,7 +2011,7 @@ const KIND_HEADER_MAP: Record<number, KindHeaderConfig> = {
   39089: {
     icon: PartyPopper,
     action: (event) => publishedAtAction(event, { created: "created a", updated: "updated a", fallback: "shared a" }),
-    noun: "follow pack",
+    noun: "profile list",
     nounRoute: "/packs",
   },
   30000: {

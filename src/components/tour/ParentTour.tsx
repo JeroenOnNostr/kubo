@@ -164,15 +164,16 @@ export function ParentTour() {
           body={
             <div className="flex flex-col gap-2">
               <p>
-                A starter <strong>Follow pack</strong> is already loaded, so
+                A starter <strong>Profile List</strong> is already loaded, so
                 {' '}{kidName}'s feed has something to start with.
               </p>
               <p>Want to swap it or add more sources?</p>
               <ul className="space-y-1">
-                <li><strong>Follow packs</strong> — other curated lists</li>
+                <li><strong>YouTube Channels</strong> — videos from creators you pick</li>
                 <li><strong>Profiles</strong> — add specific creators you know</li>
+                <li><strong>Profile Lists</strong> — other curated lists of people</li>
                 <li><strong>Communities</strong> — groups like a parents' chat or soccer club</li>
-                <li><strong>Relays</strong> — entire video sources, like a school relay</li>
+                <li><strong>Places</strong> — trusted places like a school or neighborhood</li>
               </ul>
             </div>
           }

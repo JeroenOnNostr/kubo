@@ -110,7 +110,7 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
         <DialogHeader>
           <DialogTitle>Create a group</DialogTitle>
           <DialogDescription>
-            Give your group a name and pick a relay to host it. You can add a
+            Give your group a name and pick a place to host it. You can add a
             description and picture from the About tab after it's created.
           </DialogDescription>
         </DialogHeader>
@@ -129,7 +129,7 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="group-relay">Relay</Label>
+            <Label htmlFor="group-relay">Place</Label>
             <Select value={relayUrl} onValueChange={setRelayUrl}>
               <SelectTrigger id="group-relay">
                 <SelectValue />
@@ -143,7 +143,7 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              The relay hosts the group. You can&apos;t move it later.
+              The place hosts the group. You can&apos;t move it later.
             </p>
           </div>
 

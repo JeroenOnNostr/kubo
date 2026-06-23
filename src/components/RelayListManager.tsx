@@ -146,8 +146,8 @@ export function RelayListManager() {
   const handleAddRelay = () => {
     if (!isValidRelayUrl(newRelayUrl)) {
       toast({
-        title: 'Invalid relay URL',
-        description: 'Please enter a valid relay URL (e.g., wss://relay.example.com)',
+        title: 'Invalid place address',
+        description: 'Please enter a valid place address (e.g., wss://example.com)',
         variant: 'destructive',
       });
       return;
@@ -157,8 +157,8 @@ export function RelayListManager() {
 
     if (relays.some(r => r.url === normalized)) {
       toast({
-        title: 'Relay already exists',
-        description: 'This relay is already in your list.',
+        title: 'Place already added',
+        description: 'This place is already in your list.',
         variant: 'destructive',
       });
       return;
@@ -233,15 +233,15 @@ export function RelayListManager() {
       {
         onSuccess: () => {
           toast({
-            title: 'Relay list published',
-            description: 'Your relay list has been published to Nostr.',
+            title: 'Places saved',
+            description: 'Your places have been saved.',
           });
         },
         onError: (error) => {
           console.error('Failed to publish relay list:', error);
           toast({
-            title: 'Failed to publish relay list',
-            description: 'There was an error publishing your relay list to Nostr.',
+            title: 'Couldn\'t save places',
+            description: 'There was a problem saving your places. Please try again.',
             variant: 'destructive',
           });
         },
@@ -254,9 +254,9 @@ export function RelayListManager() {
       {/* User Relays Section */}
       <div className="pb-4 pt-4">
         <div className="px-3 space-y-3">
-          <h3 className="text-sm font-medium flex items-center gap-1.5">Your Relays <HelpTip faqId="what-are-relays" iconSize="size-3.5" /></h3>
+          <h3 className="text-sm font-medium flex items-center gap-1.5">Your Places <HelpTip faqId="what-are-relays" iconSize="size-3.5" /></h3>
           <p className="text-xs text-muted-foreground">
-            Your personal relay list. These are synced to Nostr when logged in.
+            Your personal list of places. These are saved to your account when logged in.
           </p>
         </div>
 
@@ -264,7 +264,7 @@ export function RelayListManager() {
         <div className="mt-3">
           {relays.length === 0 ? (
             <div className="text-xs text-muted-foreground py-8 text-center">
-              No personal relays configured. Add relays below.
+              No places added yet. Add one below.
             </div>
           ) : (
             <div className="space-y-1">
@@ -336,11 +336,11 @@ export function RelayListManager() {
           <div className="flex gap-2">
             <div className="flex-1">
               <Label htmlFor="new-relay-url" className="sr-only">
-                Relay URL
+                Place address
               </Label>
               <Input
                 id="new-relay-url"
-                placeholder="wss://relay.example.com"
+                placeholder="wss://example.com"
                 value={newRelayUrl}
                 onChange={(e) => setNewRelayUrl(e.target.value)}
                 onKeyDown={(e) => {

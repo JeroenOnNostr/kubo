@@ -143,7 +143,7 @@ const KIND_LABELS: Record<number, string> = {
   37381: 'a Magic deck',
   37516: 'a treasure',
   30000: 'a follow set',
-  39089: 'a follow pack',
+  39089: 'a profile list',
   9735: 'a zap',
   31124: 'a Blobbi',
 };
@@ -227,7 +227,7 @@ const KIND_SUFFIXES: Partial<Record<number, string>> = {
   36767: 'theme',
   16767: 'theme',
   30000: 'follow set',
-  39089: 'follow pack',
+  39089: 'profile list',
   37381: 'deck',
   37516: 'treasure',
   34550: 'community',

@@ -425,7 +425,7 @@ function TestEventPanel({ construct }: { construct: Construct | null }) {
       );
       const event = events[0];
       if (!event) {
-        setError('Event not found on configured relays.');
+        setError('Post not found in any of your places.');
         setBusy(false);
         return;
       }

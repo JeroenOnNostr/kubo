@@ -6,13 +6,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Switch } from '@/components/ui/switch';
+import { SourceActionButton } from '@/components/feed/SourceActionButton';
 
 /**
  * Shared row used by the three feed-source browse pages (Relays,
  * Communities, Packs). Click the row body to expand the accordion
- * (reveals `description` + optional `footer`). The Switch sits OUTSIDE
- * the AccordionTrigger so toggling on/off never expands/collapses.
+ * (reveals `description` + optional `footer`). The Add/Remove button sits
+ * OUTSIDE the AccordionTrigger so adding/removing never expands/collapses.
  *
  * Each row is its own one-item Accordion (type="multiple" so multiple
  * rows can be open). This keeps rows independent across multiple
@@ -104,11 +104,11 @@ export function ExpandableSourceRow({
               </div>
             </div>
           </AccordionTrigger>
-          <div className="shrink-0 flex items-center justify-end pl-2 w-[52px]">
-            <Switch
-              checked={enabled}
-              onCheckedChange={onToggle}
-              aria-label={`Toggle ${title}`}
+          <div className="shrink-0 flex items-center justify-end pl-2">
+            <SourceActionButton
+              action={enabled ? 'remove' : 'add'}
+              onClick={onToggle}
+              itemLabel={title}
             />
           </div>
         </div>

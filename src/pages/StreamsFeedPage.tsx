@@ -89,7 +89,7 @@ export function StreamsFeedPage() {
                 <div className="max-w-sm mx-auto space-y-2">
                   <Radio className="size-8 text-muted-foreground/40 mx-auto" />
                   <p className="text-muted-foreground">
-                    No streams found. Check your relay connections or wait for new streams to start.
+                    No streams found. Check your connection or wait for new streams to start.
                   </p>
                 </div>
               </CardContent>

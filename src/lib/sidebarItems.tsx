@@ -164,7 +164,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "webxdc", label: "Webxdc", path: "/webxdc", icon: Blocks },
   { id: "themes", label: "Themes", path: "/themes", icon: Sparkles },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
-  { id: "packs", label: "Follow Packs", path: "/packs", icon: PartyPopper },
+  { id: "packs", label: "Profile Lists", path: "/packs", icon: PartyPopper },
   { id: "colors", label: "Color Moments", path: "/colors", icon: Palette },
   { id: "decks", label: "Magic Decks", path: "/decks", icon: CardsIcon },
   { id: "treasures", label: "Treasures", path: "/treasures", icon: ChestIcon },

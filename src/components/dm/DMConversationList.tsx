@@ -181,7 +181,7 @@ export const DMConversationList = ({
                 <TooltipContent>
                   <p className="text-xs">
                     {loadingPhase === LOADING_PHASES.CACHE && 'Loading from cache...'}
-                    {loadingPhase === LOADING_PHASES.RELAYS && 'Querying relays for new messages...'}
+                    {loadingPhase === LOADING_PHASES.RELAYS && 'Looking for new messages...'}
                     {loadingPhase === LOADING_PHASES.SUBSCRIPTIONS && 'Setting up subscriptions...'}
                   </p>
                 </TooltipContent>

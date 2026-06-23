@@ -74,7 +74,7 @@ export function parsePeopleList(
 export function parsePackEvent(event: NostrEvent) {
   const { title, description, image, pubkeys } = parsePeopleList(event);
   return {
-    title: title === 'Untitled' ? 'Untitled Pack' : title,
+    title: title === 'Untitled' ? 'Untitled List' : title,
     description,
     image,
     pubkeys,

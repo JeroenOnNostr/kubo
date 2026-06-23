@@ -86,7 +86,7 @@ export function AddToListDialog({ pubkey, displayName, open, onOpenChange }: Add
       queryClient.invalidateQueries({ queryKey: ['own-follow-packs', user?.pubkey] });
       toast({ title: `Added to "${pack.title}"` });
     } catch {
-      toast({ title: 'Failed to add to pack', variant: 'destructive' });
+      toast({ title: 'Failed to add to list', variant: 'destructive' });
     } finally {
       setPendingId(null);
     }
@@ -144,7 +144,7 @@ export function AddToListDialog({ pubkey, displayName, open, onOpenChange }: Add
           ) : !hasAny ? (
             <div className="py-8 px-4 text-center text-sm text-muted-foreground">
               <List className="size-8 mx-auto mb-2 text-muted-foreground/40" />
-              No lists or packs yet. Create one below.
+              No lists yet. Create one below.
             </div>
           ) : (
             <div className="py-1">
@@ -175,12 +175,12 @@ export function AddToListDialog({ pubkey, displayName, open, onOpenChange }: Add
                 </>
               )}
 
-              {/* Follow Packs */}
+              {/* Profile Lists */}
               {followPacks.length > 0 && (
                 <>
                   {lists.length > 0 && <Separator className="my-1" />}
                   <p className="px-4 pt-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Follow Packs
+                    Profile Lists
                   </p>
                   {followPacks.map((pack) => {
                     const inPack = pack.pubkeys.includes(pubkey) || addedPackIds.has(pack.id);

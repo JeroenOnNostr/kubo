@@ -897,7 +897,7 @@ export function VinesFeedPage() {
 								message={
 									tab === "follows"
 									? "None of the people you follow have posted divines yet."
-									: "No divines found. Check your relay connections or come back soon."
+									: "No divines found. Check your connection or come back soon."
 								}
 								onSwitchToGlobal={
 									tab === "follows" ? () => setTab("global") : undefined

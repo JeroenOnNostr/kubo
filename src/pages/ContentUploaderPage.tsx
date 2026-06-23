@@ -34,7 +34,7 @@ type PublishStage = 'uploading' | 'signing' | 'publishing';
 const STAGE_LABELS: Record<PublishStage, string> = {
   uploading: 'Uploading to Blossom…',
   signing: 'Signing event…',
-  publishing: 'Publishing to relays…',
+  publishing: 'Publishing…',
 };
 
 /**
@@ -366,7 +366,7 @@ export function ContentUploaderPage() {
 
             {/* Relay */}
             <div className="flex flex-col gap-2">
-              <Label>Publish to relay</Label>
+              <Label>Publish to place</Label>
               <Select
                 value={selectedRelay ?? '__all__'}
                 onValueChange={(v) => setSelectedRelay(v === '__all__' ? null : v)}
@@ -375,7 +375,7 @@ export function ContentUploaderPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">All relays (default)</SelectItem>
+                  <SelectItem value="__all__">All places (default)</SelectItem>
                   {writeRelays.map((relay) => (
                     <SelectItem key={relay.url} value={relay.url}>
                       {relay.url.replace(/^wss?:\/\//, '').replace(/\/+$/, '')}

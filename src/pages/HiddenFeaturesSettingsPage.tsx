@@ -39,7 +39,7 @@ const CATEGORIES: ToggleCategory[] = [
       { key: 'showBlobbi', label: 'Virtual pets (Blobbi)', description: 'Pet companion overlay and Blobbi page' },
       { key: 'showLetters', label: 'Personal letters', description: 'Encrypted personal letters' },
       { key: 'showWebxdc', label: 'Webxdc mini-apps', description: 'Sandboxed mini-apps' },
-      { key: 'showPacks', label: 'Follow packs', description: 'Curated lists of users to follow' },
+      { key: 'showPacks', label: 'Profile lists', description: 'Curated lists of users to follow' },
       { key: 'showBadges', label: 'Badges', description: 'NIP-58 badge definitions and awards' },
       { key: 'showBooks', label: 'Books', description: 'Bookstr integration' },
       { key: 'showArchive', label: 'Archive', description: 'Internet Archive content' },

@@ -149,7 +149,7 @@ export function PhotosFeedPage() {
               message={
                 activeTab === "follows"
                   ? "No photos yet. Follow some photographers to see their photos here."
-                  : "No photos found. Check your relay connections or come back soon."
+                  : "No photos found. Check your connection or come back soon."
               }
               onSwitchToGlobal={
                 activeTab === "follows" ? () => setActiveTab("global") : undefined

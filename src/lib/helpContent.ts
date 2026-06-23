@@ -185,16 +185,16 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'Will I have a "For You" page? How do I make my feed relevant?',
         answer: [
           'Your feed shows posts from people you follow \u2014 there\'s no algorithm deciding what you see. The more people you follow, the better your feed gets.',
-          'Use the "Trends" page to discover popular content, and check out Follow Packs (curated groups of people) to quickly fill your feed with interesting voices.',
+          'Use the "Trends" page to discover popular content, and check out Profile Lists (curated groups of people) to quickly fill your feed with interesting voices.',
         ],
       },
       {
         id: 'what-are-relays',
-        question: 'What are relays?',
+        question: 'What are places?',
         answer: [
-          'Relays are the servers that store and deliver your posts. Think of them like different mail carriers \u2014 your messages get sent through them to reach other people.',
-          'You don\'t need to think about relays to use Nostr; the defaults work great. But if you\'re curious, you can add or remove relays in Settings > Network.',
-          'Using multiple relays means your content is backed up in more places, making it harder for anyone to silence you. To dive deeper, read [Understanding Nostr Relays](https://nostr.how/en/relays).',
+          'Places are where your posts are stored and shared. Think of them like different mail carriers \u2014 your messages get sent through them to reach other people. (For the technically curious, places are called "relays".)',
+          'You don\'t need to think about places to use {appName}; the defaults work great. But if you\'re curious, you can add or remove places in Settings > Network.',
+          'Using more than one place means your content is backed up in more spots, making it harder for anyone to silence you. To dive deeper, read [Understanding Nostr Relays](https://nostr.how/en/relays).',
         ],
       },
       {

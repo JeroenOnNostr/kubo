@@ -101,7 +101,7 @@ export function RelayPage() {
         <button
           onClick={() => setInfoOpen((o) => !o)}
           className={`p-2 rounded-full transition-colors ${infoOpen ? 'text-foreground bg-secondary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}
-          aria-label="Toggle relay info"
+          aria-label="Toggle place info"
         >
           <Info className="size-4" />
         </button>
@@ -281,7 +281,7 @@ function RelayInfoPanel({ info, infoLoading, infoError, open }: {
           <div className="p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Globe className="size-4" />
-              <span>Could not load relay information.</span>
+              <span>Could not load place information.</span>
             </div>
           </div>
         ) : null}

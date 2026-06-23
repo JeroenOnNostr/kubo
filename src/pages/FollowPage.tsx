@@ -424,7 +424,7 @@ function FollowPackView({ addr, relays }: { addr: AddrCoords; relays?: string[] 
         title: allFollowed ? 'Already following all!' : 'Following all!',
         description: added > 0
           ? `Added ${added} new account${added !== 1 ? 's' : ''} to your follow list.`
-          : 'You were already following everyone in this pack.',
+          : 'You were already following everyone in this list.',
       });
     } catch (error) {
       console.error('Failed to follow all:', error);

@@ -80,11 +80,16 @@ export function CreateParentAccountPage() {
       }}
     >
       <div className="flex-1 flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Create your parent account</h1>
+          <p className="text-sm text-muted-foreground">
+            This account is for you, the parent. You'll add your kids in the next step.
+          </p>
+        </div>
 
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <Label htmlFor="parent-name">Your name</Label>
+            <Label htmlFor="parent-name">Your name (the parent)</Label>
             {name.length > 0 && (
               <span className="text-[11px] text-muted-foreground tabular-nums">
                 {name.length}/{NAME_MAX}

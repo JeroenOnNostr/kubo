@@ -127,13 +127,13 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
         await saveRelayDraft(data);
         if (!mountedRef.current) return;
         if (!silent) {
-          toast({ title: 'Draft saved', description: 'Your article has been saved to Nostr relays.' });
+          toast({ title: 'Draft saved', description: 'Your article has been saved to your account.' });
         }
       } catch (error) {
         console.error('Failed to save draft to relay:', error);
         if (!mountedRef.current) return;
         if (!silent) {
-          toast({ title: 'Draft saved locally', description: 'Could not sync to relays. Saved to your browser.', variant: 'destructive' });
+          toast({ title: 'Draft saved locally', description: 'Couldn\'t sync online. Saved to your browser.', variant: 'destructive' });
         }
       }
     } else if (!silent) {
@@ -259,7 +259,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
     } else {
       try {
         await deleteRelayDraft(deleteTarget.slug);
-        toast({ title: 'Draft deleted', description: 'Deletion published to relays.' });
+        toast({ title: 'Draft deleted', description: 'Removed from your account.' });
       } catch (error) {
         const message = error instanceof Error ? error.message : '';
         toast({ title: 'Delete failed', description: message || 'Could not delete draft.', variant: 'destructive' });
@@ -999,7 +999,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
             <AlertDialogDescription>
               {deleteTarget?.isLocal
                 ? 'This draft will be permanently deleted from your browser.'
-                : 'This draft will be deleted from Nostr relays.'}
+                : 'This draft will be deleted from your account.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

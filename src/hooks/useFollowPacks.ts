@@ -18,7 +18,7 @@ function parsePackEvent(event: NostrEvent): FollowPack {
   const id = event.tags.find((t) => t[0] === 'd')?.[1] ?? '';
   const title = event.tags.find((t) => t[0] === 'title')?.[1]
     || event.tags.find((t) => t[0] === 'name')?.[1]
-    || 'Untitled Pack';
+    || 'Untitled List';
   const pubkeys = event.tags.filter((t) => t[0] === 'p' && t[1]).map((t) => t[1]);
   return { id, title, pubkeys, event };
 }
@@ -84,7 +84,7 @@ function parsePackByAtag(event: NostrEvent): PackByAtag | null {
   if (dTag === undefined) return null;
   const title = event.tags.find((t) => t[0] === 'title')?.[1]
     || event.tags.find((t) => t[0] === 'name')?.[1]
-    || dTag || 'Untitled Pack';
+    || dTag || 'Untitled List';
   const image = event.tags.find((t) => t[0] === 'image')?.[1]
     || event.tags.find((t) => t[0] === 'thumb')?.[1];
   return {

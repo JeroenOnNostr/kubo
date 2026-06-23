@@ -115,7 +115,7 @@ export function AddMembersDialog({ open, onOpenChange, listId, listPubkeys }: Ad
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search by name or NIP-05…"
+              placeholder="Search by name…"
               className="pl-9 pr-8"
             />
             {isFetching && (

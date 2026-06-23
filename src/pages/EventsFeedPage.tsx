@@ -152,7 +152,7 @@ export function EventsFeedPage() {
             message={
               activeTab === "follows"
                 ? "No events from people you follow yet."
-                : "No calendar events found. Check your relay connections or try again later."
+                : "No calendar events found. Check your connection or try again later."
             }
             onSwitchToGlobal={
               activeTab === "follows" ? () => setActiveTab("global") : undefined

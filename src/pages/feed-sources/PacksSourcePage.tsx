@@ -46,14 +46,14 @@ export function PacksSourcePage() {
     [browsePacks, enabledSet],
   );
 
-  if (!kid) return <NoKidSelected title="Follow packs" />;
+  if (!kid) return <NoKidSelected title="Profile Lists" />;
 
   return (
     <main className="flex flex-col">
-      <FeedSourceHeader title={`Follow packs · ${kid.displayName}`} />
+      <FeedSourceHeader title={`Profile Lists · ${kid.displayName}`} />
       <div className="p-4 flex flex-col gap-4">
         <p className="text-[12px] text-muted-foreground px-1">
-          Enabled packs contribute their members' posts to
+          Enabled lists contribute their members' posts to
           {' '}{kid.displayName}'s feed aggregate.
         </p>
 
@@ -62,9 +62,9 @@ export function PacksSourcePage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search packs…"
+            placeholder="Search lists…"
             className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-muted-foreground"
-            aria-label="Search packs"
+            aria-label="Search profile lists"
           />
         </div>
 
@@ -136,7 +136,7 @@ function BrowseSection({
         <EmptyState>Searching…</EmptyState>
       ) : results.length === 0 ? (
         <EmptyState>
-          {query ? `No packs found for "${query}".` : 'No packs discovered yet.'}
+          {query ? `No lists found for "${query}".` : 'No lists discovered yet.'}
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-2">
@@ -206,5 +206,5 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 }
 
 function fallbackTitle(atag: string): string {
-  return atag.split(':').slice(2).join(':') || 'Pack';
+  return atag.split(':').slice(2).join(':') || 'List';
 }

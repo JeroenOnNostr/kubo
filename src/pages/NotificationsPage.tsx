@@ -96,7 +96,7 @@ const NOTIFICATION_KIND_NOUNS: Record<number, string> = {
   36787: 'track',
   37381: 'Magic deck',
   37516: 'treasure',
-  39089: 'follow pack',
+  39089: 'profile list',
 };
 
 /** Get a bare noun label for a kind number, defaulting to "post". */

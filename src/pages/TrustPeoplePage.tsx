@@ -104,7 +104,7 @@ export function TrustPeoplePage() {
       <TrustLegend kidName={kid.displayName} scope="people" className="mt-1" />
 
       <ProfileSearchDropdown
-        placeholder="Search by name or npub…"
+        placeholder="Search by name…"
         onSelect={handlePick}
         onSelectIdentifier={handlePick}
         hideCountry

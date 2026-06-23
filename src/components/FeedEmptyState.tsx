@@ -18,7 +18,7 @@ interface FeedEmptyStateProps {
  *
  * - Follows tab: pass `onSwitchToGlobal` and `showDiscover` to render CTAs.
  * - Global tab: omit both; the message should guide the user
- *   to check their relay connections.
+ *   to check their connection.
  */
 export function FeedEmptyState({
   message,

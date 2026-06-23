@@ -874,7 +874,7 @@ function ThemeStep({
 /** Parse a follow pack event into structured data. */
 function parsePackEvent(event: NostrEvent) {
   const getTag = (name: string) => event.tags.find(([n]) => n === name)?.[1];
-  const title = getTag("title") || getTag("name") || "Untitled Pack";
+  const title = getTag("title") || getTag("name") || "Untitled List";
   const description = getTag("description") || getTag("summary") || "";
   const image = getTag("image") || getTag("thumb") || getTag("banner");
   const pubkeys = event.tags.filter(([n]) => n === "p").map(([, pk]) => pk);
@@ -984,7 +984,7 @@ function FollowsStep({
         </h2>
         <p className="text-sm text-muted-foreground">
           Your feed is empty! Follow some people to get started. Here are some
-          curated packs to help you find interesting voices.
+          curated lists to help you find interesting voices.
         </p>
       </div>
 
@@ -995,7 +995,7 @@ function FollowsStep({
           ))
         ) : packs.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">
-            Couldn't load suggestions right now. You can find follow packs later
+            Couldn't load suggestions right now. You can find profile lists later
             in the app.
           </p>
         ) : (

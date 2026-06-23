@@ -348,7 +348,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
                 emptyMessage ?? (
                   activeTab === 'follows'
                     ? 'Your feed is empty. Follow some people to see their posts here.'
-                    : 'No posts found. Check your relay connections or come back soon.'
+                    : 'No posts found. Check your connection or come back soon.'
                 )
               }
               showDiscover={!emptyMessage && activeTab === 'follows'}

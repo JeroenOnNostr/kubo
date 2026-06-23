@@ -203,7 +203,7 @@ export function TeamSoapboxCard({ className }: { className?: string }) {
 
             {naddrLink && (
               <Button variant="outline" asChild>
-                <Link to={naddrLink}>View Pack</Link>
+                <Link to={naddrLink}>View List</Link>
               </Button>
             )}
           </div>

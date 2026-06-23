@@ -346,7 +346,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     // Also include related people-list kinds under the same feed toggle:
     // kind 3 (NIP-02 follow list) and kind 30000 (NIP-51 follow set).
     extraFeedKinds: [3, 30000],
-    label: 'Follow Packs',
+    label: 'Profile Lists',
     description: 'Curated follow recommendations and lists',
     route: 'packs',
     addressable: true,

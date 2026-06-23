@@ -488,7 +488,7 @@ export function ListPackPicker({ lists, followPacks, value, onSelectPubkeys, cla
         )}
         {followPacks.length > 0 && (
           <SelectGroup>
-            {lists.length > 0 && <SelectLabel>Follow Packs</SelectLabel>}
+            {lists.length > 0 && <SelectLabel>Profile Lists</SelectLabel>}
             {followPacks.map((p) => (
               <SelectItem key={`pack:${p.id}`} value={`pack:${p.id}`}>
                 {p.title} ({p.pubkeys.length})
@@ -538,7 +538,7 @@ export function AuthorFilterDropdown({ onCommit }: { onCommit: (pubkey: string, 
 
   return (
     <ProfileSearchDropdown
-      placeholder="Search by name or npub..."
+      placeholder="Search by name..."
       onSelect={handleSelect}
       hideCountry
       inputClassName="rounded-lg bg-secondary/50 border border-border focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 text-base md:text-sm h-9"
