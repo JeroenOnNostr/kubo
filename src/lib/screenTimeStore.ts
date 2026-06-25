@@ -8,7 +8,7 @@ import { todayDateStr } from '@/lib/formatTime';
  * 30-second flushes from the tracker only touch a small JSON blob instead
  * of rewriting the entire KuboFamily record every time.
  *
- * Shape: { [kidPubkey]: ScreenTimeEntry[] }  (last 14 days per kid)
+ * Shape: { [kidPubkey]: ScreenTimeEntry[] }  (last 365 days per kid)
  */
 
 export interface ScreenTimeEntry {
@@ -19,7 +19,8 @@ export interface ScreenTimeEntry {
 type ScreenTimeData = { [kidPubkey: string]: ScreenTimeEntry[] };
 
 const STORAGE_KEY = 'kubo:screentime';
-const MAX_LOG_DAYS = 14;
+// 365 days so the parent dashboard can page back through ~52 weeks of history.
+const MAX_LOG_DAYS = 365;
 
 // ─── In-memory cache ─────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ export async function logScreenTime(
     kidLog.push({ date: today, usedSeconds });
   }
 
-  // Prune entries older than 14 days.
+  // Prune entries older than MAX_LOG_DAYS (oldest first).
   while (kidLog.length > MAX_LOG_DAYS) {
     kidLog.shift();
   }
