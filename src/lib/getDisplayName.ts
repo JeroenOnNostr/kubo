@@ -13,3 +13,18 @@ export function getDisplayName(
 ): string {
   return metadata?.name || genUserName(pubkey);
 }
+
+/**
+ * Render a name as a possessive for UI labels — `"Jason"` → `"Jason's"`,
+ * so we say "Edit Jason's settings", "Jason's feed", "Jason's key", etc.
+ *
+ * Names already ending in "s" (or the Unicode-aware "S") get a bare apostrophe
+ * ("Chris" → "Chris'") which is the common, less-fussy English convention and
+ * reads cleanly in short UI strings. An empty/whitespace-only name is returned
+ * unchanged so callers never render a stray apostrophe.
+ */
+export function possessive(name: string): string {
+  const trimmed = (name ?? '').trim();
+  if (!trimmed) return name ?? '';
+  return /s$/i.test(trimmed) ? `${trimmed}'` : `${trimmed}'s`;
+}
