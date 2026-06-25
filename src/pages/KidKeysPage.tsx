@@ -14,6 +14,7 @@ import { useKuboFamily } from '@/hooks/useKuboFamily';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
 import { saveNsec } from '@/lib/credentialManager';
+import { possessive } from '@/lib/getDisplayName';
 
 interface FamilyAccount {
   pubkey: string;
@@ -215,7 +216,7 @@ function AccountKeyCard({ account, login }: AccountKeyCardProps) {
             onFocus={(e) => e.currentTarget.select()}
             onClick={(e) => e.currentTarget.select()}
             className="pr-12 font-mono text-base md:text-sm"
-            aria-label={`${account.displayName} public key`}
+            aria-label={`${possessive(account.displayName)} public key`}
           />
           <div className="absolute right-0 top-0 h-full flex items-center">
             <Button
@@ -224,7 +225,7 @@ function AccountKeyCard({ account, login }: AccountKeyCardProps) {
               size="icon"
               className="h-full px-2 hover:bg-transparent"
               onClick={handleCopyNpub}
-              aria-label={`Copy ${account.displayName} public key`}
+              aria-label={`Copy ${possessive(account.displayName)} public key`}
             >
               {copiedNpub ? (
                 <Check className="h-4 w-4 text-emerald-600" />
@@ -253,7 +254,7 @@ function AccountKeyCard({ account, login }: AccountKeyCardProps) {
                 onFocus={(e) => e.currentTarget.select()}
                 onClick={(e) => e.currentTarget.select()}
                 className="pr-20 font-mono text-base md:text-sm"
-                aria-label={`${account.displayName} secret key`}
+                aria-label={`${possessive(account.displayName)} secret key`}
               />
               <div className="absolute right-0 top-0 h-full flex items-center">
                 <Button
@@ -262,7 +263,7 @@ function AccountKeyCard({ account, login }: AccountKeyCardProps) {
                   size="icon"
                   className="h-full px-2 hover:bg-transparent"
                   onClick={handleCopyNsec}
-                  aria-label={`Copy ${account.displayName} secret key`}
+                  aria-label={`Copy ${possessive(account.displayName)} secret key`}
                 >
                   {copiedNsec ? (
                     <Check className="h-4 w-4 text-emerald-600" />
@@ -276,7 +277,7 @@ function AccountKeyCard({ account, login }: AccountKeyCardProps) {
                   size="icon"
                   className="h-full px-2 hover:bg-transparent"
                   onClick={() => setShowKey((v) => !v)}
-                  aria-label={showKey ? `Hide ${account.displayName} secret key` : `Reveal ${account.displayName} secret key`}
+                  aria-label={showKey ? `Hide ${possessive(account.displayName)} secret key` : `Reveal ${possessive(account.displayName)} secret key`}
                 >
                   {showKey ? (
                     <EyeOff className="h-4 w-4 text-muted-foreground" />
