@@ -79,7 +79,7 @@ export function ProfilesSourcePage() {
 
   return (
     <main className="flex flex-col">
-      <FeedSourceHeader title={`Profiles · ${kid.displayName}`} />
+      <FeedSourceHeader title="Profiles" />
       <div className="p-4 flex flex-col gap-4">
         <p className="text-[12px] text-muted-foreground px-1">
           Added profiles appear in {kid.displayName}'s feed right away.

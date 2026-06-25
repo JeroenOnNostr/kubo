@@ -50,7 +50,7 @@ export function PacksSourcePage() {
 
   return (
     <main className="flex flex-col">
-      <FeedSourceHeader title={`Profile Lists · ${kid.displayName}`} />
+      <FeedSourceHeader title="Profile Lists" />
       <div className="p-4 flex flex-col gap-4">
         <p className="text-[12px] text-muted-foreground px-1">
           Enabled lists contribute their members' posts to

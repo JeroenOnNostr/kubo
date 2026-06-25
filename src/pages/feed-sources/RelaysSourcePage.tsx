@@ -45,7 +45,7 @@ export function RelaysSourcePage() {
 
   return (
     <main className="flex flex-col">
-      <FeedSourceHeader title={`Places · ${kid.displayName}`} />
+      <FeedSourceHeader title="Places" />
       <div className="p-4 flex flex-col gap-4">
         <p className="text-[12px] text-muted-foreground px-1">
           Each enabled place — like a school or neighborhood — adds its posts

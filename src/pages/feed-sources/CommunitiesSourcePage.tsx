@@ -48,7 +48,7 @@ export function CommunitiesSourcePage() {
 
   return (
     <main className="flex flex-col">
-      <FeedSourceHeader title={`Communities · ${kid.displayName}`} />
+      <FeedSourceHeader title="Communities" />
       <div className="p-4 flex flex-col gap-4">
         <p className="text-[12px] text-muted-foreground px-1">
           Enabled communities contribute their posts to {kid.displayName}'s
