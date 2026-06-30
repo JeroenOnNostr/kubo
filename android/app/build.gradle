@@ -10,7 +10,12 @@ android {
     namespace = "pub.ditto.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.kubo.app"
+        // Default applicationId is com.kubo.app (Zapstore / GitHub releases — the original
+        // package). The Google Play build MUST use a different id because com.kubo.app is
+        // already taken on Play by an unrelated developer. The Play publish tooling passes
+        // -PplayApplicationId=watch.kubo.app (reverse-DNS of kubo.watch). Keeping this an
+        // OPT-IN override means the Zapstore build and release lineage are untouched.
+        applicationId project.hasProperty('playApplicationId') ? project.property('playApplicationId') : "com.kubo.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2026062300

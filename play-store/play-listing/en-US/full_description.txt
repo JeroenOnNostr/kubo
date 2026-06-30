@@ -1,0 +1,29 @@
+Kubo is a YouTube Kids alternative built around trust, not algorithms.
+
+Parents decide which people, feeds, and creators their child can access. Kubo avoids
+black-box recommendations, addictive design patterns, and behavioral tracking. There is
+no infinite autoplay rabbit hole and no engagement-maximizing feed.
+
+Instead of letting a platform decide what your child sees, Kubo uses webs of trust: as a
+parent, you build an online environment shaped by family, friends, schools, creators, and
+communities you actually know. The child's feed only ever shows content from people you've
+admitted — strangers and algorithmic reach simply can't get in. If the trust data can't be
+loaded, the feed fails closed and shows nothing, rather than leaking unvetted content.
+
+Kubo is built on Nostr, an open and decentralized protocol, and is the reference
+implementation for TEPP — the Trust Extended Permissions Protocol. Because it's open, your
+family isn't locked into a single company's servers or business model.
+
+What you get:
+• A parent-curated video feed for your child — no recommendation engine
+• Webs of trust: add the people, schools, and creators you know
+• Trust on by default — the feed is safe from the very first launch
+• No behavioral ads, no engagement tracking, no dark patterns
+• Open source (AGPL-3.0) and built on open protocols
+
+Kubo is a tool for parents. You set it up on a device you supervise and decide exactly who
+and what your child can see.
+
+Learn more:
+https://kubo.watch
+https://weboftrustfoundation.com
