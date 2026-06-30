@@ -48,6 +48,18 @@ android/app/my-upload-key.keystore
 android/app/kubo-release.p12
 android/key.properties
 android/local.properties
+
+# Google Play Developer API service-account key (can publish to the WOTF Play account).
+# Drop the downloaded JSON at play-store/play-service-account.json; NEVER commit it.
+play-store/play-service-account.json
+**/play-service-account*.json
+**/kubo-play-publish-*.json
+**/*.iam.gserviceaccount.com.json
+
+# Play publish tooling (Python) bytecode cache
+play-store/__pycache__/
+**/__pycache__/
+*.pyc
 android/build/
 android/.gradle/
 android/*/build/
