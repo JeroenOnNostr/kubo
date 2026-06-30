@@ -188,8 +188,8 @@ export function CSAEPolicyPage() {
             </li>
             <li>
               <strong>Contact us directly:</strong> Reach out to our team at{' '}
-              <a href="https://soapbox.pub" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-                soapbox.pub
+              <a href="mailto:info@weboftrustfoundation.org" className="text-primary hover:underline">
+                info@weboftrustfoundation.org
               </a>{' '}
               with details of the content, including any relevant Nostr event IDs or public keys.
             </li>
@@ -274,8 +274,8 @@ export function CSAEPolicyPage() {
           <p>
             If you believe your content or account has been incorrectly flagged or blocked under this policy,
             you may contact us at{' '}
-            <a href="https://soapbox.pub" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-              soapbox.pub
+            <a href="mailto:info@weboftrustfoundation.org" className="text-primary hover:underline">
+              info@weboftrustfoundation.org
             </a>{' '}
             to request a review. We will evaluate appeals on a case-by-case basis. However, we err on the side
             of child safety in all decisions, and our determination is final.
@@ -296,8 +296,8 @@ export function CSAEPolicyPage() {
           <p>
             For questions about this policy or to report CSAE content, contact the team behind
             {' '}{config.appName} at{' '}
-            <a href="https://soapbox.pub" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-              soapbox.pub
+            <a href="mailto:info@weboftrustfoundation.org" className="text-primary hover:underline">
+              info@weboftrustfoundation.org
             </a>.
           </p>
         </section>

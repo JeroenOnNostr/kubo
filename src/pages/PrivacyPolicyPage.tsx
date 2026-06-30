@@ -90,9 +90,9 @@ export function PrivacyPolicyPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-foreground">Analytics</h2>
           <p>
-            {config.appName} may use privacy-friendly analytics (such as Plausible) to understand general usage
-            patterns. These analytics do not use cookies, do not track individual users, and do not collect
-            personal information.
+            The published version of {config.appName} does <strong>not</strong> collect analytics. {config.appName} has
+            no behavioral tracking, no advertising identifiers, and no third-party analytics enabled in the app you
+            install. We do not build profiles of you or your child.
           </p>
         </section>
 
@@ -132,6 +132,10 @@ export function PrivacyPolicyPage() {
           <h2 className="text-base font-bold text-foreground">Contact</h2>
           <p>
             If you have questions about this privacy policy, you can reach the team behind {config.appName} at{' '}
+            <a href="mailto:info@weboftrustfoundation.org" className="text-primary hover:underline">
+              info@weboftrustfoundation.org
+            </a>{' '}
+            or visit{' '}
             <a href="https://weboftrustfoundation.com" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
               weboftrustfoundation.com
             </a>.
