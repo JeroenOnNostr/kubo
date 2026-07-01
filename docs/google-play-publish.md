@@ -21,7 +21,17 @@ exact console steps with pre-written answers.
   - SHA-256: `3A:99:7F:99:9D:D6:D3:47:A9:EC:E3:9F:8D:BE:AF:74:46:E8:8C:96:36:85:DE:AD:A7:9B:EA:A4:19:F5:7C:C8`
   - Backup: `~/Documents/kubo-release.keystore.backup`
   - Password: only in the user's password manager ("Kubo Android release keystore").
-- **Application ID:** `com.kubo.app` — must match Zapstore. Cannot ever change once published on Play.
+- **Play applicationId:** `watch.kubo.app` — NOT `com.kubo.app` (which is taken on Google Play by
+  an unrelated developer). The Zapstore/GitHub channel keeps `com.kubo.app`; the Play build passes
+  `-PplayApplicationId=watch.kubo.app` to gradle. Cannot ever change once published on Play.
+
+> **Authoritative tooling + answer sheet (2026-06-30):** publishing is now scripted via
+> `play-store/publish-play.py` (build/upload to test tracks + listing sync), documented in
+> `play-store/PLAY-PUBLISH.md`. The click-by-click Console questionnaire answers (content rating,
+> target audience, data safety, child safety, app access) live in
+> `play-store/CONSOLE-ANSWER-SHEET.md`. The listing source of truth is
+> `play-store/play-listing/en-US/`. The store copy below has been superseded by that listing dir —
+> see §3.
 
 ### Play App Signing (one-time enrollment, first upload)
 When you create the app in Play Console and upload the first AAB, Play offers **Play App Signing**.
@@ -49,8 +59,11 @@ When you create the app in Play Console and upload the first AAB, Play offers **
    You cannot publish until verification clears.
 5. New 2023+ accounts also face a **testing requirement** before production access:
    personal accounts must run a **closed test with ≥12 testers for ≥14 continuous days** before
-   the "Production" track unlocks. **Plan for this** — see Step 6. (Org accounts may be exempt;
-   the console will tell you.)
+   the "Production" track unlocks.
+   - **RESOLVED 2026-06-30:** Kubo's account is the **Web of Trust Foundation organization**
+     account (registered legal entity) → **exempt** from the 12-testers / 14-day gate. You can
+     target **Production** directly. Step 6 (closed testing) becomes optional smoke-testing, not a
+     blocker.
 
 ---
 
@@ -114,41 +127,15 @@ Play Console → **Grow → Store presence → Main store listing**
 | Field | Value |
 |---|---|
 | **App name** (30 chars) | `Kubo` |
-| **Short description** (80 chars) | `Kids' video, curated by people you trust — not by an algorithm.` |
-| **Full description** (4000 chars) | see block below |
+| **Short description** (80 chars) | `Video for your child, curated by people you trust — not by an algorithm.` |
+| **Full description** (4000 chars) | see `play-store/play-listing/en-US/full_description.txt` |
 
-**Full description:**
-```
-Kubo is a YouTube Kids alternative built around trust, not algorithms.
-
-Parents decide which people, feeds, and creators their child can access. Kubo avoids
-black-box recommendations, addictive design patterns, and behavioral tracking. There is
-no infinite autoplay rabbit hole and no engagement-maximizing feed.
-
-Instead of letting a platform decide what your child sees, Kubo uses webs of trust: as a
-parent, you build an online environment shaped by family, friends, schools, creators, and
-communities you actually know. The child's feed only ever shows content from people you've
-admitted — strangers and algorithmic reach simply can't get in. If the trust data can't be
-loaded, the feed fails closed and shows nothing, rather than leaking unvetted content.
-
-Kubo is built on Nostr, an open and decentralized protocol, and is the reference
-implementation for TEPP — the Trust Extended Permissions Protocol. Because it's open, your
-family isn't locked into a single company's servers or business model.
-
-What you get:
-• A parent-curated video feed for your child — no recommendation engine
-• Webs of trust: add the people, schools, and creators you know
-• Trust on by default — the feed is safe from the very first launch
-• No behavioral ads, no engagement tracking, no dark patterns
-• Open source (AGPL-3.0) and built on open protocols
-
-Kubo is a tool for parents. You set it up on a device you supervise and decide exactly who
-and what your child can see.
-
-Learn more:
-https://kubo.watch
-https://weboftrustfoundation.com
-```
+> **Copy updated 2026-06-30 (cross-platform-safe).** The opener no longer names a competitor
+> ("YouTube Kids alternative" was removed — it is rejection-level on the Apple App Store and a
+> trademark risk on Google), and the copy drops platform/pricing words so the **same text is
+> reused for the iOS App Store** (see `docs/app-store-publish.md`). The live source is
+> `play-store/play-listing/en-US/{title,short_description,full_description}.txt`, pushed with
+> `publish-play.py listing-push --confirm`. Do not hand-edit copy here — edit the listing files.
 
 **Graphics** (all in `play-store/`):
 | Asset | File | Spec |
@@ -174,8 +161,11 @@ https://weboftrustfoundation.com
 Play Console → **Policy → App content**. Each must be completed before you can publish.
 
 ### 4a. Privacy policy
-Paste `https://kubo.watch/privacy`. (In-app route `/privacy`, also reachable in the deployed
-web app. Contact line now points to weboftrustfoundation.com, fixed in KUBO-192.)
+Paste `https://kubo.watch/privacy`. **GATE (2026-06-30):** this URL currently returns **404** —
+the route only exists inside the app SPA, not on the live kubo.watch marketing site. Publish
+`play-store/policies/privacy-policy.md` to `kubo.watch/privacy` (and `policies/csae-policy.md` to
+`kubo.watch/csae`) BEFORE submitting. Contact is now **info@weboftrustfoundation.org** (in-app
+privacy + CSAE pages updated to match; the old `soapbox.pub` CSAE contact was removed).
 
 ### 4b. Ads
 - **Does your app contain ads?** → **No.** (Kubo serves no ads.)
