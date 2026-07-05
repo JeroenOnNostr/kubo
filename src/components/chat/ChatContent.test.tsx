@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { TestApp } from '@/test/TestApp';
 import { ChatContent } from './ChatContent';
 
@@ -75,5 +75,30 @@ describe('ChatContent', () => {
     );
     expect(await screen.findByText('just a normal message')).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('renders an attached image (described by imeta) inline, not as a link', async () => {
+    const url = 'https://blossom.example/abc123.png';
+    const { container } = render(
+      <TestApp>
+        <ChatContent content={`here it is\n${url}`} tags={[['imeta', `url ${url}`, 'm image/png']]} />
+      </TestApp>,
+    );
+    // The screenshot renders as an <img>; the raw URL is not shown as a link.
+    await waitFor(() => expect(container.querySelector('img')).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: url })).not.toBeInTheDocument();
+    // The caption text is still shown above the image.
+    expect(screen.getByText('here it is')).toBeInTheDocument();
+  });
+
+  it('keeps a pasted image URL (no imeta) as a plain link', async () => {
+    const url = 'https://example.com/pic.png';
+    render(
+      <TestApp>
+        <ChatContent content={`look ${url}`} />
+      </TestApp>,
+    );
+    const link = await screen.findByRole('link', { name: url });
+    expect(link).toHaveAttribute('href', url);
   });
 });

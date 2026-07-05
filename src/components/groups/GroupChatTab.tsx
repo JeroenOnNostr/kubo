@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Loader2, Send } from 'lucide-react';
+import { AlertCircle, Loader2, Paperclip, Send, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,13 +15,17 @@ import { collapseMentionsForPreview } from '@/lib/chatTokens';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEvent } from '@/hooks/useEvent';
-import { useGroupMessages, type GroupMessage } from '@/hooks/useGroupMessages';
+import { useGroupMessages, type GroupMessage, type GroupImageAttachment } from '@/hooks/useGroupMessages';
 import { useGroupSystemEvents, type GroupSystemEvent } from '@/hooks/useGroupSystemEvents';
 import { useParentSigner } from '@/hooks/useParentSigner';
 import { SystemRow } from '@/components/groups/SystemRow';
 import { formatConversationTime } from '@/lib/dmUtils';
 import { genUserName } from '@/lib/genUserName';
 import { getReplyTarget, parseGroupAddr } from '@/lib/nip29';
+import { getEffectiveBlossomServers } from '@/lib/appBlossom';
+import { resizeImage } from '@/lib/resizeImage';
+import { useAppContext } from '@/hooks/useAppContext';
+import { uploadFileWithSigner } from '@/hooks/useUploadFile';
 import { cn } from '@/lib/utils';
 
 interface GroupChatTabProps {
@@ -78,6 +82,10 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
+  const { config } = useAppContext();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<GroupImageAttachment[]>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -214,18 +222,67 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
     return out;
   }, [messages, systemEvents, ownPubkey]);
 
+  const handleAttachFiles = useCallback(
+    async (files: FileList) => {
+      if (!parentUser) {
+        setError('Parent must be logged in to post in a group on this device.');
+        return;
+      }
+      const images = Array.from(files).filter((f) => f.type.startsWith('image/'));
+      if (images.length === 0) return;
+      setError(null);
+      const servers = getEffectiveBlossomServers(
+        config.blossomServerMetadata,
+        config.useAppBlossomServers,
+      );
+      for (const file of images) {
+        setIsUploadingImage(true);
+        try {
+          // Resize/optimize like the feed composer (honors the user's
+          // image-quality setting); fall back to the original on failure.
+          let uploadable = file;
+          let dim: string | undefined;
+          if (config.imageQuality === 'compressed') {
+            try {
+              const resized = await resizeImage(file);
+              uploadable = resized.file;
+              dim = resized.dimensions;
+            } catch {
+              // Non-resizable image (e.g. SVG) — upload as-is.
+            }
+          }
+          // Group posts are attributed to the parent, so sign the Blossom
+          // upload auth with the parent signer too (mirrors useUploadKidAvatar).
+          const tags = await uploadFileWithSigner(uploadable, parentUser.signer, servers);
+          if (dim && !tags.some((t) => t[0] === 'dim')) tags.push(['dim', dim]);
+          const url = tags[0][1];
+          setAttachments((prev) => [...prev, { url, tags }]);
+        } catch {
+          setError('Image upload failed. Please try again.');
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+    },
+    [parentUser, config],
+  );
+
   const onSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
     const body = draft.trim();
-    if (!body || isSending) return;
+    if ((!body && attachments.length === 0) || isSending || isUploadingImage) return;
     setError(null);
     const parent = replyTo ?? undefined;
+    const images = attachments;
     setDraft('');
+    setAttachments([]);
     try {
-      await sendMessage(body, parent);
+      await sendMessage(body, parent, images);
       setReplyTo(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Send failed.');
+      // Restore the attachments so the user can retry without re-uploading.
+      setAttachments(images);
     }
   };
 
@@ -309,7 +366,54 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
         />
       )}
 
+      {(attachments.length > 0 || isUploadingImage) && (
+        <div className="px-4 pt-2 flex gap-2 flex-wrap flex-shrink-0">
+          {attachments.map((a) => (
+            <div key={a.url} className="relative size-16">
+              <img src={a.url} alt="" className="size-16 rounded-lg object-cover" />
+              <button
+                type="button"
+                aria-label="Remove image"
+                onClick={() => setAttachments((prev) => prev.filter((x) => x.url !== a.url))}
+                className="absolute -top-1.5 -right-1.5 bg-background border rounded-full p-0.5 shadow"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+          {isUploadingImage && (
+            <div className="size-16 rounded-lg bg-muted flex items-center justify-center">
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </div>
+      )}
+
       <form className="px-4 pt-2 flex items-end gap-2 flex-shrink-0" onSubmit={onSubmit}>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploadingImage || !user}
+          aria-label="Attach image"
+          className="size-11 rounded-full flex-shrink-0 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
+        >
+          {isUploadingImage ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <Paperclip className="size-5" />
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) handleAttachFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
         <div className="relative flex-1">
           <Textarea
             ref={textareaRef}
@@ -331,7 +435,7 @@ export function GroupChatTab({ addr, isAdmin: _isAdmin }: GroupChatTabProps) {
           type="submit"
           size="icon"
           className="size-11 rounded-full flex-shrink-0"
-          disabled={!draft.trim() || isSending || !user}
+          disabled={(!draft.trim() && attachments.length === 0) || isSending || isUploadingImage || !user}
           aria-label="Send"
         >
           <Send className="size-4" />
@@ -498,6 +602,7 @@ function ChatRow({
         >
           <ChatContent
             content={message.content}
+            tags={message.tags}
             className={cn(
               message._pending && 'opacity-70',
               message._failed && 'opacity-70 line-through',

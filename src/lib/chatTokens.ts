@@ -3,15 +3,21 @@ import { nip19 } from 'nostr-tools';
 /**
  * A parsed token from a chat message body. Deliberately a small subset of
  * NoteContent's token set: chat bubbles render mentions, hashtags and inline
- * links, but NOT heavy media embeds (image galleries, video players,
- * link-preview cards, quoted notes). Keeping the surface tight preserves the
- * compact bubble layout — a pasted image URL stays a clickable link rather
- * than blowing the bubble open into a gallery.
+ * links, but NOT heavy media embeds (video players, link-preview cards, quoted
+ * notes). Keeping the surface tight preserves the compact bubble layout — a
+ * pasted image URL stays a clickable link rather than blowing the bubble open
+ * into a gallery.
+ *
+ * The one exception is images the sender intentionally attached: passing their
+ * URLs (from the message's NIP-92 `imeta` tags) as `imageUrls` to
+ * `tokenizeChat` turns just those into inline `image-embed` tokens, so uploaded
+ * screenshots render in the bubble while arbitrary pasted links do not.
  */
 export type ChatToken =
   | { type: 'text'; value: string }
   | { type: 'mention'; pubkey: string; raw: string }
   | { type: 'link'; url: string }
+  | { type: 'image-embed'; url: string }
   | { type: 'hashtag'; tag: string; raw: string }
   | { type: 'nostr-link'; id: string; raw: string };
 
@@ -26,8 +32,12 @@ const TOKEN_REGEX =
 /** Trailing punctuation likely not part of a URL (e.g. "see https://x.com)."). */
 const TRAILING_PUNCT_REGEX = /^(.*?)([.,;:!?)\]]+)$/;
 
-/** Tokenize a chat message body into render-ready tokens. */
-export function tokenizeChat(text: string): ChatToken[] {
+/**
+ * Tokenize a chat message body into render-ready tokens. `imageUrls` is the set
+ * of URLs the event's `imeta` tags describe as images; those become
+ * `image-embed` tokens, everything else stays a `link` (see the type doc).
+ */
+export function tokenizeChat(text: string, imageUrls: Set<string> = new Set()): ChatToken[] {
   const result: ChatToken[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -50,7 +60,10 @@ export function tokenizeChat(text: string): ChatToken[] {
         url = trailing[1];
         fullMatch = trailing[1];
       }
-      result.push({ type: 'link', url });
+      // Embed as an inline image only for intentional uploads (URL described by
+      // an imeta tag → present in `imageUrls`); arbitrary pasted image URLs stay
+      // plain links to keep the bubble compact.
+      result.push(imageUrls.has(url) ? { type: 'image-embed', url } : { type: 'link', url });
     } else if ((nostrPrefix && nostrData) || (barePrefix && bareData)) {
       const prefix = nostrPrefix || barePrefix;
       const data = nostrData || bareData;

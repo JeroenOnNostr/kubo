@@ -53,6 +53,20 @@ describe('tokenizeChat', () => {
     const tokens = tokenizeChat('just a normal message');
     expect(tokens).toEqual([{ type: 'text', value: 'just a normal message' }]);
   });
+
+  it('emits an image-embed token only when the URL is in the imageUrls set', () => {
+    const img = 'https://blossom.example/abc123.png';
+    const tokens = tokenizeChat(`look ${img}`, new Set([img]));
+    expect(tokens.some((t) => t.type === 'image-embed' && t.url === img)).toBe(true);
+    expect(tokens.some((t) => t.type === 'link')).toBe(false);
+  });
+
+  it('keeps an image URL as a plain link when it is not in the imageUrls set', () => {
+    const img = 'https://blossom.example/abc123.png';
+    const tokens = tokenizeChat(`look ${img}`);
+    expect(tokens.some((t) => t.type === 'link' && t.url === img)).toBe(true);
+    expect(tokens.some((t) => t.type === 'image-embed')).toBe(false);
+  });
 });
 
 describe('collapseMentionsForPreview', () => {

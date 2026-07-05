@@ -43,6 +43,19 @@ export interface GroupMessage extends NostrEvent {
   _error?: string;
 }
 
+/**
+ * An image attached to an outgoing group message. Produced by the composer's
+ * Blossom upload; `tags` are the NIP-94 tags the uploader returns
+ * (`tags[0] === ['url', url]`), used to build the message's NIP-92 `imeta`
+ * tag so the image renders inline on receipt.
+ */
+export interface GroupImageAttachment {
+  /** Blossom blob URL (already extension-appended by the uploader). */
+  url: string;
+  /** NIP-94 tags from the upload. */
+  tags: string[][];
+}
+
 const PAGE_LIMIT = 200;
 
 function dedupAndSort(events: GroupMessage[]): GroupMessage[] {
@@ -140,8 +153,12 @@ export function useGroupMessages(addr: string | undefined) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addr]);
 
-  const sendMessage = useMutation<NostrEvent, Error, { content: string; replyTo?: NostrEvent }>({
-    mutationFn: async ({ content, replyTo }) => {
+  const sendMessage = useMutation<
+    NostrEvent,
+    Error,
+    { content: string; replyTo?: NostrEvent; images?: GroupImageAttachment[] }
+  >({
+    mutationFn: async ({ content, replyTo, images }) => {
       if (!addr) throw new Error('No group selected');
       if (!parentUser) {
         throw new Error(
@@ -151,7 +168,15 @@ export function useGroupMessages(addr: string | undefined) {
         );
       }
       const trimmed = content.trim();
-      if (!trimmed) throw new Error('Empty message');
+      const imgs = images ?? [];
+      if (!trimmed && imgs.length === 0) throw new Error('Empty message');
+
+      // Attached images: append each URL on its own line (NIP-92 convention —
+      // the URL lives in content and is described by an imeta tag) so other
+      // NIP-29 clients still see the link even if they don't parse imeta.
+      const finalContent = [trimmed, ...imgs.map((i) => i.url)]
+        .filter(Boolean)
+        .join('\n');
 
       const { gid, relay } = parseGroupAddr(addr);
       const tags: string[][] = [['h', gid]];
@@ -180,10 +205,16 @@ export function useGroupMessages(addr: string | undefined) {
       const previous = buildPreviousTag(current.filter(m => !m._pending), parentUser.pubkey);
       if (previous) tags.push(previous);
 
+      // NIP-92 imeta tag per attached image (mirrors ComposeBox) so the
+      // receiver can size via dim/blurhash and fall back across Blossom servers.
+      for (const img of imgs) {
+        tags.push(['imeta', ...img.tags.map((t) => `${t[0]} ${t[1]}`)]);
+      }
+
       const created_at = Math.floor(Date.now() / 1000);
       const event = await parentUser.signer.signEvent({
-        kind: replyTo ? NIP29_KINDS.CHAT : NIP29_KINDS.CHAT, // both use kind 9; replies are e-tagged
-        content: trimmed,
+        kind: NIP29_KINDS.CHAT, // kind 9; replies are e-tagged
+        content: finalContent,
         tags,
         created_at,
       });
@@ -217,8 +248,8 @@ export function useGroupMessages(addr: string | undefined) {
   return {
     ...query,
     messages: query.data ?? [],
-    sendMessage: (content: string, replyTo?: NostrEvent) =>
-      sendMessage.mutateAsync({ content, replyTo }),
+    sendMessage: (content: string, replyTo?: NostrEvent, images?: GroupImageAttachment[]) =>
+      sendMessage.mutateAsync({ content, replyTo, images }),
     isSending: sendMessage.isPending,
   };
 }
