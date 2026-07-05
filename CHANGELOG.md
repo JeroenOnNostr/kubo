@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.07.05] - 2026-07-05
+
+### Added
+- **Tablet mode for the child feed** — a new per-child setting lays the feed out as a grid of videos (2–3 across) that your child can browse in any orientation, with a button to make a video fullscreen. It's off by default, which keeps the familiar single-column view that fills the screen when you turn the device sideways. Turn it on per child under Parent → Child settings. On a computer or large browser window the grid turns on automatically.
+- **Send photos in group chat** — you can now attach one or more images to a group message with the paperclip button, and images others send show up right in the conversation instead of as a plain link.
+
+### Fixed
+- **Buttons no longer hide behind the keyboard** — on Android, the main button on the sign-up and upload screens now rides up above the on-screen keyboard instead of being covered by it, so you can always reach it.
+- **Navigation always available for parents** — the bottom navigation bar no longer disappears on tablets and large screens, so you can always move between Home, Feed, Trust, Upload, and Support.
+
 ## [2026.06.23] - 2026-06-23
 
 ### Changed

@@ -1,7 +1,7 @@
 {
   "name": "kubo",
   "private": true,
-  "version": "2026.06.23",
+  "version": "2026.07.05",
   "type": "module",
   "scripts": {
     "dev": "npm i --silent && vite",
