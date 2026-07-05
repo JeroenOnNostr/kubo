@@ -22,6 +22,7 @@ import {
   type KuboKidLayoutOptions,
 } from '@/contexts/KuboKidLayoutContext';
 import { useKidBackGuard } from '@/hooks/useKidBackGuard';
+import { useKidOrientationLock } from '@/hooks/useKidOrientationLock';
 
 /**
  * Layout shell for all /kid/* routes.
@@ -111,6 +112,10 @@ export function KuboKidLayout() {
       setGateOpen(true);
     },
   });
+
+  // Pin the screen to portrait while browsing the kid feed (native, tablet mode
+  // off), releasing it only while a video plays so rotate-to-fullscreen works.
+  useKidOrientationLock();
 
   return (
     <div

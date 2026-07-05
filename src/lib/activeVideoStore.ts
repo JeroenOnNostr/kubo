@@ -24,6 +24,29 @@ export interface ActiveVideo {
  * the invariant the fullscreen path relies on.
  */
 let current: ActiveVideo | null = null;
+const listeners = new Set<() => void>();
+
+function notify() {
+  for (const l of listeners) l();
+}
+
+/** The YouTube video currently playing inline, or `null` if none. */
+export function getActiveVideo(): ActiveVideo | null {
+  return current;
+}
+
+/**
+ * Subscribe to active-video transitions (set / clear / preemption). The listener
+ * fires on every change; read the value with {@link getActiveVideo}. Returns an
+ * unsubscribe fn. Used by the kid orientation-lock controller to release the
+ * portrait lock while a video is playing.
+ */
+export function subscribeActiveVideo(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 
 /**
  * Register the embed that just started playing. Preempts the previous one
@@ -34,9 +57,11 @@ let current: ActiveVideo | null = null;
 export function setActiveVideo(next: ActiveVideo): () => void {
   if (current && current.deactivate !== next.deactivate) current.deactivate();
   current = next;
+  notify();
   return () => {
     if (current?.deactivate === next.deactivate) {
       current = null;
+      notify();
     }
   };
 }

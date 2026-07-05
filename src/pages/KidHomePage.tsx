@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { Settings, Play, Inbox, Star } from 'lucide-react';
 
@@ -11,6 +11,8 @@ import { KuboKidBottomNav } from '@/components/KuboKidBottomNav';
 import { ParentGateDialog } from '@/components/kid/ParentGateDialog';
 import { NextPostFAB } from '@/components/kid/NextPostFAB';
 import { KidFeedList } from '@/components/feed/KidFeedList';
+import { useKidFeedColumns } from '@/hooks/useKidFeedColumns';
+import { cn } from '@/lib/utils';
 import { KidNavigationInterceptor } from '@/components/feed/KidNavigationInterceptor';
 import { KuboLoadingScreen } from '@/components/KuboLoadingScreen';
 import { NoteCard } from '@/components/NoteCard';
@@ -80,13 +82,24 @@ export function KidHomePage() {
   const showBlobbiTab = !!kidSettings?.showBlobbiTab;
   const nextPostButtonOn = !!kidSettings?.nextPostButton;
 
-  // KUBO-063: scroll-cap state for the "Next post" FAB. `unlockedCount`
-  // starts at 2 (posts 0 and 1 visible) and only grows in steps of 2 —
-  // each tap reveals two more posts. It's passed into KidFeedList as
-  // `capAtIndex` — see that component for the clipping logic that makes
-  // the cap a hard wall without a scroll listener.
-  const INITIAL_UNLOCKED_COUNT = 2;
-  const [unlockedCount, setUnlockedCount] = useState(INITIAL_UNLOCKED_COUNT);
+  // Tiles per row — 1 in the default single-column mode, 2–3 in tablet mode.
+  const columns = useKidFeedColumns();
+
+  // KUBO-063: scroll-cap for the "Next post" FAB. We track the running count in
+  // TILES (not rows), then snap it to a whole number of rows for the current
+  // column count — nearest full row, ties rounding down. Tracking tiles is what
+  // preserves the visible count across rotation: 9 tiles in a 3-col landscape
+  // become 8 (not 6) in a 2-col portrait — the MINIMUM change needed to keep
+  // rows full — and it's reversible (rotate back → 9). `capIndex` is the count
+  // of unlocked posts / the index of the next locked one, passed to KidFeedList
+  // as `capAtIndex`. The tile count starts at 2 and is grown to fill the
+  // viewport by the layout effect below; each tap unlocks one more row, built on
+  // the DISPLAYED `capIndex` (not the raw total) so it stays reversible across
+  // rotations — a tap after a rotate doesn't inherit that rotate's rounding slack.
+  const [unlockedTiles, setUnlockedTiles] = useState(2);
+  const capIndex = Math.max(1, Math.ceil(unlockedTiles / columns - 0.5)) * columns;
+  // Re-armed per kid so the viewport-fill measurement runs once per feed load.
+  const filledRef = useRef(false);
 
   // KUBO-140: the kid app holds a loading splash while the feed loads
   // underneath, dismissed once BOTH (a) the feed's first notes page has settled
@@ -134,7 +147,8 @@ export function KidHomePage() {
   // the static node; this is the tighter one for the React overlay, and the
   // prefetch hook caps at ~2.5s once notes do arrive.)
   useEffect(() => {
-    setUnlockedCount(INITIAL_UNLOCKED_COUNT);
+    setUnlockedTiles(2);
+    filledRef.current = false;
     setFeedSettled(false);
     setFeedItems([]);
     setForceHidden(false);
@@ -151,6 +165,28 @@ export function KidHomePage() {
     (idx: number) => postRefs.current[idx] ?? null,
     [],
   );
+
+  // Fill the first screen: once real tiles have painted, measure one and unlock
+  // enough ROWS to cover the viewport — so the kid never lands on a half-empty
+  // screen above the cap, on any device/size. Runs once per feed load (guarded),
+  // at the top of the feed (the kid-change reset scrolls to 0), so the measured
+  // rect isn't thrown off by scroll. Rotation keeps the row count (capIndex ×
+  // columns stays full rows). No-op when the cap is off — infinite scroll fills
+  // the screen on its own.
+  useLayoutEffect(() => {
+    if (!nextPostButtonOn || filledRef.current) return;
+    const tile = postRefs.current[0];
+    if (!tile) return;
+    const rect = tile.getBoundingClientRect();
+    const rowHeight = rect.height + 12; // + gap-3
+    if (rowHeight <= 0) return;
+    // From the first tile's top down to just above the fixed bottom nav (the
+    // container reserves it with pb-24 = 96px).
+    const available = window.innerHeight - rect.top - 96;
+    const rowsToFill = Math.max(2, Math.round(available / rowHeight));
+    filledRef.current = true;
+    setUnlockedTiles((t) => Math.max(t, rowsToFill * columns));
+  }, [nextPostButtonOn, feedSettled, feedItems.length, columns]);
 
   // Lock screen is handled at the layout level (KuboKidLayout) so it covers
   // every /kid/* route uniformly.
@@ -249,11 +285,11 @@ export function KidHomePage() {
           overlay below stays on top until onFirstLoadSettled fires and the
           first thumbnails warm, then it fades to reveal the already-painted
           feed. */}
-      <div className="flex-1">
+      <div className="flex-1 w-full max-w-5xl mx-auto">
         <KidFeedList
           variant="kid"
           emptyMessage="Nothing here yet — ask a grown-up!"
-          capAtIndex={nextPostButtonOn ? unlockedCount : undefined}
+          capAtIndex={nextPostButtonOn ? capIndex : undefined}
           postRefs={nextPostButtonOn ? postRefs : undefined}
           onFirstLoadSettled={() => setFeedSettled(true)}
           onFeedItems={setFeedItems}
@@ -264,8 +300,8 @@ export function KidHomePage() {
 
       {nextPostButtonOn && (
         <NextPostFAB
-          unlockedCount={unlockedCount}
-          onAdvance={() => setUnlockedCount((n) => n + 2)}
+          unlockedCount={capIndex}
+          onAdvance={() => setUnlockedTiles(capIndex + columns)}
           getPostElement={getPostElement}
         />
       )}
@@ -321,11 +357,19 @@ function KidFavoritesView({
     : events.length > 0                                                                ? 'list'
     :                                                                                    'empty';
 
+  // Match the home feed's responsive layout: grid in tablet mode, otherwise a
+  // centered phone-width single column.
+  const columns = useKidFeedColumns();
+  const useGrid = columns > 1;
+  const listClass = useGrid
+    ? cn('grid gap-3 items-start w-full max-w-5xl mx-auto', columns === 3 ? 'grid-cols-3' : 'grid-cols-2')
+    : 'flex flex-col gap-3 w-full max-w-md mx-auto';
+
   return (
     <div className="min-h-dvh pb-24 flex flex-col gap-4 px-5 pt-2">
       {viewState === 'loading' && (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 3 }).map((_, i) => (
+        <div className={listClass}>
+          {Array.from({ length: useGrid ? 6 : 3 }).map((_, i) => (
             <div
               key={i}
               className="rounded-2xl p-3"
@@ -345,7 +389,7 @@ function KidFavoritesView({
       )}
 
       {viewState === 'list' && (
-        <div className="flex flex-col gap-3">
+        <div className={listClass}>
           {events.map((event) => (
             <div
               key={event.id}

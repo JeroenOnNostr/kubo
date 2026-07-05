@@ -50,6 +50,15 @@ export interface KidSettings {
    * further down than the most recently unlocked post.
    */
   nextPostButton?: boolean;
+  /**
+   * When true, this kid's feed uses the tablet layout: a responsive grid (2–3
+   * tiles per row) browsable in any orientation, with fullscreen reached via an
+   * on-tile button. When false (default) the phone mechanism applies: a single
+   * portrait column, and rotating the device to landscape fullscreens the
+   * playing video. A per-kid setting so it travels with the kid across the
+   * family's devices.
+   */
+  tabletMode?: boolean;
 }
 
 /**
@@ -722,6 +731,9 @@ export const DEFAULT_KID_SETTINGS: KidSettings = {
   showPostTimestamp: false,
   showHashtags: false,
   nextPostButton: true,
+  // Phone mechanism by default on every device; parents opt a kid's device into
+  // the tablet grid layout per-kid on /parent/kid-settings.
+  tabletMode: false,
 };
 
 export async function setKidSettings(

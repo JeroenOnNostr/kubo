@@ -102,9 +102,10 @@ describe('NextPostFAB (KUBO-063)', () => {
       vi.runOnlyPendingTimers();
     });
 
-    // The FAB should have asked for idx = unlockedCount + 1 — the LAST of
-    // the two newly-unlocked posts (KidHomePage advances by 2 per tap).
-    expect(getPostElement).toHaveBeenCalledWith(3);
+    // The FAB should have asked for idx = unlockedCount — the FIRST of the
+    // newly-unlocked posts (KidHomePage advances by a full row per tap, so we
+    // land on the top of the new row rather than its last tile).
+    expect(getPostElement).toHaveBeenCalledWith(2);
     // Scroll target = top + window.scrollY - 12 = 500 + 0 - 12 = 488.
     expect(scrollSpy).toHaveBeenCalledWith({ top: 488, behavior: 'smooth' });
   });

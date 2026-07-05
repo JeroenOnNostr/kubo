@@ -55,6 +55,14 @@ vi.mock('@/hooks/useKidFeed', () => ({
   useKidFeed: () => mockFeed(),
 }));
 
+// Tablet-mode column count — drive the grid/single-column layout from tests
+// (the harness mocks matchMedia to always report false, so mock the hook directly).
+const mockColumns = vi.fn(() => 1);
+
+vi.mock('@/hooks/useKidFeedColumns', () => ({
+  useKidFeedColumns: () => mockColumns(),
+}));
+
 // KUBO-159: KidFeedList now runs items through the render-side TEPP filter as
 // defense-in-depth. Mock it so we can drive shouldShow from the test; the
 // default is PASS (filter disabled — parent surfaces / non-enforced kids).
@@ -75,6 +83,11 @@ function Wrapper({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   );
 }
+
+// Default every test to a single column; grid tests override per-test.
+beforeEach(() => {
+  mockColumns.mockReturnValue(1);
+});
 
 describe('KidFeedList capAtIndex (KUBO-066)', () => {
   beforeEach(() => {
@@ -283,5 +296,71 @@ describe('KidFeedList TEPP render-side filter (KUBO-159)', () => {
 
     // shouldShow returns false but enabled:false means it is never consulted.
     expect(document.querySelectorAll('[data-kid-feed-item]')).toHaveLength(3);
+  });
+});
+
+/**
+ * Tablet mode: the feed lays tiles out in a responsive grid, and the "Next
+ * post" cap advances a full ROW at a time (no half-height single-column peek).
+ */
+describe('KidFeedList tablet grid', () => {
+  beforeEach(() => {
+    mockTeppFilter.mockReturnValue({ enabled: false, shouldShow: () => true });
+    mockFeed.mockReturnValue({
+      data: {
+        pages: [
+          { items: [0, 1, 2, 3, 4].map((i) => ({ event: makeEvent(i) })) },
+        ],
+      },
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isPending: false,
+      isLoading: false,
+    });
+  });
+
+  it('renders a grid when tablet mode reports multiple columns', () => {
+    mockColumns.mockReturnValue(2);
+    const { container } = render(
+      <Wrapper>
+        <KidFeedList variant="kid" emptyMessage="empty" />
+      </Wrapper>,
+    );
+    expect(container.querySelector('.grid.grid-cols-2')).toBeTruthy();
+    expect(document.querySelectorAll('[data-kid-feed-item]')).toHaveLength(5);
+  });
+
+  it('stays a centered single column when columns is 1', () => {
+    mockColumns.mockReturnValue(1);
+    const { container } = render(
+      <Wrapper>
+        <KidFeedList variant="kid" emptyMessage="empty" />
+      </Wrapper>,
+    );
+    expect(container.querySelector('.grid')).toBeNull();
+    // Single-column list is width-capped and centered.
+    expect(container.querySelector('.flex.flex-col.max-w-md.mx-auto')).toBeTruthy();
+  });
+
+  it('reveals whole rows with no half-height peek when capped in grid mode', () => {
+    mockColumns.mockReturnValue(2);
+    render(
+      <Wrapper>
+        <KidFeedList variant="kid" emptyMessage="empty" capAtIndex={2} />
+      </Wrapper>,
+    );
+    const getItem = (idx: number) =>
+      document.querySelector<HTMLElement>(`[data-kid-feed-item="${idx}"]`);
+    // First row (idx 0,1) fully visible, no peek.
+    [0, 1].forEach((idx) => {
+      expect(getItem(idx)!.style.display).not.toBe('none');
+      expect(getItem(idx)!.style.maxHeight).toBe('');
+    });
+    // idx 2 onward hidden entirely — no 12px peek in grid mode.
+    [2, 3, 4].forEach((idx) => {
+      expect(getItem(idx)!.style.display).toBe('none');
+      expect(getItem(idx)!.style.maxHeight).toBe('');
+    });
   });
 });

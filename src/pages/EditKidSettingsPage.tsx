@@ -52,6 +52,7 @@ export function EditKidSettingsPage() {
   const [viewOnly, setViewOnly]   = useState(false);
   const [showBlobbiTab, setShowBlobbiTab] = useState(false);
   const [nextPostButton, setNextPostButton] = useState(false);
+  const [tabletMode, setTabletMode] = useState(false);
 
   // Post-action button visibility, per-kid. Initialized from each kid's
   // override if present, otherwise from the global FeedSettings toggle
@@ -83,6 +84,7 @@ export function EditKidSettingsPage() {
     setViewOnly(s.viewOnly ?? false);
     setShowBlobbiTab(s.showBlobbiTab ?? false);
     setNextPostButton(s.nextPostButton ?? false);
+    setTabletMode(s.tabletMode ?? false);
     const globalOn = (v: boolean) => v !== false;
     setShowReply(   s.showReplyAction    ?? globalOn(feedSettings.showReplyAction));
     setShowRepost(  s.showRepostAction   ?? globalOn(feedSettings.showRepostAction));
@@ -105,6 +107,7 @@ export function EditKidSettingsPage() {
     viewOnly,
     showBlobbiTab,
     nextPostButton,
+    tabletMode,
     showReplyAction:    showReply,
     showRepostAction:   showRepost,
     showReactionAction: showReaction,
@@ -116,6 +119,7 @@ export function EditKidSettingsPage() {
     showHashtags,
   }), [
     age, dailyLimit, windowStart, windowEnd, viewOnly, showBlobbiTab, nextPostButton,
+    tabletMode,
     showReply, showRepost, showReaction, showZap, showShare, showMore,
     showNip05, showPostTimestamp, showHashtags,
   ]);
@@ -358,6 +362,26 @@ export function EditKidSettingsPage() {
             saveField({ nextPostButton: v });
           }}
           aria-label={`"Next post" button`}
+        />
+      </div>
+
+      {/* Tablet mode — larger-screen grid layout */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
+          <Label>Tablet mode</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Lays the feed out as a grid (2–3 videos per row) that can be browsed
+            in any orientation — best on a tablet. Off keeps a single portrait
+            column and fullscreens a video when the device is turned sideways.
+          </p>
+        </div>
+        <Switch
+          checked={tabletMode}
+          onCheckedChange={(v) => {
+            setTabletMode(v);
+            saveField({ tabletMode: v });
+          }}
+          aria-label="Tablet mode"
         />
       </div>
 

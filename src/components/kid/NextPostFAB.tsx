@@ -63,10 +63,10 @@ export function NextPostFAB({
     // newly-unlocked posts at full height) before measuring position.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        // KidHomePage advances by 2 posts per tap; we land on the SECOND
-        // newly-unlocked post (idx = pre-advance unlockedCount + 1) so the
-        // first one sits just above the viewport, ready to scroll back to.
-        const el = getPostElement(unlockedCount + 1);
+        // KidHomePage advances by one ROW per tap; land on the first
+        // newly-unlocked post (idx = pre-advance cap index) so the new row
+        // sits near the top of the viewport.
+        const el = getPostElement(unlockedCount);
         if (!el) return;
         const target =
           el.getBoundingClientRect().top + window.scrollY - KID_FEED_PEEK_PX;

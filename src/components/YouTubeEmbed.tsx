@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Maximize, Minimize } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useKuboFamily } from '@/hooks/useKuboFamily';
+import { getKidSettings, useKuboFamily } from '@/hooks/useKuboFamily';
 import { useIsLandscape } from '@/hooks/useIsLandscape';
+import { useIsLargeViewport } from '@/hooks/useIsLargeViewport';
 import { cn } from '@/lib/utils';
 import { findThumbnail } from '@/lib/youtubeThumbnail';
 import { setActiveVideo } from '@/lib/activeVideoStore';
@@ -32,18 +33,11 @@ interface YouTubeEmbedProps {
  */
 export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEmbedProps) {
   const [activated, setActivated] = useState(false);
+  const [manualFullscreen, setManualFullscreen] = useState(false);
   const [resolvedThumb, setResolvedThumb] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Rotate-to-fullscreen: when this is the playing embed AND the device is
-  // landscape, we promote our OWN wrapper to fixed-fullscreen via CSS. The
-  // iframe is never remounted (it's the same live element, just pulled out of
-  // flow visually), so the video keeps playing from where it was — no restart,
-  // no jitter. Mirrors how the parent /parent/video/:id page reflows wider on
-  // rotate. The store's single-active preemption guarantees only one embed is
-  // `activated`, so only one card can ever be fullscreen.
   const landscape = useIsLandscape();
-  const fullscreen = activated && landscape;
 
   // Kid-mode detection mirrors useActionVisibility / useKuboTeppFeedFilter:
   // active signer matches one of the family's kid pubkeys.
@@ -51,6 +45,50 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
   const { family } = useKuboFamily();
   const isKidMode =
     !!user?.pubkey && !!family?.kids.some((k) => k.pubkey === user.pubkey);
+
+  // Per-kid tablet-mode preference (set by the parent in Kid settings). Reuses
+  // the family already subscribed above rather than calling useTabletMode, since
+  // this component renders once per feed tile.
+  const tabletMode =
+    !!user?.pubkey && (getKidSettings(user.pubkey).tabletMode ?? false);
+
+  // Fullscreen has two entry points:
+  //  - Rotate-to-fullscreen: when this is the playing embed AND the device is
+  //    landscape, we promote our OWN wrapper to fixed-fullscreen via CSS. The
+  //    iframe is never remounted (same live element, just pulled out of flow),
+  //    so the video keeps playing — no restart, no jitter. The store's
+  //    single-active preemption guarantees only one embed is `activated`, so
+  //    only one card can ever be fullscreen.
+  //  - Manual: the expand button (below) sets `manualFullscreen`.
+  // In the kid app with tablet mode ON, rotate-to-fullscreen is disabled — the
+  // feed is meant to be browsed in landscape — so fullscreen is reached only via
+  // the expand button. On the web at tablet/desktop size the "landscape" signal
+  // isn't a deliberate rotation (a desktop is permanently landscape), so we
+  // disable rotate-to-fullscreen there too — across the whole app, kid feed and
+  // main feed alike — and rely on the expand button. Native phones and mobile
+  // web keep rotate-to-fullscreen.
+  const isWebLarge = useIsLargeViewport() && !Capacitor.isNativePlatform();
+  const disableRotateFullscreen = isWebLarge || (tabletMode && isKidMode);
+  const fullscreen =
+    activated && (manualFullscreen || (!disableRotateFullscreen && landscape));
+
+  // A play that ends (scroll-out, preemption, exit) resets manual fullscreen so
+  // a re-play always starts inline.
+  useEffect(() => {
+    if (!activated) setManualFullscreen(false);
+  }, [activated]);
+
+  // Unified fullscreen exit. Manual (expand-button) fullscreen collapses back to
+  // inline and keeps playing; rotate-driven fullscreen returns to the feed
+  // facade (kids may not rotate back, so the exit button doubles as "stop").
+  // Read `manualFullscreen` via a ref so the Android hardware-back listener
+  // registered below never goes stale.
+  const manualRef = useRef(manualFullscreen);
+  manualRef.current = manualFullscreen;
+  const exitFullscreen = useCallback(() => {
+    if (manualRef.current) setManualFullscreen(false);
+    else setActivated(false);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +148,7 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
       (async () => {
         const { App } = await import('@capacitor/app');
         const listener = await App.addListener('backButton', () =>
-          setActivated(false),
+          exitFullscreen(),
         );
         if (cancelled) {
           listener.remove();
@@ -125,7 +163,7 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
       cleanupBack?.();
       document.body.style.overflow = prevOverflow;
     };
-  }, [fullscreen]);
+  }, [fullscreen, exitFullscreen]);
 
   return (
     <div
@@ -197,25 +235,48 @@ export function YouTubeEmbed({ videoId, className, aspect = 'video' }: YouTubeEm
                 mounted. */}
             {isKidMode && <YouTubeClickEaters />}
 
+            {/* Expand-to-fullscreen — the ONLY way to fullscreen in the kid app
+                when tablet mode disables rotate-to-fullscreen. Above the iframe
+                (z-20), top-right (clear of YouTubeClickEaters, which mask the
+                bottom), so it never re-exposes YouTube's own controls (controls=0
+                stays; KUBO-141/142 intact). Only while playing inline. */}
+            {disableRotateFullscreen && !fullscreen && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setManualFullscreen(true);
+                }}
+                aria-label="Expand video"
+                className="absolute top-2 right-2 z-20 size-9 rounded-full bg-black/50 text-white flex items-center justify-center active:scale-95 transition-transform"
+              >
+                <Maximize className="size-5" />
+              </button>
+            )}
+
             {/* Tap-to-exit in fullscreen — kids may not rotate back. Large,
                 high-contrast, above the click-eaters, in the top-left safe
-                area. Drops back to the inline facade (which also exits
-                fullscreen since activated→false). */}
+                area. Manual fullscreen collapses to inline (keeps playing);
+                rotate-driven fullscreen drops back to the feed facade. */}
             {fullscreen && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setActivated(false);
+                  exitFullscreen();
                 }}
-                aria-label="Back to feed"
+                aria-label={manualFullscreen ? 'Exit fullscreen' : 'Back to feed'}
                 className="absolute top-3 left-3 z-20 size-11 rounded-full bg-black/50 text-white flex items-center justify-center active:scale-95 transition-transform"
                 style={{
                   marginTop: 'var(--safe-area-inset-top, env(safe-area-inset-top, 0px))',
                   marginLeft: 'var(--safe-area-inset-left, env(safe-area-inset-left, 0px))',
                 }}
               >
-                <ChevronDown className="size-6" />
+                {manualFullscreen ? (
+                  <Minimize className="size-6" />
+                ) : (
+                  <ChevronDown className="size-6" />
+                )}
               </button>
             )}
           </>

@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useKidFeed } from '@/hooks/useKidFeed';
+import { useKidFeedColumns } from '@/hooks/useKidFeedColumns';
 import { useKuboTeppFeedFilter } from '@/hooks/useKuboTeppFeedFilter';
 import { getKidSettings } from '@/hooks/useKuboFamily';
 import { useMuteList } from '@/hooks/useMuteList';
@@ -99,6 +100,7 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
     teppHold,
   } = useKidFeed();
   const { muteItems } = useMuteList();
+  const columns = useKidFeedColumns();
 
   // View-only mode: read from the active kid's settings. Applies to both
   // variants — on /kid the signer *is* the kid, and on /parent/feed the
@@ -200,6 +202,19 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
       ? cn(KID_TILE_ROUNDING, 'overflow-hidden bg-white/10')
       : 'rounded-2xl overflow-hidden bg-card';
 
+  // Layout: single column (the "phone mechanism") unless tablet mode is on AND
+  // the viewport is wide enough for 2–3 columns (useKidFeedColumns). The grid
+  // coexists with the "Next post" cap — KidHomePage advances the cap a full ROW
+  // at a time (see the capAtIndex handling below). In single-column mode we cap
+  // the width (max-w-md, centered) so a big tablet in portrait shows phone-sized
+  // tiles instead of one giant column; phones are already narrower than the cap,
+  // so they're unaffected.
+  const isCapped = capAtIndex !== undefined;
+  const useGrid = columns > 1;
+  const listClass = useGrid
+    ? cn('grid gap-3 items-start', columns === 3 ? 'grid-cols-3' : 'grid-cols-2')
+    : 'flex flex-col gap-3 w-full max-w-md mx-auto';
+
   // KUBO-155: fail-closed hold — never the firehose. Show a kid-friendly
   // notice (empty feed) when TEPP is enforced but the construct is unavailable.
   if (teppHold) {
@@ -224,8 +239,8 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
 
   if (showSkeleton) {
     return (
-      <div className="flex flex-col gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
+      <div className={listClass}>
+        {Array.from({ length: useGrid ? 6 : 3 }).map((_, i) => (
           <div key={i} className={cardWrapperClass}>
             <Skeleton className="aspect-video w-full" />
             <div className="p-3 flex gap-2.5">
@@ -256,10 +271,8 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
     );
   }
 
-  const isCapped = capAtIndex !== undefined;
-
   return (
-    <div className="flex flex-col gap-3">
+    <div className={listClass}>
       {feedItems.map((item, idx) => {
         // When the "Next post" FAB is on, only posts 0..capAtIndex-1 render
         // at full height. The post at capAtIndex shows a KID_FEED_PEEK_PX
@@ -270,7 +283,15 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
         let capStyle: React.CSSProperties | undefined;
         let ariaHidden: true | undefined;
         if (capAtIndex !== undefined) {
-          if (idx > capAtIndex) {
+          if (useGrid) {
+            // Grid mode: no half-height "peek" (that's a single-column
+            // affordance). Hide whole tiles at/after the cap; the "Next post"
+            // FAB advances capAtIndex by a full row (KidHomePage).
+            if (idx >= capAtIndex) {
+              capStyle = { display: 'none' };
+              ariaHidden = true;
+            }
+          } else if (idx > capAtIndex) {
             capStyle = { display: 'none' };
             ariaHidden = true;
           } else if (idx === capAtIndex) {
@@ -316,11 +337,18 @@ export function KidFeedList({ variant, emptyMessage, capAtIndex, postRefs, onFir
       })}
       {/* Infinite-scroll sentinel. Hidden when capped — in tap-to-advance
           mode pagination is driven explicitly by the FAB, not by scroll. */}
-      {!isCapped && <div ref={scrollRef} className="h-1" aria-hidden />}
+      {!isCapped && (
+        <div
+          ref={scrollRef}
+          className={cn('h-1', useGrid && 'col-span-full')}
+          aria-hidden
+        />
+      )}
       {isFetchingNextPage && !isCapped && (
         <div
           className={cn(
             'text-center text-xs py-2',
+            useGrid && 'col-span-full',
             variant === 'kid' ? 'text-white/50' : 'text-muted-foreground',
           )}
         >
