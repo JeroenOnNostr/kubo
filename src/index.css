@@ -10,6 +10,7 @@
     /* Mobile chrome dimensions — referenced by layout utility classes below */
     --top-bar-height: 2.5rem;   /* MobileTopBar h-10 = 40px */
     --bottom-nav-height: 2.75rem; /* MobileBottomNav h-11 = 44px */
+    --kubo-header-height: 2.25rem; /* KuboParentLayout header: pt-2(8)+wordmark h-6(24)+pb-1(4) = 36px, excl. safe-area-top */
   }
 
   .dark {
@@ -137,6 +138,22 @@
      both hidden for an immersive experience). Tab bar floats over video. */
   .vine-slide-height {
     height: 100dvh;
+  }
+
+  /* ContentUploaderPage bounded height (mobile only, applied via `max-sidebar:`).
+     Fills the gap between the sticky KuboParentLayout header (+ its safe-area-top)
+     and the fixed bottom nav (+ its safe-area-bottom), so the upload form's scroll
+     region and its Publish footer are a self-contained flex column. Lets
+     `interactive-widget=resizes-content` reflow the keyboard with no JS — the
+     footer stays a flex sibling that can't overlap the inputs. (KUBO-217) */
+  .kubo-upload-height {
+    height: calc(
+      100dvh
+      - var(--safe-area-inset-top, env(safe-area-inset-top, 0px))
+      - var(--kubo-header-height)
+      - var(--bottom-nav-height)
+      - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+    );
   }
 }
 

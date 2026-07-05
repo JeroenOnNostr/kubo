@@ -51,7 +51,15 @@ export function KuboOnboardLayout() {
         ))}
       </header>
 
-      <main className="flex-1 flex flex-col px-6 pb-[calc(env(safe-area-inset-bottom,0px)+env(keyboard-inset-height,0px)+24px)]">
+      {/*
+        Bottom padding reserves room for (a) the device safe area and (b) the
+        on-screen keyboard, so the page's primary CTA rides up above the
+        keyboard instead of hiding behind it. --keyboard-height is published by
+        the Android handler in main.tsx (visualViewport-driven); env(keyboard-
+        inset-height) is the equivalent for real Chrome / web where that var
+        actually resolves. max() takes whichever platform provides a value.
+      */}
+      <main className="flex-1 flex flex-col px-6 pb-[calc(env(safe-area-inset-bottom,0px)+max(env(keyboard-inset-height,0px),var(--keyboard-height,0px))+24px)]">
         {/*
           Onboarding-themed fallback — keeps the beige palette consistent
           if something crashes mid-flow (e.g., relay publish failure).

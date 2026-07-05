@@ -92,7 +92,13 @@ export function KuboBottomNav() {
   const hasUnreadTesters = useHasUnreadTestersGroup();
 
   return (
-    <nav ref={navRef} className="fixed bottom-0 left-0 right-0 z-40 sidebar:hidden">
+    // NB: no `sidebar:hidden` here. Unlike the Ditto MobileBottomNav — which is
+    // replaced by a desktop sidebar at the `sidebar` breakpoint (≥900px) — the
+    // parent app (KuboParentLayout) has NO desktop sidebar. This bottom nav is
+    // the parent's only navigation, so it must stay visible at every width;
+    // hiding it on tablets/large screens leaves the parent with no way to move
+    // between Home/Feed/Trust/Upload/Support (KUBO-217).
+    <nav ref={navRef} className="fixed bottom-0 left-0 right-0 z-40">
       <div className="relative">
         <ArcBackground variant="up" />
         <div className="h-11 flex items-center relative">

@@ -267,7 +267,7 @@ export function PhotoComposeModal({ open, onOpenChange, onSuccess }: PhotoCompos
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-[520px] max-h-[85vh] rounded-2xl p-0 gap-0 border-border overflow-hidden [&>button]:hidden flex flex-col"
+        className="max-w-[520px] max-h-[85dvh] rounded-2xl p-0 gap-0 border-border overflow-hidden [&>button]:hidden flex flex-col"
         onPaste={handlePaste}
       >
         {/* Header */}

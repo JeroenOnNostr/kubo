@@ -233,172 +233,180 @@ export function ContentUploaderPage() {
     && !publishMutation.isPending;
 
   return (
-    <div className="flex flex-col gap-4 pt-2 pb-6 min-h-dvh">
-      {/* Drop zone / preview */}
-      {previewUrl && selectedFile ? (
-        <div className="mx-4 relative aspect-video rounded-2xl overflow-hidden bg-black">
-          {isVideo ? (
-            <video
-              src={previewUrl}
-              controls
-              muted
-              playsInline
-              className="size-full object-contain"
-            />
-          ) : (
-            <img
-              src={previewUrl}
-              alt="Preview"
-              className="size-full object-cover"
-            />
-          )}
+    <div className="flex flex-col sidebar:min-h-dvh max-sidebar:kubo-upload-height max-sidebar:overflow-hidden">
+      {/*
+        Scrollable form region. Keeping the fields in their own scroll
+        container — with the Publish footer as a flex sibling below it — means
+        the footer can never paint over the inputs when the soft keyboard
+        opens. `interactive-widget=resizes-content` (index.html) shrinks this
+        bounded column on keyboard show/hide, so the reflow needs no JS.
+        (KUBO-217)
+      */}
+      <div className="flex flex-col gap-4 pt-2 pb-6 max-sidebar:flex-1 max-sidebar:min-h-0 max-sidebar:overflow-y-auto">
+        {/* Drop zone / preview */}
+        {previewUrl && selectedFile ? (
+          <div className="mx-4 relative aspect-video rounded-2xl overflow-hidden bg-black">
+            {isVideo ? (
+              <video
+                src={previewUrl}
+                controls
+                muted
+                playsInline
+                className="size-full object-contain"
+              />
+            ) : (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="size-full object-cover"
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs text-white hover:bg-black/80 transition-colors"
+            >
+              Change
+            </button>
+          </div>
+        ) : (
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs text-white hover:bg-black/80 transition-colors"
+            className="mx-4 aspect-video rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-card/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-card/60 transition-colors"
           >
-            Change
+            <Upload className="size-6" />
+            <span className="text-[13px]">Tap to select</span>
+            <span className="text-[11px] text-muted-foreground/70">
+              Video or image · up to 200 MB
+            </span>
           </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="mx-4 aspect-video rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-card/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-card/60 transition-colors"
-        >
-          <Upload className="size-6" />
-          <span className="text-[13px]">Tap to select</span>
-          <span className="text-[11px] text-muted-foreground/70">
-            Video or image · up to 200 MB
-          </span>
-        </button>
-      )}
+        )}
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*,image/*"
-        className="hidden"
-        onChange={handleFilePick}
-      />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*,image/*"
+          className="hidden"
+          onChange={handleFilePick}
+        />
 
-      {/* Publish as */}
-      {family && (
-        <div className="px-4 flex flex-col gap-2">
-          <Label>Publish as</Label>
-          <Select value={publisherPubkey ?? ''} onValueChange={setPublisherPubkey}>
-            <SelectTrigger className="h-11 rounded-xl">
-              <SelectValue placeholder="Select who publishes" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={family.parentPubkey}>
-                {family.parentDisplayName} (parent)
-              </SelectItem>
-              {family.kids.map((kid) => (
-                <SelectItem key={kid.pubkey} value={kid.pubkey}>
-                  {kid.displayName}
+        {/* Publish as */}
+        {family && (
+          <div className="px-4 flex flex-col gap-2">
+            <Label>Publish as</Label>
+            <Select value={publisherPubkey ?? ''} onValueChange={setPublisherPubkey}>
+              <SelectTrigger className="h-11 rounded-xl">
+                <SelectValue placeholder="Select who publishes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={family.parentPubkey}>
+                  {family.parentDisplayName} (parent)
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Title */}
-      <div className="px-4 flex flex-col gap-2">
-        <Label htmlFor="upl-title">Title</Label>
-        <Input
-          id="upl-title"
-          placeholder="My octopus video"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="h-11 rounded-xl"
-        />
-      </div>
-
-      {/* Description */}
-      <div className="px-4 flex flex-col gap-2">
-        <Label htmlFor="upl-desc">
-          Description <span className="text-muted-foreground font-normal">(optional)</span>
-        </Label>
-        <Textarea
-          id="upl-desc"
-          placeholder="What's this video about?"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="min-h-24 rounded-xl resize-none"
-        />
-      </div>
-
-      {/* Advanced options */}
-      <div className="px-4">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          Advanced options
-        </button>
-
-        {showAdvanced && (
-          <div className="flex flex-col gap-4 mt-3">
-            {/* Blossom server */}
-            <div className="flex flex-col gap-2">
-              <Label>Blossom server</Label>
-              <Select
-                value={selectedBlossomServer ?? '__all__'}
-                onValueChange={(v) => setSelectedBlossomServer(v === '__all__' ? null : v)}
-              >
-                <SelectTrigger className="h-11 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All servers (default)</SelectItem>
-                  {blossomServers.map((server) => (
-                    <SelectItem key={server} value={server}>
-                      {server.replace(/^https?:\/\//, '').replace(/\/+$/, '')}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Relay */}
-            <div className="flex flex-col gap-2">
-              <Label>Publish to place</Label>
-              <Select
-                value={selectedRelay ?? '__all__'}
-                onValueChange={(v) => setSelectedRelay(v === '__all__' ? null : v)}
-              >
-                <SelectTrigger className="h-11 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All places (default)</SelectItem>
-                  {writeRelays.map((relay) => (
-                    <SelectItem key={relay.url} value={relay.url}>
-                      {relay.url.replace(/^wss?:\/\//, '').replace(/\/+$/, '')}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                {family.kids.map((kid) => (
+                  <SelectItem key={kid.pubkey} value={kid.pubkey}>
+                    {kid.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
+
+        {/* Title */}
+        <div className="px-4 flex flex-col gap-2">
+          <Label htmlFor="upl-title">Title</Label>
+          <Input
+            id="upl-title"
+            placeholder="My octopus video"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="h-11 rounded-xl"
+          />
+        </div>
+
+        {/* Description */}
+        <div className="px-4 flex flex-col gap-2">
+          <Label htmlFor="upl-desc">
+            Description <span className="text-muted-foreground font-normal">(optional)</span>
+          </Label>
+          <Textarea
+            id="upl-desc"
+            placeholder="What's this video about?"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="min-h-24 rounded-xl resize-none"
+          />
+        </div>
+
+        {/* Advanced options */}
+        <div className="px-4">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            Advanced options
+          </button>
+
+          {showAdvanced && (
+            <div className="flex flex-col gap-4 mt-3">
+              {/* Blossom server */}
+              <div className="flex flex-col gap-2">
+                <Label>Blossom server</Label>
+                <Select
+                  value={selectedBlossomServer ?? '__all__'}
+                  onValueChange={(v) => setSelectedBlossomServer(v === '__all__' ? null : v)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All servers (default)</SelectItem>
+                    {blossomServers.map((server) => (
+                      <SelectItem key={server} value={server}>
+                        {server.replace(/^https?:\/\//, '').replace(/\/+$/, '')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Relay */}
+              <div className="flex flex-col gap-2">
+                <Label>Publish to place</Label>
+                <Select
+                  value={selectedRelay ?? '__all__'}
+                  onValueChange={(v) => setSelectedRelay(v === '__all__' ? null : v)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All places (default)</SelectItem>
+                    {writeRelays.map((relay) => (
+                      <SelectItem key={relay.url} value={relay.url}>
+                        {relay.url.replace(/^wss?:\/\//, '').replace(/\/+$/, '')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Bottom padding so the last form field doesn't tuck under the sticky bar. */}
-      <div className="h-20" />
-
       {/*
-        Publish — sticks above the bottom nav. `bottom` offsets by the nav
-        height so the button is reachable without colliding with nav icons.
-        The page lives inside <main> which already reserves that space at
-        its base; sticky is viewport-relative, so we add the offset here.
+        Publish — a flex sibling below the scroll region, so it can never
+        overlap the fields when the keyboard shrinks the viewport (mobile).
+        On desktop (`sidebar:`) there is no bottom nav and the column is not
+        height-bounded, so it reverts to the original sticky-above-nav
+        behavior via the inline `bottom` offset.
       */}
       <div
-        className="sticky inset-x-0 px-4 pt-3 pb-3 bg-gradient-to-t from-background via-background to-background/0"
+        className="shrink-0 px-4 pt-3 pb-3 bg-gradient-to-t from-background via-background to-background/0 sidebar:sticky sidebar:inset-x-0"
         style={{ bottom: 'calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px))' }}
       >
         <Button
