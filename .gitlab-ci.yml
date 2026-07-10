@@ -67,6 +67,7 @@ publish-web:
     name: demo.kubo.watch
     url: https://demo.kubo.watch
   script:
-    - ls -la
     - rsync -avz --delete -e ssh dist/. weboftrustfoundation_9rsu0j7cylw@demo.kubo.watch:/var/www/vhosts/weboftrustfoundation.org/demo.kubo.watch
-    - echo "Deployment ready (tag '$CI_COMMIT_TAG'), check https://demo.kubo.watch"
+    - echo "----------------------------------------------------------------------"
+    - echo "Deployment ready (tag "$CI_COMMIT_TAG"), check https://demo.kubo.watch"
+    - echo "----------------------------------------------------------------------"
