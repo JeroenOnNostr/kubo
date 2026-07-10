@@ -29,6 +29,10 @@ build-web:
   timeout: 10 minutes
   rules:
     - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  dependencies:
+    - test
   script:
     - npm ci
     - npm run build
@@ -55,6 +59,8 @@ publish-web:
   timeout: 5 minutes
   rules:
     - if: $CI_COMMIT_TAG =~ /^kubo-v\d+\.\d+\.\d+$/
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
   dependencies:
     - build-web
   environment:
