@@ -49,7 +49,7 @@ publish-web:
     - 'which ssh-agent || ( apk add --update openssh )'
     - apk add --update bash
     - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY_PROD" | ssh-add -
+    - echo "$SSH_PRIVATE_KEY" | ssh-add -
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
@@ -64,7 +64,7 @@ publish-web:
   dependencies:
     - build-web
   environment:
-    name: demo
+    name: demo.kubo.watch
     url: https://demo.kubo.watch
   script:
     - ls -la
